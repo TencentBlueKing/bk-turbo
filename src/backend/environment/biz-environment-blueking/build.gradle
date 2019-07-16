@@ -24,19 +24,9 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.environment.pojo
+dependencies {
+    compile project(":environment:biz-environment")
+    compile project(":common:common-auth:common-auth-blueking")
+}
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
-
-@ApiModel("BCS容器机型")
-data class BcsVmModel(
-    @ApiModelProperty("moduleId", required = true)
-    val moduleId: String,
-    @ApiModelProperty("镜像名称", required = true)
-    val moduleName: String,
-    @ApiModelProperty("CPU", required = true)
-    val resCpu: String,
-    @ApiModelProperty("Memory", required = true)
-    val resMemory: String
-)
+apply from: "$rootDir/task_deploy_to_maven.gradle"
