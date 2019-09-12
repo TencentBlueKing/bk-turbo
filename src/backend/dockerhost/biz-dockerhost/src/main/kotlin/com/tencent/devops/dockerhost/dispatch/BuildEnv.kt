@@ -24,17 +24,31 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.common.api.pojo
+package com.tencent.devops.dockerhost.dispatch
+
+import com.tencent.devops.dockerhost.utils.SLAVE_BUILD_TYPE
 
 /**
- * 构建机地域
+ * Created by Aaron Sheng on 2018/6/22.
  */
-enum class Zone(name: String) {
-    DEFAULT("默认"),
-    SHENZHEN("深圳"),
-    SHANGHAI("上海"),
-    CHENGDU("成都"),
-    TIANJIN("天津"),
-    GITHUB("GitHub"),
-    EXTERNAL("外网")
+object BuildEnv {
+    private var buildType: String? = null
+
+    fun getBuildType(): BuildType {
+        if (buildType == null) {
+            synchronized(this) {
+                if (buildType == null) {
+                    buildType = System.getProperty(SLAVE_BUILD_TYPE)
+                }
+            }
+        }
+        if (buildType == null || !BuildType.contains(buildType!!)) {
+            return BuildType.WORKER
+        }
+        return BuildType.valueOf(buildType!!)
+    }
 }
+
+// fun main(args: Array<String>) {
+//    println(BuildEnv.getBuildType())
+// }

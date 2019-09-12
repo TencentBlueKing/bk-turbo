@@ -24,17 +24,20 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.common.api.pojo
+package com.tencent.devops.dispatch.pojo
 
-/**
- * 构建机地域
- */
-enum class Zone(name: String) {
-    DEFAULT("默认"),
-    SHENZHEN("深圳"),
-    SHANGHAI("上海"),
-    CHENGDU("成都"),
-    TIANJIN("天津"),
-    GITHUB("GitHub"),
-    EXTERNAL("外网")
-}
+import com.fasterxml.jackson.annotation.JsonProperty
+
+data class DockerHostBuildInfo(
+    val projectId: String,
+    val agentId: String,
+    val pipelineId: String,
+    val buildId: String,
+    val vmSeqId: Int,
+    val secretKey: String,
+    val status: Int,
+    val imageName: String,
+    val containerId: String,
+    @JsonProperty("wsInHost")
+    val wsInHost: Boolean
+)

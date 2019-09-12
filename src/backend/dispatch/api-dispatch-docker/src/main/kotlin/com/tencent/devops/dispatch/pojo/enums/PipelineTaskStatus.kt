@@ -24,17 +24,23 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.common.api.pojo
+package com.tencent.devops.dispatch.pojo.enums
 
-/**
- * 构建机地域
- */
-enum class Zone(name: String) {
-    DEFAULT("默认"),
-    SHENZHEN("深圳"),
-    SHANGHAI("上海"),
-    CHENGDU("成都"),
-    TIANJIN("天津"),
-    GITHUB("GitHub"),
-    EXTERNAL("外网")
+import javax.ws.rs.NotFoundException
+
+enum class PipelineTaskStatus(val status: Int) {
+    QUEUE(1),
+    RUNNING(2),
+    DONE(3),
+    FAILURE(4);
+
+    companion object {
+        fun toStatus(status: Int): PipelineTaskStatus {
+            PipelineTaskStatus.values().forEach {
+                if (it.status == status)
+                    return it
+            }
+            throw NotFoundException("Can't find the pipeline task status($status)")
+        }
+    }
 }

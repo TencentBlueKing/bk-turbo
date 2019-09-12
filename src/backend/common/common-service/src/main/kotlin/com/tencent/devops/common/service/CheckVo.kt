@@ -24,17 +24,24 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.common.api.pojo
+package com.tencent.devops.common.service
 
-/**
- * 构建机地域
- */
-enum class Zone(name: String) {
-    DEFAULT("默认"),
-    SHENZHEN("深圳"),
-    SHANGHAI("上海"),
-    CHENGDU("成都"),
-    TIANJIN("天津"),
-    GITHUB("GitHub"),
-    EXTERNAL("外网")
-}
+import com.fasterxml.jackson.annotation.JsonFormat
+import com.fasterxml.jackson.annotation.JsonProperty
+import java.util.Date
+
+data class CheckVo (
+    val status: Boolean = false,
+    val message: String? = null,
+    val result: Int = 0,
+    @JsonProperty("message_cn")
+    val messageCn: String? = null,
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    val time: Date? = null,
+    @JsonProperty("validstarttime")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    val validStartTime: Date? = null,
+    @JsonProperty("validendtime")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    val validEndTime: Date? = null
+)

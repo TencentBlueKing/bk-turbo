@@ -24,17 +24,21 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.common.api.pojo
-
-/**
- * 构建机地域
- */
-enum class Zone(name: String) {
-    DEFAULT("默认"),
-    SHENZHEN("深圳"),
-    SHANGHAI("上海"),
-    CHENGDU("成都"),
-    TIANJIN("天津"),
-    GITHUB("GitHub"),
-    EXTERNAL("外网")
+dependencies {
+    compile project(":common:common-web")
+    compile project(":common:common-service")
+    compile project(":common:common-api")
+    compile project(":dockerhost:api-dockerhost")
+    compile project(":dispatch:api-dispatch-docker")
+    compile project(":process:api-process")
+    compile group: 'com.github.docker-java', name: 'docker-java', version: '3.1.1'
+    compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.2'
+    compile group: 'org.glassfish.jersey.core', name: 'jersey-client', version: '2.25.1'
+    compile group: 'org.glassfish.jersey.containers', name: 'jersey-container-servlet', version: '2.25.1'
+    compile group: 'org.glassfish.jersey.core', name: 'jersey-server', version: '2.25.1'
+    compile group: 'org.glassfish.jersey.core', name: 'jersey-common', version: '2.25.1'
+    compile "org.slf4j:slf4j-api"
+    compile "com.squareup.okhttp3:okhttp"
 }
+
+apply from: "$rootDir/task_deploy_to_maven.gradle"

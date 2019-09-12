@@ -24,17 +24,34 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.tencent.devops.common.api.pojo
+package com.tencent.devops.dispatch.controller
 
-/**
- * 构建机地域
- */
-enum class Zone(name: String) {
-    DEFAULT("默认"),
-    SHENZHEN("深圳"),
-    SHANGHAI("上海"),
-    CHENGDU("成都"),
-    TIANJIN("天津"),
-    GITHUB("GitHub"),
-    EXTERNAL("外网")
+import com.tencent.devops.common.api.pojo.Result
+import com.tencent.devops.common.web.RestResource
+import com.tencent.devops.dispatch.api.BuildDockerHostResource
+import com.tencent.devops.dispatch.pojo.DockerHostBuildInfo
+import com.tencent.devops.dispatch.service.DockerHostBuildService
+import org.springframework.beans.factory.annotation.Autowired
+
+@RestResource
+class BuildDockerHostResourceImpl @Autowired constructor(
+    private val dockerHostBuildService: DockerHostBuildService
+) : BuildDockerHostResource {
+
+    override fun rollbackBuild(buildId: String, vmSeqId: Int, shutdown: Boolean?): Result<Boolean>? {
+        return dockerHostBuildService.rollbackBuild(buildId, vmSeqId, shutdown)
+    }
+
+    override fun startBuild(hostTag: String): Result<DockerHostBuildInfo>? {
+        return dockerHostBuildService.startBuild(hostTag)
+    }
+
+    override fun reportContainerId(buildId: String, vmSeqId: Int, containerId: String): Result<Boolean>? {
+        return dockerHostBuildService.reportContainerId(buildId, vmSeqId, containerId)
+    }
+
+    override fun log(buildId: String, red: Boolean, message: String): Result<Boolean>? {
+        dockerHostBuildService.log(buildId, red, message)
+        return Result(0, "success")
+    }
 }
