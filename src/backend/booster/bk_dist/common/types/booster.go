@@ -111,6 +111,7 @@ type BoosterWorks struct {
 	PumpCacheRemoveAll   bool
 	PumpBlackList        []string
 	PumpMinActionNum     int32
+	PumpDisableStatCache bool
 
 	ForceLocalList []string
 
