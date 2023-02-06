@@ -331,11 +331,19 @@ type FederationResult struct {
 
 func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (FederationResult, error) {
 	var result FederationResult
+	varCPU := ist.CPUPerInstance
+	varMem := ist.MemPerInstance
+	if ist.CPUPerInstanceOffset > 0.0 && ist.CPUPerInstanceOffset < varCPU {
+		varCPU = varCPU - ist.CPUPerInstanceOffset
+	}
+	if ist.MemPerInstanceOffset > 0.0 && ist.MemPerInstanceOffset < varMem {
+		varMem = varMem - ist.MemPerInstanceOffset
+	}
 	param := &FederationResourceParam{
 		Resources: ResRequests{
 			Requests: ResRequest{
-				CPU:    fmt.Sprintf("%f", ist.CPUPerInstance),
-				Memory: fmt.Sprintf("%fM", ist.MemPerInstance),
+				CPU:    fmt.Sprintf("%f", varCPU),
+				Memory: fmt.Sprintf("%fM", varMem),
 			},
 		},
 		NodeSelector: map[string]string{
@@ -380,12 +388,20 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			continue
 		}
 		totalIst := float64(result.Data.Total)
+		varCPU := ist.CPUPerInstance
+		varMem := ist.MemPerInstance
+		if ist.CPUPerInstanceOffset > 0.0 && ist.CPUPerInstanceOffset < varCPU {
+			varCPU = varCPU - ist.CPUPerInstanceOffset
+		}
+		if ist.MemPerInstanceOffset > 0.0 && ist.MemPerInstanceOffset < varMem {
+			varMem = varMem - ist.MemPerInstanceOffset
+		}
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			DiskLeft: totalIst,
-			MemLeft:  totalIst * ist.MemPerInstance,
-			CPULeft:  totalIst * ist.CPUPerInstance,
+			MemLeft:  totalIst * varMem,
+			CPULeft:  totalIst * varCPU,
 			Attributes: map[string]string{
 				op.AttributeKeyPlatform: ist.Platform,
 				op.AttributeKeyCity:     ist.Group,
@@ -628,6 +644,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	varMem := o.conf.BcsMemPerInstance
 	varLimitCPU := o.conf.BcsCPUPerInstance
 	varLimitMem := o.conf.BcsMemPerInstance
+	if o.conf.BcsCPUPerInstanceOffset > 0.0 && o.conf.BcsCPUPerInstanceOffset < varCPU {
+		varCPU = varCPU - o.conf.BcsCPUPerInstanceOffset
+	}
+	if o.conf.BcsMemPerInstanceOffset > 0.0 && o.conf.BcsMemPerInstanceOffset < varMem {
+		varMem = varMem - o.conf.BcsMemPerInstanceOffset
+	}
 	if o.conf.BcsCPULimitPerInstance > 0.0 {
 		varLimitCPU = o.conf.BcsCPULimitPerInstance
 	}
@@ -646,6 +668,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 		if istItem.MemPerInstance > 0.0 {
 			varMem = istItem.MemPerInstance
 			varLimitMem = istItem.MemPerInstance
+		}
+		if istItem.CPUPerInstanceOffset > 0.0 && istItem.CPUPerInstanceOffset < varCPU {
+			varCPU = varCPU - istItem.CPUPerInstanceOffset
+		}
+		if istItem.MemPerInstanceOffset > 0.0 && istItem.MemPerInstanceOffset < varMem {
+			varMem = varMem - istItem.MemPerInstanceOffset
 		}
 		if istItem.CPULimitPerInstance > 0.0 {
 			varLimitCPU = istItem.CPULimitPerInstance
