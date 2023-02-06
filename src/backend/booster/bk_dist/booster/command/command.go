@@ -91,6 +91,8 @@ const (
 	FlagAutoResourceMgr      = "auto_resource_mgr"
 	FlagResIdleSecsForFree   = "res_idle_secs_for_free"
 	FlagSendCork             = "send_cork"
+	FlagNetErrorLimit        = "net_error_limit"
+	FlagRemoteRetryTimes     = "remote_retry_times"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -375,6 +377,14 @@ var (
 		commandCli.BoolFlag{
 			Name:  "send_cork",
 			Usage: "send files like tcp cork",
+		},
+		commandCli.IntFlag{
+			Name:  "net_error_limit",
+			Usage: "disable a remote worker which's continuous net errors reach this limit",
+		},
+		commandCli.IntFlag{
+			Name:  "remote_retry_times",
+			Usage: "retry a remote failed task for serveral times before degrad it to local",
 		},
 	}
 )
