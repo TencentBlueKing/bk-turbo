@@ -473,7 +473,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 			"ensure tool chain failed: %v, going to disable host(%s)",
 			m.work.ID(), req.Pid, req.Server.Server, err, req.Server.Server)
 
-		m.resource.workerDead(req.Server)
+		m.resource.disableWorker(req.Server)
 		return nil, err
 	}
 
@@ -510,7 +510,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 				if w.isDead(m.conf.NetErrorLimit) {
 					m.resource.workerDead(req.Server)
 					blog.Errorf("remote: server(%s) in work(%s) has (%d) continuous net errors "+
-						"make it disabled", req.Server.Server, m.work.ID(), w.continuousNetErrors)
+						"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors)
 				}
 			}
 			break

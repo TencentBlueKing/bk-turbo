@@ -206,6 +206,43 @@ func (wr *resource) TotalSlots() int {
 	return wr.totalSlots
 }
 
+func (wr *resource) disableWorker(host *dcProtocol.Host) {
+	if host == nil {
+		return
+	}
+
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+
+	invalidjobs := 0
+	for _, w := range wr.worker {
+		if !host.Equal(w.host) {
+			continue
+		}
+
+		if w.disabled {
+			blog.Infof("remote slot: host:%v disabled before,do nothing now", *host)
+			break
+		}
+
+		w.disabled = true
+		invalidjobs = w.totalSlots
+		break
+	}
+
+	// !!! wr.totalSlots and v.limit may be <= 0 !!!
+	if invalidjobs > 0 {
+		wr.totalSlots -= invalidjobs
+		for _, v := range wr.usageMap {
+			v.limit = wr.totalSlots
+			blog.Infof("remote slot: usage map:%v after disable host:%v", *v, *host)
+		}
+	}
+
+	blog.Infof("remote slot: total slot:%d after disable host:%v", wr.totalSlots, *host)
+	return
+}
+
 func (wr *resource) workerDead(host *dcProtocol.Host) {
 	if host == nil {
 		return
@@ -283,7 +320,6 @@ func (wr *resource) recoverDeadWorker(host *dcProtocol.Host) {
 
 		if !w.dead {
 			blog.Infof("remote slot: host:%v is not dead, do nothing now", *host)
-			w.continuousNetErrors = 0
 			return
 		}
 
