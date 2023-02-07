@@ -262,8 +262,8 @@ type QueueBriefInfo struct {
 type QueueShareType int
 
 const (
-	QueueShareTypeAllAllowed QueueShareType = iota
-	QueueShareTypeOnlyTakeFromPublic
-	QueueShareTypeOnlyGiveToPublic
+	QueueShareTypeAllAllowed         QueueShareType = iota
+	QueueShareTypeOnlyTakeFromPublic                // 是否允许从公共队列中获取任务，即用当前资源来为公共队列中的任务进行加速
+	QueueShareTypeOnlyGiveToPublic                  // 是否允许将当前处理不了的任务放置到公共队列中，即是否用其它组的资源来为当前组的任务进行加速
 	QueueShareTypeNoneAllowed
 )

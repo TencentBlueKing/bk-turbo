@@ -306,6 +306,10 @@ func (b *Booster) getWorkersEnv() map[string]string {
 	}
 	requiredEnv[env.KeyExecutorPumpMinActionNum] = strconv.Itoa(int(b.config.Works.PumpMinActionNum))
 
+	if b.config.Works.PumpDisableStatCache {
+		requiredEnv[env.KeyExecutorPumpDisableStatCache] = envValueTrue
+	}
+
 	if b.config.Works.IOTimeoutSecs > 0 {
 		requiredEnv[env.KeyExecutorIOTimeout] = strconv.Itoa(b.config.Works.IOTimeoutSecs)
 	}
