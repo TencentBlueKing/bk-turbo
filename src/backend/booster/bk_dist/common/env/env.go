@@ -51,10 +51,13 @@ const (
 	KeyExecutorPumpBlackKeys           = "PUMP_BLACK_KEYS"
 	KeyExecutorPumpMinActionNum        = "PUMP_MIN_ACTION_NUM"
 	KeyExecutorPumpDisableStatCache    = "PUMP_DISABLE_STAT_CACHE"
+<<<<<<< HEAD
 	KeyExecutorPumpSearchLink          = "PUMP_SEARCH_LINK"
 	KeyExecutorPumpSearchLinkResult    = "PUMP_SEARCH_LINK_RESULT"
 	KeyExecutorPumpLstatByDir          = "PUMP_LSTAT_BY_DIR"
 	KeyExecutorPumpCorrectCap          = "PUMP_CORRECT_CAP"
+=======
+>>>>>>> 2f1c77af... pump模式下文件的stat调用去重, issue: #3
 	KeyExecutorForceLocalKeys          = "FORCE_LOCAL_KEYS"
 	KeyExecutorCCEnsureFileOwnerkey    = "CC_ENSURE_OWNER"
 	KeyExecutorEnvProfile              = "ENV_PROFILE"

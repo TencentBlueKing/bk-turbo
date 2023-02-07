@@ -284,10 +284,27 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 		sep = "\r\n"
 	}
 	lines := strings.Split(string(data), sep)
-	uniqlines := dcUtil.UniqArr(lines)
-	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
+	uniqlines := uniqArr(lines)
+	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), f)
 
-	return dcFile.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
+		return commonUtil.GetFileInfo(uniqlines, true, true), nil
+	} else {
+		includes := []*dcFile.Info{}
+		for _, l := range uniqlines {
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			fstat := dcFile.Stat(l)
+			if fstat.Exist() && !fstat.Basic().IsDir() {
+				includes = append(includes, fstat)
+			} else {
+				blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+			}
+		}
+
+		return includes, nil
+	}
 }
 
 func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -453,29 +470,14 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
 
 	if len(includes) == 0 {
-		blog.Warnf("cc: depend file: %s is invalid", cc.sourcedependfile)
+		blog.Warnf("cl: depend file: %s data:[%s] is invalid", cc.sourcedependfile, string(data))
 		return ErrorInvalidDependFile
 	}
 
-	// TODO : get system header dir for prospero-clang.exe
-	headerdir := cc.getPS5SystemHeaderDir()
-	if headerdir != "" {
-		includes = append(includes, headerdir)
+	for i := range includes {
+		includes[i] = strings.Replace(includes[i], "\\", "/", -1)
 	}
-
-	uniqlines := dcUtil.UniqArr(includes)
-
-	// TODO : append symlink or symlinked if need
-	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
-	if links != nil {
-		uniqlines = append(uniqlines, links...)
-	}
-
-	// TODO :将链接路径找出并放到前面
-	linkdirs := dcUtil.GetAllLinkDir(uniqlines)
-	if len(linkdirs) > 0 {
-		uniqlines = append(linkdirs, uniqlines...)
-	}
+	uniqlines := uniqArr(includes)
 
 	// TODO : save to cc.pumpHeadFile
 	newdata := strings.Join(uniqlines, sep)
@@ -1153,89 +1155,16 @@ ERROREND:
 	}
 }
 
-func (cc *TaskCC) resolvePchDepend(workdir string) error {
-	blog.Infof("cc: ready resolve pch depend file: %s", cc.sourcedependfile)
-
-	sep := "\n"
-	if runtime.GOOS == osWindows {
-		sep = "\r\n"
-	}
-
-	includes := []string{}
-	err := cc.resolveDependFile(sep, workdir, &includes)
-	if err != nil {
-		return err
-	}
-
-	if len(includes) > 0 {
-		if !filepath.IsAbs(cc.objectpchfile) {
-			cc.objectpchfile, _ = filepath.Abs(filepath.Join(workdir, cc.objectpchfile))
-		}
-
-		gchfile := []string{}
-		for _, v := range includes {
-			if strings.HasSuffix(v, ".gch") {
-				newfile := true
-				for _, v1 := range gchfile {
-					if v == v1 {
-						newfile = false
-						break
-					}
-				}
-
-				if newfile {
-					blog.Infof("cc: found pch depend %s->%s", cc.objectpchfile, v)
-					gchfile = append(gchfile, v)
-				}
-			}
-		}
-
-		if len(gchfile) > 0 {
-			dcPump.SetPchDepend(cc.objectpchfile, gchfile)
-		}
-	}
-
-	return nil
-}
-
-func (cc *TaskCC) getPumpFileByPCHFullPath(f string) (string, error) {
-	pumpdir, err := cc.getPumpDir(cc.sandbox.Env)
-	if err == nil {
-		args := []string{f}
-		return getPumpIncludeFile(pumpdir, "pch_depend", ".txt", args, cc.sandbox.Dir)
-	}
-
-	blog.Warnf("cc: got pch:%s depend file with err:%v", f, err)
-	return "", err
-}
-
 func (cc *TaskCC) finalExecute([]string) {
-	go func() {
-		if cc.needcopypumpheadfile {
-			cc.copyPumpHeadFile(cc.sandbox.Dir)
-		}
+	if cc.needcopypumpheadfile {
+		go cc.copyPumpHeadFile(cc.sandbox.Dir)
+	}
 
-		// TODO : 解析pch的依赖关系，并将该gch的依赖列表保存起来
-		if cc.needresolvepchdepend {
-			// 解析并保存pch的依赖关系
-			cc.resolvePchDepend(cc.sandbox.Dir)
+	if cc.saveTemp() {
+		return
+	}
 
-			// 并将该gch的依赖列表保存起来
-			var err error
-			cc.pumpHeadFile, err = cc.getPumpFileByPCHFullPath(cc.objectpchfile)
-			if err != nil {
-				blog.Warnf("cc: failed to get pump head file with pch file:%s err:%v", cc.objectpchfile, err)
-			} else {
-				cc.copyPumpHeadFile(cc.sandbox.Dir)
-			}
-		}
-
-		if cc.saveTemp() {
-			return
-		}
-
-		cc.cleanTmpFile()
-	}()
+	go cc.cleanTmpFile()
 }
 
 func (cc *TaskCC) saveTemp() bool {

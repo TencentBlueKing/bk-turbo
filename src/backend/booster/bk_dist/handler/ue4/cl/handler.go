@@ -405,30 +405,27 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	}
 
 	lines := strings.Split(string(data), "\r\n")
-	uniqlines := dcUtil.UniqArr(lines)
+	uniqlines := uniqArr(lines)
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
-	// if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
-	// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
-	return dcFile.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
-	// } else {
-	// 	includes := []*dcFile.Info{}
-	// 	for _, l := range uniqlines {
-	// 		if !filepath.IsAbs(l) {
-	// 			l, _ = filepath.Abs(filepath.Join(workdir, l))
-	// 		}
-	// 		fstat := dcFile.Stat(l)
-	// 		if fstat.Exist() && !fstat.Basic().IsDir() {
-	// 			includes = append(includes, fstat)
-	// 		} else {
-	// 			blog.Warnf("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
-	// 			// return fail if not existed
-	// 			return nil, fmt.Errorf("%s not existed", f)
-	// 		}
-	// 	}
+	if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
+		return commonUtil.GetFileInfo(uniqlines, true, true), nil
+	} else {
+		includes := []*dcFile.Info{}
+		for _, l := range uniqlines {
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			fstat := dcFile.Stat(l)
+			if fstat.Exist() && !fstat.Basic().IsDir() {
+				includes = append(includes, fstat)
+			} else {
+				blog.Infof("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+			}
+		}
 
-	// 	return includes, nil
-	// }
+		return includes, nil
+	}
 }
 
 func (cl *TaskCL) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -578,14 +575,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
-	// for i := range includes {
-	// 	includes[i] = strings.Replace(includes[i], "/", "\\", -1)
-	// }
-	uniqlines := dcUtil.UniqArr(includes)
-
-	if dcPump.PumpCorrectCap(cl.sandbox.Env) {
-		uniqlines, _ = dcUtil.CorrectPathCap(uniqlines)
+	for i := range includes {
+		includes[i] = strings.Replace(includes[i], "/", "\\", -1)
 	}
+	uniqlines := uniqArr(includes)
 
 	// TODO : save to cc.pumpHeadFile
 	newdata := strings.Join(uniqlines, sep)
@@ -1191,17 +1184,15 @@ ERROREND:
 }
 
 func (cl *TaskCL) finalExecute([]string) {
-	go func() {
-		if cl.needcopypumpheadfile {
-			cl.copyPumpHeadFile(cl.sandbox.Dir)
-		}
+	if cl.needcopypumpheadfile {
+		go cl.copyPumpHeadFile(cl.sandbox.Dir)
+	}
 
-		if cl.saveTemp() {
-			return
-		}
+	if cl.saveTemp() {
+		return
+	}
 
-		cl.cleanTmpFile()
-	}()
+	go cl.cleanTmpFile()
 }
 
 func (cl *TaskCL) saveTemp() bool {
