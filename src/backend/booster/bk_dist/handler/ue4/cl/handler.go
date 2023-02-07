@@ -352,23 +352,27 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	}
 
 	lines := strings.Split(string(data), "\r\n")
-	includes := []*dcFile.Info{}
 	uniqlines := uniqArr(lines)
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
-	for _, l := range uniqlines {
-		if !filepath.IsAbs(l) {
-			l, _ = filepath.Abs(filepath.Join(workdir, l))
+	if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
+		return commonUtil.GetFileInfo(uniqlines, true, true), nil
+	} else {
+		includes := []*dcFile.Info{}
+		for _, l := range uniqlines {
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			fstat := dcFile.Stat(l)
+			if fstat.Exist() && !fstat.Basic().IsDir() {
+				includes = append(includes, fstat)
+			} else {
+				blog.Infof("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+			}
 		}
-		fstat := dcFile.Stat(l)
-		if fstat.Exist() && !fstat.Basic().IsDir() {
-			includes = append(includes, fstat)
-		} else {
-			blog.Infof("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
-		}
-	}
 
-	return includes, nil
+		return includes, nil
+	}
 }
 
 func (cl *TaskCL) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -475,8 +479,13 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
+	for i := range includes {
+		includes[i] = strings.Replace(includes[i], "/", "\\", -1)
+	}
+	uniqlines := uniqArr(includes)
+
 	// TODO : save to cc.pumpHeadFile
-	newdata := strings.Join(includes, sep)
+	newdata := strings.Join(uniqlines, sep)
 	err = ioutil.WriteFile(cl.pumpHeadFile, []byte(newdata), os.ModePerm)
 	if err != nil {
 		blog.Warnf("cl: copy pump head failed to write file: %s with err:%v", cl.pumpHeadFile, err)
@@ -993,15 +1002,15 @@ ERROREND:
 }
 
 func (cl *TaskCL) finalExecute([]string) {
+	if cl.needcopypumpheadfile {
+		go cl.copyPumpHeadFile(cl.sandbox.Dir)
+	}
+
 	if cl.saveTemp() {
 		return
 	}
 
-	if cl.needcopypumpheadfile {
-		cl.copyPumpHeadFile(cl.sandbox.Dir)
-	}
-
-	cl.cleanTmpFile()
+	go cl.cleanTmpFile()
 }
 
 func (cl *TaskCL) saveTemp() bool {

@@ -76,6 +76,7 @@ const (
 	FlagPumpCacheRemoveAll   = "pump_cache_remove_all"
 	FlagPumpBlackList        = "pump_black_list"
 	FlagPumpMinActionNum     = "pump_min_action_num"
+	FlagPumpDisableStatCache = "pump_disable_stat_cache"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -315,6 +316,10 @@ var (
 		commandCli.IntFlag{
 			Name:  "pump_min_action_num",
 			Usage: "do not use pump if total actions less this",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_disable_stat_cache",
+			Usage: "whether disable pump depend file stat info cache, default is false",
 		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",
