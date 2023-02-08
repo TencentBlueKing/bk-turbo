@@ -146,9 +146,17 @@ func NewNodeInfoPool(cpu, mem, disk float64, istTypes []config.InstanceType) *No
 			AttributeKeyPlatform: istItem.Platform,
 		}
 		key := getBlockKey(condition)
+		varCPU := istItem.CPUPerInstance
+		varMem := istItem.MemPerInstance
+		if istItem.CPUPerInstanceOffset > 0.0 && istItem.CPUPerInstanceOffset < varCPU {
+			varCPU = varCPU - istItem.CPUPerInstanceOffset
+		}
+		if istItem.MemPerInstanceOffset > 0.0 && istItem.MemPerInstanceOffset < varMem {
+			varMem = varMem - istItem.MemPerInstanceOffset
+		}
 		nip.nodeBlockMap[key] = &NodeInfoBlock{
-			CPUPerInstance: istItem.CPUPerInstance,
-			MemPerInstance: istItem.MemPerInstance,
+			CPUPerInstance: varCPU,
+			MemPerInstance: varMem,
 		}
 	}
 	return &nip
