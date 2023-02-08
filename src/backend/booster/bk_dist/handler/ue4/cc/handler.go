@@ -225,8 +225,8 @@ func uniqArr(arr []string) []string {
 	return newarr
 }
 
-func (cc *TaskCC) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, error) {
-	data, err := ioutil.ReadFile(f)
+func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Info, error) {
+	data, err := ioutil.ReadFile(dependf)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +237,7 @@ func (cc *TaskCC) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	}
 	lines := strings.Split(string(data), sep)
 	uniqlines := uniqArr(lines)
-	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), f)
+	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
 		return commonUtil.GetFileInfo(uniqlines, true, true), nil
@@ -249,9 +249,24 @@ func (cc *TaskCC) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 			}
 			fstat := dcFile.Stat(l)
 			if fstat.Exist() && !fstat.Basic().IsDir() {
+				if fstat.Basic().Mode()&os.ModeSymlink != 0 {
+					originFile, err := os.Readlink(l)
+					if err == nil {
+						if !filepath.IsAbs(originFile) {
+							originFile, err = filepath.Abs(filepath.Join(filepath.Dir(l), originFile))
+							if err == nil {
+								fstat.LinkTarget = originFile
+								blog.Infof("cc: symlink %s to %s", l, originFile)
+							}
+						} else {
+							fstat.LinkTarget = originFile
+							blog.Infof("cc: symlink %s to %s", l, originFile)
+						}
+					}
+				}
 				includes = append(includes, fstat)
 			} else {
-				blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+				blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
 			}
 		}
 
@@ -305,7 +320,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
 
 	if len(includes) == 0 {
-		blog.Warnf("cl: depend file: %s data:[%s] is invalid", cc.sourcedependfile, string(data))
+		blog.Warnf("cc: depend file: %s data:[%s] is invalid", cc.sourcedependfile, string(data))
 		return ErrorInvalidDependFile
 	}
 
@@ -313,6 +328,12 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		includes[i] = strings.Replace(includes[i], "\\", "/", -1)
 	}
 	uniqlines := uniqArr(includes)
+
+	// TODO : append symlink if need
+	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
+	if links != nil {
+		uniqlines = append(uniqlines, links...)
+	}
 
 	// TODO : save to cc.pumpHeadFile
 	newdata := strings.Join(uniqlines, sep)
@@ -436,7 +457,7 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			cc.sourcedependfile = sourcedependfile
 		} else {
 			// TODO : 我们可以主动加上 /showIncludes 参数得到依赖列表，生成一个临时的 cl.sourcedependfile 文件
-			blog.Infof("cl: trypump not found depend file, try append it")
+			blog.Infof("cc: trypump not found depend file, try append it")
 			if cc.forceDepend() != nil {
 				return nil, ErrorNoDependFile, nil
 			}
@@ -498,6 +519,7 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				Md5:                "",
 				Filemode:           fileMode,
 				Targetrelativepath: filepath.Dir(fpath),
+				LinkTarget:         f.LinkTarget,
 				NoDuplicated:       true,
 				// Priority:           priority,
 			})

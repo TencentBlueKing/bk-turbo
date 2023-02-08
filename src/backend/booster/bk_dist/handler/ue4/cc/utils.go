@@ -20,8 +20,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
 	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
+	dcPump "github.com/Tencent/bk-ci/src/booster/bk_dist/common/pump"
 	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
 	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
 	"github.com/Tencent/bk-ci/src/booster/common/blog"
@@ -1483,4 +1485,46 @@ func getResourceDir(cmd string) (string, error) {
 
 	blog.Infof("cc: found final resource dir:%s by exe dir:%s", maxversion, exepfullath)
 	return maxversion, nil
+}
+
+var (
+	XcodeIncludeLinkFileslock sync.RWMutex
+	XcodeIncludeLinkFiles     = make(map[string]string, 0)
+	XcodeIncludeLinkResolved  = false
+)
+
+func getIncludeLinks(env *env.Sandbox, uniqlines []string) ([]string, error) {
+	if !dcPump.SupportPumpSearchLink(env) {
+		return nil, nil
+	}
+
+	if !XcodeIncludeLinkResolved {
+		XcodeIncludeLinkFileslock.Lock()
+
+		if !XcodeIncludeLinkResolved {
+			XcodeIncludeLinkResolved = true
+
+			var err error
+			resultfile := dcPump.LinkResultFile(env)
+			XcodeIncludeLinkFiles, err = dcPump.ResolveLinkData(resultfile)
+			if err != nil {
+				blog.Infof("cc: resolve link file %s with error:%v", resultfile, err)
+			}
+		}
+
+		XcodeIncludeLinkFileslock.Unlock()
+	}
+
+	if XcodeIncludeLinkFiles != nil {
+		templinkarr := make([]string, 0, 10)
+		for _, l := range uniqlines {
+			if v, ok := XcodeIncludeLinkFiles[l]; ok {
+				templinkarr = append(templinkarr, v)
+			}
+		}
+		return templinkarr, nil
+	}
+
+	return nil, nil
+
 }

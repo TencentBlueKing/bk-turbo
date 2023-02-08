@@ -218,3 +218,33 @@ func cleanDirByTime(dir string, limitsize int64) {
 		totalsize -= fi.Size()
 	}
 }
+
+func searchSymlink(dirPth string) (files map[string]string, err error) {
+	files = make(map[string]string, 100)
+
+	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error {
+		if fi.IsDir() {
+			return nil
+		}
+
+		if fi.Mode()&os.ModeSymlink != 0 {
+			originFile, err := os.Readlink(filename)
+
+			if err != nil {
+				blog.Infof("booster: readlink file %s with error:%v", filename, err)
+				return nil
+			}
+
+			if !filepath.IsAbs(originFile) {
+				originFile, _ = filepath.Abs(filepath.Join(dirPth, originFile))
+			}
+
+			blog.Infof("booster: Resolved symlink %s to %s\n", filename, originFile)
+			files[filename] = originFile
+		}
+
+		return nil
+	})
+
+	return files, err
+}

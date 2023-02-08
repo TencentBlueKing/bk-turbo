@@ -77,6 +77,7 @@ const (
 	FlagPumpBlackList        = "pump_black_list"
 	FlagPumpMinActionNum     = "pump_min_action_num"
 	FlagPumpDisableStatCache = "pump_disable_stat_cache"
+	FlagPumpSearchLink       = "pump_search_link"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -320,6 +321,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "pump_disable_stat_cache",
 			Usage: "whether disable pump depend file stat info cache, default is false",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_search_link",
+			Usage: "whether search link files",
 		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",
