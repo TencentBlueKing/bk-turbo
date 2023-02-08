@@ -329,8 +329,7 @@ type FederationResult struct {
 	Data FederationData `json:"data"`
 }
 
-func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (FederationResult, error) {
-	var result FederationResult
+func getCPUAndMemIst(ist config.InstanceType) (float64, float64) {
 	varCPU := ist.CPUPerInstance
 	varMem := ist.MemPerInstance
 	if ist.CPUPerInstanceOffset > 0.0 && ist.CPUPerInstanceOffset < varCPU {
@@ -339,6 +338,12 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (F
 	if ist.MemPerInstanceOffset > 0.0 && ist.MemPerInstanceOffset < varMem {
 		varMem = varMem - ist.MemPerInstanceOffset
 	}
+	return varCPU, varMem
+}
+
+func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (FederationResult, error) {
+	var result FederationResult
+	varCPU, varMem := getCPUAndMemIst(ist)
 	param := &FederationResourceParam{
 		Resources: ResRequests{
 			Requests: ResRequest{
@@ -388,14 +393,7 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			continue
 		}
 		totalIst := float64(result.Data.Total)
-		varCPU := ist.CPUPerInstance
-		varMem := ist.MemPerInstance
-		if ist.CPUPerInstanceOffset > 0.0 && ist.CPUPerInstanceOffset < varCPU {
-			varCPU = varCPU - ist.CPUPerInstanceOffset
-		}
-		if ist.MemPerInstanceOffset > 0.0 && ist.MemPerInstanceOffset < varMem {
-			varMem = varMem - ist.MemPerInstanceOffset
-		}
+		varCPU, varMem := getCPUAndMemIst(ist)
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
@@ -662,19 +660,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 			continue
 		}
 		if istItem.CPUPerInstance > 0.0 {
-			varCPU = istItem.CPUPerInstance
 			varLimitCPU = istItem.CPUPerInstance
 		}
 		if istItem.MemPerInstance > 0.0 {
-			varMem = istItem.MemPerInstance
 			varLimitMem = istItem.MemPerInstance
 		}
-		if istItem.CPUPerInstanceOffset > 0.0 && istItem.CPUPerInstanceOffset < varCPU {
-			varCPU = varCPU - istItem.CPUPerInstanceOffset
-		}
-		if istItem.MemPerInstanceOffset > 0.0 && istItem.MemPerInstanceOffset < varMem {
-			varMem = varMem - istItem.MemPerInstanceOffset
-		}
+		varCPU, varMem = getCPUAndMemIst(istItem)
 		if istItem.CPULimitPerInstance > 0.0 {
 			varLimitCPU = istItem.CPULimitPerInstance
 		}
