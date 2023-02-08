@@ -236,23 +236,27 @@ func (cc *TaskCC) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 		sep = "\r\n"
 	}
 	lines := strings.Split(string(data), sep)
-	includes := []*dcFile.Info{}
 	uniqlines := uniqArr(lines)
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), f)
 
-	for _, l := range uniqlines {
-		if !filepath.IsAbs(l) {
-			l, _ = filepath.Abs(filepath.Join(workdir, l))
+	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
+		return commonUtil.GetFileInfo(uniqlines, true, true), nil
+	} else {
+		includes := []*dcFile.Info{}
+		for _, l := range uniqlines {
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			fstat := dcFile.Stat(l)
+			if fstat.Exist() && !fstat.Basic().IsDir() {
+				includes = append(includes, fstat)
+			} else {
+				blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+			}
 		}
-		fstat := dcFile.Stat(l)
-		if fstat.Exist() && !fstat.Basic().IsDir() {
-			includes = append(includes, fstat)
-		} else {
-			blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, f)
-		}
-	}
 
-	return includes, nil
+		return includes, nil
+	}
 }
 
 func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -300,8 +304,18 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 
 	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
 
+	if len(includes) == 0 {
+		blog.Warnf("cl: depend file: %s data:[%s] is invalid", cc.sourcedependfile, string(data))
+		return ErrorInvalidDependFile
+	}
+
+	for i := range includes {
+		includes[i] = strings.Replace(includes[i], "\\", "/", -1)
+	}
+	uniqlines := uniqArr(includes)
+
 	// TODO : save to cc.pumpHeadFile
-	newdata := strings.Join(includes, sep)
+	newdata := strings.Join(uniqlines, sep)
 	err = ioutil.WriteFile(cc.pumpHeadFile, []byte(newdata), os.ModePerm)
 	if err != nil {
 		blog.Warnf("cc: copy pump head failed to write file: %s with err:%v", cc.pumpHeadFile, err)
@@ -767,15 +781,15 @@ ERROREND:
 }
 
 func (cc *TaskCC) finalExecute([]string) {
+	if cc.needcopypumpheadfile {
+		go cc.copyPumpHeadFile(cc.sandbox.Dir)
+	}
+
 	if cc.saveTemp() {
 		return
 	}
 
-	if cc.needcopypumpheadfile {
-		cc.copyPumpHeadFile(cc.sandbox.Dir)
-	}
-
-	cc.cleanTmpFile()
+	go cc.cleanTmpFile()
 }
 
 func (cc *TaskCC) saveTemp() bool {

@@ -150,8 +150,8 @@ func IsPump(env *env.Sandbox) bool {
 }
 
 func SupportPump(env *env.Sandbox) bool {
-	// return IsPump(env) && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
-	return IsPump(env) && runtime.GOOS == "windows"
+	return IsPump(env) && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
+	// return IsPump(env) && runtime.GOOS == "windows"
 }
 
 func IsPumpCache(env *env.Sandbox) bool {
@@ -188,4 +188,8 @@ func PumpMinActionNum(env *env.Sandbox) int32 {
 	}
 
 	return 0
+}
+
+func SupportPumpStatCache(env *env.Sandbox) bool {
+	return env.GetEnv(dcEnv.KeyExecutorPumpDisableStatCache) == ""
 }
