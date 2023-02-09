@@ -11,6 +11,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -410,17 +411,16 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 
 		case <-ticker.C:
 			handler := m.remoteWorker.Handler(0, nil, nil, nil)
-			for _, w := range m.resource.getWorkers() {
-				if !w.disabled && w.dead {
-					go func(w *worker) {
-						_, err := handler.ExecuteSyncTime(w.host.Server)
-						if err != nil {
-							blog.Warnf("remote: try to sync time for host(%s) failed: %v", w.host.Server, err)
-							return
-						}
-						m.resource.recoverDeadWorker(w.host)
-					}(w)
-				}
+			for _, w := range m.resource.getDeadWorkers() {
+				go func(w *worker) {
+					_, err := handler.ExecuteSyncTime(w.host.Server)
+					if err != nil {
+						blog.Debugf("remote: try to sync time for host(%s) failed: %v", w.host.Server, err)
+						return
+					}
+					m.resource.recoverDeadWorker(w)
+				}(w)
+
 			}
 
 		}
@@ -448,6 +448,11 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 	// 如果有超过100MB的大文件，则在选择host时，作为选择条件
 	fpath, _ := getMaxSizeFile(req, m.largeFileSize)
 	req.Server = m.lockSlots(dcSDK.JobUsageRemoteExe, fpath, req.BanWorkerList)
+	if req.Server == nil {
+		blog.Infof("remote: no available worker for work(%s) from pid(%d) with(%d) ban worker",
+			m.work.ID(), req.Pid, len(req.BanWorkerList))
+		return nil, errors.New("no available worker")
+	}
 	blog.Infof("remote: selected host(%s) with large file(%s)",
 		req.Server.Server, fpath)
 

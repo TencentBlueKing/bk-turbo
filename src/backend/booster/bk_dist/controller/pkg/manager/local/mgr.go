@@ -185,14 +185,13 @@ func (m *Mgr) ExecuteTask(
 		if err != nil {
 			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v", m.work.ID(), req.Pid, i, err)
 			req.Stats.RemoteErrorMessage = err.Error()
-			// do not retry if remote timeout
-			if req.Stats.RemoteWorkTimeout {
-				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with remote timeout, error: %v",
+			if !needRetry(req) {
+				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with error: %v",
 					m.work.ID(), req.Pid, i, err)
 				break
 			}
-			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d),ban (%d) worker:(%s)",
-				m.work.ID(), i+1, req.Pid, len(remoteReq.BanWorkerList), remoteReq.BanWorkerList)
+			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) with error(%v),ban (%d) worker:(%s)",
+				m.work.ID(), i+1, req.Pid, err.Error(), len(remoteReq.BanWorkerList), remoteReq.BanWorkerList)
 		} else {
 			break
 		}
@@ -271,4 +270,12 @@ func (m *Mgr) waitApplyFinish() error {
 			return fmt.Errorf("wait apply status timeout")
 		}
 	}
+}
+
+func needRetry(req *types.LocalTaskExecuteRequest) bool {
+	// do not retry if remote timeout
+	if req.Stats.RemoteWorkTimeout {
+		return false
+	}
+	return true
 }

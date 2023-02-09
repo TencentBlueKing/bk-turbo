@@ -304,22 +304,22 @@ func (wr *resource) disableAllWorker() {
 	return
 }
 
-func (wr *resource) recoverDeadWorker(host *dcProtocol.Host) {
-	if host == nil {
+func (wr *resource) recoverDeadWorker(w *worker) {
+	if w.host == nil {
 		return
 	}
-	blog.Infof("remote slot: ready enable host(%s)", host.Server)
+	blog.Infof("remote slot: ready enable host(%s)", w.host.Server)
 
 	wr.workerLock.Lock()
 	defer wr.workerLock.Unlock()
 
-	for _, w := range wr.worker {
-		if !host.Equal(w.host) {
+	for _, wk := range wr.worker {
+		if !w.host.Equal(wk.host) {
 			continue
 		}
 
 		if !w.dead {
-			blog.Infof("remote slot: host:%v is not dead, do nothing now", *host)
+			blog.Infof("remote slot: host:%v is not dead, do nothing now", w.host)
 			return
 		}
 
@@ -331,10 +331,10 @@ func (wr *resource) recoverDeadWorker(host *dcProtocol.Host) {
 
 	for _, v := range wr.usageMap {
 		v.limit = wr.totalSlots
-		blog.Infof("remote slot: usage map:%v after recover host:%v", *v, *host)
+		blog.Infof("remote slot: usage map:%v after recover host:%v", *v, w.host)
 	}
 
-	blog.Infof("remote slot: total slot:%d after recover host:%v", wr.totalSlots, *host)
+	blog.Infof("remote slot: total slot:%d after recover host:%v", wr.totalSlots, w.host)
 	return
 }
 
@@ -357,7 +357,27 @@ func (wr *resource) countWorkerError(host *dcProtocol.Host) {
 }
 
 func (wr *resource) getWorkers() []*worker {
-	return wr.worker
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+
+	workers := []*worker{}
+	for _, w := range wr.worker {
+		workers = append(workers, w.copy())
+	}
+	return workers
+}
+
+func (wr *resource) getDeadWorkers() []*worker {
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+
+	workers := []*worker{}
+	for _, w := range wr.worker {
+		if !w.disabled && w.dead {
+			workers = append(workers, w.copy())
+		}
+	}
+	return workers
 }
 
 func (wr *resource) addWorker(host *dcProtocol.Host) {
@@ -412,9 +432,10 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 			w = worker
 		}
 	}
-	if w == nil {
+
+	/*if w == nil {
 		w = wr.worker[0]
-	}
+	}*/
 	return w
 }
 
@@ -471,7 +492,10 @@ func (wr *resource) occupyWorkerSlots(f string, banWorkerList []*dcProtocol.Host
 	} else {
 		w = wr.getWorkerLargeFileFirst(f)
 	}
-	_ = w.occupySlot()
+
+	if w != nil {
+		_ = w.occupySlot()
+	}
 	return w.host
 }
 
@@ -629,6 +653,19 @@ func (wr *worker) isDead(netErrorLimit int) bool {
 		return true
 	}
 	return false
+}
+
+func (wr *worker) copy() *worker {
+	return &worker{
+		disabled:            wr.dead,
+		host:                wr.host,
+		totalSlots:          wr.totalSlots,
+		occupiedSlots:       wr.occupiedSlots,
+		largefiles:          wr.largefiles,
+		largefiletotalsize:  wr.largefiletotalsize,
+		continuousNetErrors: wr.continuousNetErrors,
+		dead:                wr.dead,
+	}
 }
 
 // by tming to limit local memory usage
