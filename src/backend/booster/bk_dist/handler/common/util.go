@@ -107,11 +107,16 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 					if err == nil {
 						i.LinkTarget = originFile
 						blog.Infof("common util: symlink %s to %s", f, originFile)
+					} else {
+						blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
+							f, originFile, err)
 					}
 				} else {
 					i.LinkTarget = originFile
 					blog.Infof("common util: symlink %s to %s", f, originFile)
 				}
+			} else {
+				blog.Infof("common util: symlink %s Readlink error:%s", f, err)
 			}
 		}
 		tempis[f] = i
