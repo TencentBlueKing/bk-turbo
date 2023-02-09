@@ -1489,7 +1489,8 @@ func getResourceDir(cmd string) (string, error) {
 
 var (
 	XcodeIncludeLinkFileslock sync.RWMutex
-	XcodeIncludeLinkFiles     = make(map[string]string, 0)
+	XcodeIncludeReal2link     = make(map[string]string, 0)
+	XcodeIncludeLink2real     = make(map[string]string, 0)
 	XcodeIncludeLinkResolved  = false
 )
 
@@ -1506,7 +1507,7 @@ func getIncludeLinks(env *env.Sandbox, uniqlines []string) ([]string, error) {
 
 			var err error
 			resultfile := dcPump.LinkResultFile(env)
-			XcodeIncludeLinkFiles, err = dcPump.ResolveLinkData(resultfile)
+			XcodeIncludeLink2real, XcodeIncludeReal2link, err = dcPump.ResolveLinkData(resultfile)
 			if err != nil {
 				blog.Infof("cc: resolve link file %s with error:%v", resultfile, err)
 			}
@@ -1515,14 +1516,17 @@ func getIncludeLinks(env *env.Sandbox, uniqlines []string) ([]string, error) {
 		XcodeIncludeLinkFileslock.Unlock()
 	}
 
-	if XcodeIncludeLinkFiles != nil {
-		templinkarr := make([]string, 0, 10)
+	if XcodeIncludeLink2real != nil {
+		temparr := make([]string, 0, 10)
 		for _, l := range uniqlines {
-			if v, ok := XcodeIncludeLinkFiles[l]; ok {
-				templinkarr = append(templinkarr, v)
+			if v, ok := XcodeIncludeLink2real[l]; ok {
+				temparr = append(temparr, v)
+			}
+			if v, ok := XcodeIncludeReal2link[l]; ok {
+				temparr = append(temparr, v)
 			}
 		}
-		return templinkarr, nil
+		return temparr, nil
 	}
 
 	return nil, nil

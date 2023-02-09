@@ -213,25 +213,28 @@ func SaveLinkData(data map[string]string, f string) error {
 	return ioutil.WriteFile(f, []byte(newdata), os.ModePerm)
 }
 
-// key is real file, value is symlink
-func ResolveLinkData(f string) (map[string]string, error) {
+// first map  : symlink->realfile
+// second map : realfile->symlink
+func ResolveLinkData(f string) (map[string]string, map[string]string, error) {
 	data, err := ioutil.ReadFile(f)
 	if err != nil {
 		blog.Warnf("pump: read link file %s with err:%v", f, err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	lines := strings.Split(string(data), "\n")
-	resultmap := make(map[string]string, len(lines))
+	link2real := make(map[string]string, len(lines))
+	real2link := make(map[string]string, len(lines))
 	for _, l := range lines {
 		l = strings.Trim(l, " \r\n")
 		fields := strings.Split(l, "->")
 		if len(fields) == 2 {
-			resultmap[fields[1]] = fields[0]
+			link2real[fields[0]] = fields[1]
+			real2link[fields[1]] = fields[0]
 		}
 	}
 
-	return resultmap, nil
+	return link2real, real2link, nil
 }
 
 func LinkResultFile(env *env.Sandbox) string {

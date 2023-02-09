@@ -247,7 +247,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			fstat := dcFile.Stat(l)
+			fstat := dcFile.Lstat(l)
 			if fstat.Exist() && !fstat.Basic().IsDir() {
 				if fstat.Basic().Mode()&os.ModeSymlink != 0 {
 					originFile, err := os.Readlink(l)
@@ -329,7 +329,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	}
 	uniqlines := uniqArr(includes)
 
-	// TODO : append symlink if need
+	// TODO : append symlink or symlinked if need
 	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
 	if links != nil {
 		uniqlines = append(uniqlines, links...)
