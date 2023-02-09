@@ -283,6 +283,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			PumpMinActionNum:     int32(pumpMinActionNum),
 			PumpDisableStatCache: c.Bool(FlagPumpDisableStatCache),
 			PumpSearchLink:       c.Bool(FlagPumpSearchLink),
+			PumpSearchLinkFile:   c.String(FlagPumpSearchLinkFile),
 			ForceLocalList:       c.StringSlice(FlagForceLocalList),
 			NoWork:               c.Bool(FlagNoWork),
 			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),

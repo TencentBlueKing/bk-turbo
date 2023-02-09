@@ -78,6 +78,7 @@ const (
 	FlagPumpMinActionNum     = "pump_min_action_num"
 	FlagPumpDisableStatCache = "pump_disable_stat_cache"
 	FlagPumpSearchLink       = "pump_search_link"
+	FlagPumpSearchLinkFile   = "pump_search_link_file"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -325,6 +326,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "pump_search_link",
 			Usage: "whether search link files",
+		},
+		commandCli.StringFlag{
+			Name:  "pump_search_link_file",
+			Usage: "specify the file which record link result",
 		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",

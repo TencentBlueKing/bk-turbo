@@ -317,6 +317,8 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorPumpSearchLink] = envValueTrue
 	}
 
+	requiredEnv[env.KeyExecutorPumpSearchLinkResult] = b.config.Works.PumpSearchLinkFile
+
 	if b.config.Works.IOTimeoutSecs > 0 {
 		requiredEnv[env.KeyExecutorIOTimeout] = strconv.Itoa(b.config.Works.IOTimeoutSecs)
 	}
@@ -1289,6 +1291,7 @@ func (b *Booster) checkPump() {
 
 			// fresh env of cache dir
 			os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
+			b.config.Works.PumpCacheDir = pumpdir
 		}
 
 		b.checkPumpCache(pumpdir)
@@ -1365,6 +1368,7 @@ func (b *Booster) searchXcodeIncludeLink(pumpdir string) {
 						if err == nil {
 							// set link result
 							os.Setenv(env.GetEnvKey(env.KeyExecutorPumpSearchLinkResult), linkresult)
+							b.config.Works.PumpSearchLinkFile = linkresult
 							blog.Infof("booster: set link result file to %s", linkresult)
 						}
 					}
