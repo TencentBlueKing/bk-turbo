@@ -211,8 +211,8 @@ func (h *UBTTool) executeActions() error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("UBTTool: got action result:%+v", r)
-			if r.Exitcode != 0 {
-				err := fmt.Errorf("exit code:%d", r.Exitcode)
+			if r.Exitcode != 0 || r.Err != nil {
+				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("UBTTool: %v", err)
 				return err
 			}
@@ -449,6 +449,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 		Outputmsg: "",
 		Errormsg:  "",
 		Exitcode:  retcode,
+		Err:       err,
 	}
 
 	actionchan <- r
