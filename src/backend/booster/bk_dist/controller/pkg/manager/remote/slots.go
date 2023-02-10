@@ -432,10 +432,9 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 			w = worker
 		}
 	}
-
-	if w == nil {
+	/*if w == nil {
 		w = wr.worker[0]
-	}
+	}*/
 	return w
 }
 
