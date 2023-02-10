@@ -99,6 +99,12 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 	tempis := make(map[string]*dcFile.Info, len(notfound))
 	for _, f := range notfound {
 		i := dcFile.Lstat(f)
+		tempis[f] = i
+
+		if mustexisted && !i.Exist() {
+			continue
+		}
+
 		if i.Basic().Mode()&os.ModeSymlink != 0 {
 			originFile, err := os.Readlink(f)
 			if err == nil {
@@ -119,11 +125,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 				blog.Infof("common util: symlink %s Readlink error:%s", f, err)
 			}
 		}
-		tempis[f] = i
 
-		if mustexisted && !i.Exist() {
-			continue
-		}
 		if notdir && i.Basic().IsDir() {
 			continue
 		}
