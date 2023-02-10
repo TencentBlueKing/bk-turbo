@@ -318,13 +318,13 @@ func (wr *resource) recoverDeadWorker(w *worker) {
 			continue
 		}
 
-		if !w.dead {
+		if !wk.dead {
 			blog.Infof("remote slot: host:%v is not dead, do nothing now", w.host)
 			return
 		}
 
-		w.dead = false
-		w.continuousNetErrors = 0
+		wk.dead = false
+		wk.continuousNetErrors = 0
 		wr.totalSlots += w.totalSlots
 		break
 	}
@@ -433,9 +433,9 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 		}
 	}
 
-	/*if w == nil {
+	if w == nil {
 		w = wr.worker[0]
-	}*/
+	}
 	return w
 }
 
