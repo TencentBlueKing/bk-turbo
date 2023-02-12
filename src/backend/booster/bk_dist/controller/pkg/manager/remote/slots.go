@@ -305,7 +305,7 @@ func (wr *resource) disableAllWorker() {
 }
 
 func (wr *resource) recoverDeadWorker(w *worker) {
-	if w.host == nil {
+	if w == nil || w.host == nil {
 		return
 	}
 	blog.Infof("remote slot: ready enable host(%s)", w.host.Server)
@@ -318,13 +318,13 @@ func (wr *resource) recoverDeadWorker(w *worker) {
 			continue
 		}
 
-		if !w.dead {
+		if !wk.dead {
 			blog.Infof("remote slot: host:%v is not dead, do nothing now", w.host)
 			return
 		}
 
-		w.dead = false
-		w.continuousNetErrors = 0
+		wk.dead = false
+		wk.continuousNetErrors = 0
 		wr.totalSlots += w.totalSlots
 		break
 	}
@@ -338,27 +338,27 @@ func (wr *resource) recoverDeadWorker(w *worker) {
 	return
 }
 
-func (wr *resource) countWorkerError(host *dcProtocol.Host) {
-	if host == nil {
+func (wr *resource) countWorkerError(w *worker) {
+	if w == nil || w.host == nil {
 		return
 	}
-	blog.Infof("remote slot: ready count error from host(%s)", host.Server)
+	blog.Infof("remote slot: ready count error from host(%s)", w.host.Server)
 
 	wr.workerLock.Lock()
 	defer wr.workerLock.Unlock()
 
-	for _, w := range wr.worker {
-		if !host.Equal(w.host) {
+	for _, wk := range wr.worker {
+		if !w.host.Equal(wk.host) {
 			continue
 		}
-		w.continuousNetErrors++
+		wk.continuousNetErrors++
 		break
 	}
 }
 
 func (wr *resource) getWorkers() []*worker {
-	wr.workerLock.Lock()
-	defer wr.workerLock.Unlock()
+	wr.workerLock.RLock()
+	defer wr.workerLock.RUnlock()
 
 	workers := []*worker{}
 	for _, w := range wr.worker {
@@ -368,8 +368,8 @@ func (wr *resource) getWorkers() []*worker {
 }
 
 func (wr *resource) getDeadWorkers() []*worker {
-	wr.workerLock.Lock()
-	defer wr.workerLock.Unlock()
+	wr.workerLock.RLock()
+	defer wr.workerLock.RUnlock()
 
 	workers := []*worker{}
 	for _, w := range wr.worker {
@@ -378,6 +378,22 @@ func (wr *resource) getDeadWorkers() []*worker {
 		}
 	}
 	return workers
+}
+
+func (wr *resource) isWorkerDead(w *worker, netErrorLimit int) bool {
+	wr.workerLock.RLock()
+	defer wr.workerLock.RUnlock()
+
+	for _, wk := range wr.worker {
+		if !wk.host.Equal(w.host) {
+			continue
+		}
+		if wk.continuousNetErrors >= netErrorLimit {
+			return true
+		}
+		break
+	}
+	return false
 }
 
 func (wr *resource) addWorker(host *dcProtocol.Host) {
@@ -645,13 +661,6 @@ func (wr *worker) hasFile(f string) bool {
 		}
 	}
 
-	return false
-}
-
-func (wr *worker) isDead(netErrorLimit int) bool {
-	if wr.continuousNetErrors >= netErrorLimit {
-		return true
-	}
 	return false
 }
 

@@ -506,19 +506,8 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkEndTime)
 	if err != nil {
-		for _, w := range m.resource.getWorkers() {
-			if !w.host.Equal(req.Server) {
-				continue
-			}
-			if isCaredNetError(err) {
-				m.resource.countWorkerError(w.host)
-				if w.isDead(m.conf.NetErrorLimit) {
-					m.resource.workerDead(req.Server)
-					blog.Errorf("remote: server(%s) in work(%s) has (%d) continuous net errors "+
-						"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors)
-				}
-			}
-			break
+		if isCaredNetError(err) {
+			m.handleNetError(req, err)
 		}
 
 		req.BanWorkerList = append(req.BanWorkerList, req.Server)
@@ -1806,4 +1795,19 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 
 	blog.Infof("remote: end send %d files with cork to server %s tick for work: %s with err:%v, retcode:%d",
 		len(files), host.Server, m.work.ID(), err, retcode)
+}
+
+func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
+	for _, w := range m.resource.getWorkers() {
+		if !w.host.Equal(req.Server) {
+			continue
+		}
+		m.resource.countWorkerError(w)
+		if m.resource.isWorkerDead(w, m.conf.NetErrorLimit) {
+			m.resource.workerDead(req.Server)
+			blog.Errorf("remote: server(%s) in work(%s) has the %dth continuous net errors:(%v), "+
+				"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
+		}
+		break
+	}
 }
