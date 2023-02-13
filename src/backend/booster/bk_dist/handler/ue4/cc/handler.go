@@ -305,14 +305,33 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		// TODO : the file path maybe contains space, should support this condition
 		fields := strings.Split(l, " ")
 		if len(fields) >= 1 {
-			for i, f := range fields {
-				if strings.HasSuffix(f, ".o:") {
+			// for i, f := range fields {
+			for index := len(fields) - 1; index >= 0; index-- {
+				var targetf string
+				// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
+				// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
+				// 向前依附到不为空的字符串为止
+				if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
+					for targetindex := index - 1; targetindex >= 0; targetindex-- {
+						if len(fields[targetindex]) > 0 {
+							targetf = strings.Join(fields[targetindex:index+1], " ")
+							index = targetindex
+							break
+						}
+					}
+				} else if len(fields[index]) > 0 {
+					targetf = fields[index]
+				} else {
 					continue
 				}
-				if !filepath.IsAbs(f) {
-					fields[i], _ = filepath.Abs(filepath.Join(workdir, f))
+
+				if strings.HasSuffix(targetf, ".o:") {
+					continue
 				}
-				includes = append(includes, fields[i])
+				if !filepath.IsAbs(targetf) {
+					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
+				}
+				includes = append(includes, targetf)
 			}
 		}
 	}
