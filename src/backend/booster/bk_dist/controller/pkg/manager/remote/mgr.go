@@ -1804,7 +1804,7 @@ func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
 		}
 		m.resource.countWorkerError(w)
 		if m.resource.isWorkerDead(w, m.conf.NetErrorLimit) {
-			m.resource.workerDead(req.Server)
+			m.resource.workerDead(w)
 			blog.Errorf("remote: server(%s) in work(%s) has the %dth continuous net errors:(%v), "+
 				"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
 		}

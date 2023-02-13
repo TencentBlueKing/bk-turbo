@@ -243,8 +243,8 @@ func (wr *resource) disableWorker(host *dcProtocol.Host) {
 	return
 }
 
-func (wr *resource) workerDead(host *dcProtocol.Host) {
-	if host == nil {
+func (wr *resource) workerDead(w *worker) {
+	if w == nil || w.host == nil {
 		return
 	}
 
@@ -252,17 +252,17 @@ func (wr *resource) workerDead(host *dcProtocol.Host) {
 	defer wr.workerLock.Unlock()
 
 	invalidjobs := 0
-	for _, w := range wr.worker {
-		if !host.Equal(w.host) {
+	for _, wk := range wr.worker {
+		if !wk.host.Equal(w.host) {
 			continue
 		}
 
-		if w.dead {
-			blog.Infof("remote slot: host:%v is already dead,do nothing now", *host)
+		if wk.dead {
+			blog.Infof("remote slot: host:%v is already dead,do nothing now", w.host)
 			return
 		}
 
-		w.dead = true
+		wk.dead = true
 		invalidjobs = w.totalSlots
 		break
 	}
@@ -272,11 +272,11 @@ func (wr *resource) workerDead(host *dcProtocol.Host) {
 		wr.totalSlots -= invalidjobs
 		for _, v := range wr.usageMap {
 			v.limit = wr.totalSlots
-			blog.Infof("remote slot: usage map:%v after host is dead:%v", *v, *host)
+			blog.Infof("remote slot: usage map:%v after host is dead:%v", *v, w.host)
 		}
 	}
 
-	blog.Infof("remote slot: total slot:%d after host is dead:%v", wr.totalSlots, *host)
+	blog.Infof("remote slot: total slot:%d after host is dead:%v", wr.totalSlots, w.host)
 	return
 }
 
@@ -508,9 +508,11 @@ func (wr *resource) occupyWorkerSlots(f string, banWorkerList []*dcProtocol.Host
 		w = wr.getWorkerLargeFileFirst(f)
 	}
 
-	if w != nil {
-		_ = w.occupySlot()
+	if w == nil {
+		return nil
 	}
+
+	_ = w.occupySlot()
 	return w.host
 }
 
