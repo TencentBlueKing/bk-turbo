@@ -314,6 +314,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 				if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
 					for targetindex := index - 1; targetindex >= 0; targetindex-- {
 						if len(fields[targetindex]) > 0 {
+							fields[targetindex] = strings.Trim(fields[targetindex], "\\")
 							targetf = strings.Join(fields[targetindex:index+1], " ")
 							index = targetindex
 							break
