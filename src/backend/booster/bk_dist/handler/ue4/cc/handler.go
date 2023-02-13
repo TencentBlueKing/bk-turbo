@@ -823,15 +823,17 @@ ERROREND:
 }
 
 func (cc *TaskCC) finalExecute([]string) {
-	if cc.needcopypumpheadfile {
-		go cc.copyPumpHeadFile(cc.sandbox.Dir)
-	}
+	go func() {
+		if cc.needcopypumpheadfile {
+			cc.copyPumpHeadFile(cc.sandbox.Dir)
+		}
 
-	if cc.saveTemp() {
-		return
-	}
+		if cc.saveTemp() {
+			return
+		}
 
-	go cc.cleanTmpFile()
+		cc.cleanTmpFile()
+	}()
 }
 
 func (cc *TaskCC) saveTemp() bool {

@@ -989,15 +989,17 @@ ERROREND:
 }
 
 func (cl *TaskCL) finalExecute([]string) {
-	if cl.needcopypumpheadfile {
-		go cl.copyPumpHeadFile(cl.sandbox.Dir)
-	}
+	go func() {
+		if cl.needcopypumpheadfile {
+			cl.copyPumpHeadFile(cl.sandbox.Dir)
+		}
 
-	if cl.saveTemp() {
-		return
-	}
+		if cl.saveTemp() {
+			return
+		}
 
-	go cl.cleanTmpFile()
+		cl.cleanTmpFile()
+	}()
 }
 
 func (cl *TaskCL) saveTemp() bool {
