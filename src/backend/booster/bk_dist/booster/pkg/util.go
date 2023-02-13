@@ -219,8 +219,10 @@ func cleanDirByTime(dir string, limitsize int64) {
 	}
 }
 
-func searchSymlink(dirPth string) (files map[string]string, err error) {
-	files = make(map[string]string, 100)
+func searchSymlink(dirPth string, files map[string]string) (err error) {
+	if files == nil {
+		files = make(map[string]string, 100)
+	}
 
 	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error {
 		if fi.IsDir() {
@@ -246,5 +248,5 @@ func searchSymlink(dirPth string) (files map[string]string, err error) {
 		return nil
 	})
 
-	return files, err
+	return err
 }

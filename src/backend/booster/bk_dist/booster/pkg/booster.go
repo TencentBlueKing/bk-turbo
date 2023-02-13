@@ -1297,7 +1297,24 @@ func (b *Booster) checkPump() {
 		b.checkPumpCache(pumpdir)
 
 		if b.config.Works.PumpSearchLink && runtime.GOOS == "darwin" {
-			b.searchXcodeIncludeLink(pumpdir)
+			// 获取默认xcode的路径
+			xcodepath, err := getXcodeIncludeLinkDir()
+			if err != nil || xcodepath == "" {
+				blog.Infof("booster: get default xcode path with error:%v", err)
+				return
+			}
+
+			// 得到所有需要搜索的目录（包括默认xcode和用户指定的）
+			dirs := []string{xcodepath}
+			dirs = append(dirs, b.config.Works.PumpSearchLinkDir...)
+
+			// 搜索所有symlink
+			files := make(map[string]string, 100)
+			searchLinks(dirs, files)
+
+			// 保存结果
+			linkresultfile := getLinkFile(pumpdir, xcodepath)
+			b.saveLinks(files, linkresultfile)
 		}
 	}
 }
@@ -1315,8 +1332,8 @@ func (b *Booster) checkPumpCache(pumpdir string) {
 	}
 }
 
-// search and save link files
-func (b *Booster) searchXcodeIncludeLink(pumpdir string) {
+// get default xcode link path
+func getXcodeIncludeLinkDir() (string, error) {
 	sandbox := dcSyscall.Sandbox{}
 
 	exefullpath := "xcode-select"
@@ -1327,7 +1344,7 @@ func (b *Booster) searchXcodeIncludeLink(pumpdir string) {
 
 	if err != nil || stdout == nil {
 		blog.Warnf("booster: run xcode-select -p with error:[%v] or no output", err)
-		return
+		return "", err
 	}
 
 	xcodepath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms/MacOSX.platform/Developer/SDKs")
@@ -1335,7 +1352,7 @@ func (b *Booster) searchXcodeIncludeLink(pumpdir string) {
 	if info != nil && (err == nil || os.IsExist(err)) {
 		fis, err := ioutil.ReadDir(xcodepath)
 		if err != nil {
-			return
+			return "", err
 		}
 
 		for _, fi := range fis {
@@ -1355,27 +1372,56 @@ func (b *Booster) searchXcodeIncludeLink(pumpdir string) {
 
 					xcodepath = filepath.Join(linkfile, "usr/include")
 
-					// 记录该目录下的所有链接关系
-					linkmap, err := searchSymlink(xcodepath)
-					if err == nil {
-						blog.Debugf("booster: %+v", linkmap)
+					// // 记录该目录下的所有链接关系
+					// linkmap, err := searchSymlink(xcodepath)
+					// if err == nil {
+					// 	blog.Debugf("booster: %+v", linkmap)
 
-						// TOOD : save map to file
-						md5str := md5.Sum([]byte(xcodepath))
-						linkresult := filepath.Join(pumpdir, fmt.Sprintf("link_%x.txt", md5str))
+					// 	// TOOD : save map to file
+					// 	md5str := md5.Sum([]byte(xcodepath))
+					// 	linkresult := filepath.Join(pumpdir, fmt.Sprintf("link_%x.txt", md5str))
 
-						err = dcPump.SaveLinkData(linkmap, linkresult)
-						if err == nil {
-							// set link result
-							os.Setenv(env.GetEnvKey(env.KeyExecutorPumpSearchLinkResult), linkresult)
-							b.config.Works.PumpSearchLinkFile = linkresult
-							blog.Infof("booster: set link result file to %s", linkresult)
-						}
-					}
+					// 	err = dcPump.SaveLinkData(linkmap, linkresult)
+					// 	if err == nil {
+					// 		// set link result
+					// 		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpSearchLinkResult), linkresult)
+					// 		b.config.Works.PumpSearchLinkFile = linkresult
+					// 		blog.Infof("booster: set link result file to %s", linkresult)
+					// 	}
+					// }
 
-					break
+					// break
+					return xcodepath, nil
 				}
 			}
 		}
 	}
+
+	return "", nil
+}
+
+func getLinkFile(pumpdir string, xcodepath string) string {
+	md5str := md5.Sum([]byte(xcodepath))
+	return filepath.Join(pumpdir, fmt.Sprintf("link_%x.txt", md5str))
+}
+
+func searchLinks(dirs []string, result map[string]string) error {
+	for _, v := range dirs {
+		// 记录该目录下的所有链接关系
+		_ = searchSymlink(v, result)
+	}
+
+	return nil
+}
+
+func (b *Booster) saveLinks(result map[string]string, f string) error {
+	err := dcPump.SaveLinkData(result, f)
+	if err == nil {
+		// set link result
+		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpSearchLinkResult), f)
+		b.config.Works.PumpSearchLinkFile = f
+		blog.Infof("booster: set link result file to %s", f)
+	}
+
+	return err
 }

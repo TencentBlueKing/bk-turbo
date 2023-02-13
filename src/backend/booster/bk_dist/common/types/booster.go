@@ -114,6 +114,7 @@ type BoosterWorks struct {
 	PumpDisableStatCache bool
 	PumpSearchLink       bool
 	PumpSearchLinkFile   string
+	PumpSearchLinkDir    []string
 
 	ForceLocalList []string
 
