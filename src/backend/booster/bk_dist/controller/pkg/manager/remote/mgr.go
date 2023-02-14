@@ -11,6 +11,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -42,6 +43,7 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 		fileMessageBank:       newFileMessageBank(),
 		conf:                  work.Config(),
 		resourceCheckTick:     5 * time.Second,
+		workerCheckTick:       5 * time.Second,
 		sendCorkTick:          10 * time.Millisecond,
 		// corkSize:              1024 * 512, // 512KB, it will delay much if too big
 		corkSize:      1024 * 10,
@@ -82,6 +84,7 @@ type Mgr struct {
 	conf *config.ServerConfig
 
 	resourceCheckTick time.Duration
+	workerCheckTick   time.Duration
 	lastUsed          uint64 // only accurate to second now
 	lastApplied       uint64 // only accurate to second now
 	remotejobs        int64  // save job number which using remote worker
@@ -257,6 +260,8 @@ func (m *Mgr) Init() {
 		go m.resourceCheck(ctx)
 	}
 
+	go m.workerCheck(ctx)
+
 	if m.conf.SendCork {
 		m.sendCorkChan = make(chan bool, 1000)
 		go m.sendFilesWithCorkTick(ctx)
@@ -392,6 +397,36 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 	}
 }
 
+// workerCheck check disconnected worker and recover it when it's available
+func (m *Mgr) workerCheck(ctx context.Context) {
+	blog.Infof("remote: run worker check tick for work: %s", m.work.ID())
+	ticker := time.NewTicker(m.workerCheckTick)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			blog.Infof("remote: run worker check for work(%s) canceled by context", m.work.ID())
+			return
+
+		case <-ticker.C:
+			handler := m.remoteWorker.Handler(0, nil, nil, nil)
+			for _, w := range m.resource.getDeadWorkers() {
+				go func(w *worker) {
+					_, err := handler.ExecuteSyncTime(w.host.Server)
+					if err != nil {
+						blog.Debugf("remote: try to sync time for host(%s) failed: %v", w.host.Server, err)
+						return
+					}
+					m.resource.recoverDeadWorker(w)
+				}(w)
+
+			}
+
+		}
+	}
+}
+
 // ExecuteTask run the task in remote worker and ensure the dependent files
 func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTaskExecuteResult, error) {
 	if m.TotalSlots() <= 0 {
@@ -412,7 +447,12 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	// 如果有超过100MB的大文件，则在选择host时，作为选择条件
 	fpath, _ := getMaxSizeFile(req, m.largeFileSize)
-	req.Server = m.lockSlots(dcSDK.JobUsageRemoteExe, fpath)
+	req.Server = m.lockSlots(dcSDK.JobUsageRemoteExe, fpath, req.BanWorkerList)
+	if req.Server == nil {
+		blog.Infof("remote: no available worker for work(%s) from pid(%d) with(%d) ban worker",
+			m.work.ID(), req.Pid, len(req.BanWorkerList))
+		return nil, errors.New("no available worker")
+	}
 	blog.Infof("remote: selected host(%s) with large file(%s)",
 		req.Server.Server, fpath)
 
@@ -466,6 +506,11 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkEndTime)
 	if err != nil {
+		if isCaredNetError(err) {
+			m.handleNetError(req, err)
+		}
+
+		req.BanWorkerList = append(req.BanWorkerList, req.Server)
 		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
 			"remote execute failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
 		return nil, err
@@ -1344,8 +1389,8 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 	return types.FileSendUnknown, nil
 }
 
-func (m *Mgr) lockSlots(usage dcSDK.JobUsage, f string) *dcProtocol.Host {
-	return m.resource.Lock(usage, f)
+func (m *Mgr) lockSlots(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host {
+	return m.resource.Lock(usage, f, banWorkerList)
 }
 
 func (m *Mgr) unlockSlots(usage dcSDK.JobUsage, host *dcProtocol.Host) {
@@ -1395,6 +1440,7 @@ func (m *Mgr) syncHostTime(hostList []*dcProtocol.Host) []*dcProtocol.Host {
 					blog.Warnf("remote: try to sync time for host(%s) failed: %v", h.Server, err)
 					return
 				}
+
 				t2 := time.Now().Local().UnixNano()
 
 				deltaTime := remoteTime - (t1+t2)/2
@@ -1749,4 +1795,19 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 
 	blog.Infof("remote: end send %d files with cork to server %s tick for work: %s with err:%v, retcode:%d",
 		len(files), host.Server, m.work.ID(), err, retcode)
+}
+
+func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
+	for _, w := range m.resource.getWorkers() {
+		if !w.host.Equal(req.Server) {
+			continue
+		}
+		m.resource.countWorkerError(w)
+		if m.resource.isWorkerDead(w, m.conf.NetErrorLimit) {
+			m.resource.workerDead(w)
+			blog.Errorf("remote: server(%s) in work(%s) has the %dth continuous net errors:(%v), "+
+				"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
+		}
+		break
+	}
 }
