@@ -178,8 +178,8 @@ func (m *Mgr) ExecuteTask(
 		IOTimeout:     e.ioTimeout,
 		BanWorkerList: []*protocol.Host{},
 	}
-	//for i := 0; i < e.remoteTryTimes(); i++ {
-	for i := 0; i < m.work.Config().RemoteRetryTimes; i++ {
+
+	for i := 0; i < m.getRetryTimes(e); i++ {
 		req.Stats.RemoteTryTimes = i + 1
 		r, err = m.work.Remote().ExecuteTask(remoteReq)
 		if err != nil {
@@ -278,4 +278,12 @@ func needRetry(req *types.LocalTaskExecuteRequest) bool {
 		return false
 	}
 	return true
+}
+
+func (m *Mgr) getRetryTimes(e *executor) int {
+	// hander 配置优先
+	if e.remoteTryTimes() > 1 {
+		return e.remoteTryTimes()
+	}
+	return m.work.Config().RemoteRetryTimes
 }
