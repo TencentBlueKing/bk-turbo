@@ -390,8 +390,8 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("ShaderTool: got action result:%+v", r)
-			if r.Exitcode != 0 {
-				err := fmt.Errorf("exit code:%d", r.Exitcode)
+			if r.Exitcode != 0 || r.Err != nil {
+				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("ShaderTool: %v", err)
 				return err
 			}
@@ -481,6 +481,7 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 		Outputmsg: "",
 		Errormsg:  "",
 		Exitcode:  retcode,
+		Err:       err,
 	}
 
 	actionchan <- r
