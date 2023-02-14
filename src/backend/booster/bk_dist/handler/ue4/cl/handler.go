@@ -443,19 +443,6 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		lines := strings.Split(string(data), sep)
 		for _, l := range lines {
 			l = strings.Trim(l, " \r\n\\")
-			// // TODO : the file path maybe contains space, should support this condition
-			// fields := strings.Split(l, " ")
-			// if len(fields) >= 1 {
-			// 	for i, f := range fields {
-			// 		if strings.HasSuffix(f, ".o:") {
-			// 			continue
-			// 		}
-			// 		if !filepath.IsAbs(f) {
-			// 			fields[i], _ = filepath.Abs(filepath.Join(workdir, f))
-			// 		}
-			// 		includes = append(includes, fields[i])
-			// 	}
-			// }
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -1002,15 +989,17 @@ ERROREND:
 }
 
 func (cl *TaskCL) finalExecute([]string) {
-	if cl.needcopypumpheadfile {
-		go cl.copyPumpHeadFile(cl.sandbox.Dir)
-	}
+	go func() {
+		if cl.needcopypumpheadfile {
+			cl.copyPumpHeadFile(cl.sandbox.Dir)
+		}
 
-	if cl.saveTemp() {
-		return
-	}
+		if cl.saveTemp() {
+			return
+		}
 
-	go cl.cleanTmpFile()
+		cl.cleanTmpFile()
+	}()
 }
 
 func (cl *TaskCL) saveTemp() bool {

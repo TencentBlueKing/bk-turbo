@@ -82,6 +82,7 @@ type Actionresult struct {
 	Outputmsg string
 	Errormsg  string
 	Exitcode  int
+	Err       error
 }
 
 func uniqueAndCheck(strlist []string, allindex map[string]bool) []string {
