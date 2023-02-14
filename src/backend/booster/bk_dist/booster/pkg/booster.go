@@ -11,7 +11,9 @@ package pkg
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"os"
@@ -24,6 +26,7 @@ import (
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
 	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
 	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
+	dcPump "github.com/Tencent/bk-ci/src/booster/bk_dist/common/pump"
 	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
 	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
@@ -298,13 +301,23 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorPumpCache] = envValueTrue
 	}
 
-	requiredEnv[env.KeyExecutorPumpCacheDir] = b.config.Works.PumpCacheDir
+	// requiredEnv[env.KeyExecutorPumpCacheDir] = b.config.Works.PumpCacheDir
 	requiredEnv[env.KeyExecutorPumpCacheSizeMaxMB] = strconv.Itoa(int(b.config.Works.PumpCacheSizeMaxMB))
 
 	if len(b.config.Works.PumpBlackList) > 0 {
 		requiredEnv[env.KeyExecutorPumpBlackKeys] = strings.Join(b.config.Works.PumpBlackList, env.CommonBKEnvSepKey)
 	}
 	requiredEnv[env.KeyExecutorPumpMinActionNum] = strconv.Itoa(int(b.config.Works.PumpMinActionNum))
+
+	if b.config.Works.PumpDisableStatCache {
+		requiredEnv[env.KeyExecutorPumpDisableStatCache] = envValueTrue
+	}
+
+	if b.config.Works.PumpSearchLink {
+		requiredEnv[env.KeyExecutorPumpSearchLink] = envValueTrue
+	}
+
+	requiredEnv[env.KeyExecutorPumpSearchLinkResult] = b.config.Works.PumpSearchLinkFile
 
 	if b.config.Works.IOTimeoutSecs > 0 {
 		requiredEnv[env.KeyExecutorIOTimeout] = strconv.Itoa(b.config.Works.IOTimeoutSecs)
@@ -490,8 +503,8 @@ func (b *Booster) run(pCtx context.Context) (int, error) {
 		return b.runDegradeWorks(pCtx)
 	}
 
-	// support pump cache check
-	b.checkPumpCache()
+	// support pump check
+	b.checkPump()
 
 	// no work commands do not register
 	if b.config.Works.NoWork {
@@ -1266,23 +1279,149 @@ func (b *Booster) setToolChainWithJSON(tools *dcSDK.Toolchain) error {
 	return nil
 }
 
-func (b *Booster) checkPumpCache() {
-	if b.config.Works.PumpCache || b.config.Works.PumpCacheRemoveAll {
+func (b *Booster) checkPump() {
+	if b.config.Works.Pump {
 		pumpdir := b.config.Works.PumpCacheDir
 		if pumpdir == "" {
 			pumpdir = dcUtil.GetPumpCacheDir()
+			if pumpdir == "" {
+				blog.Infof("booster: not found pump cache dir, do nothing")
+				return
+			}
+
+			// fresh env of cache dir
+			os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
+			b.config.Works.PumpCacheDir = pumpdir
 		}
 
-		if pumpdir != "" {
-			blog.Infof("booster: ready clean pump cache dir:%s", pumpdir)
-			if b.config.Works.PumpCacheRemoveAll {
-				os.RemoveAll(pumpdir)
-			} else {
-				limitsize := int64(b.config.Works.PumpCacheSizeMaxMB * 1024 * 1024)
-				cleanDirByTime(pumpdir, limitsize)
+		b.checkPumpCache(pumpdir)
+
+		if b.config.Works.PumpSearchLink && runtime.GOOS == "darwin" {
+			// 获取默认xcode的路径
+			xcodepath, err := getXcodeIncludeLinkDir()
+			if err != nil || xcodepath == "" {
+				blog.Infof("booster: get default xcode path with error:%v", err)
+				return
 			}
-		} else {
-			blog.Infof("booster: not found pump cache dir, do nothing")
+
+			// 得到所有需要搜索的目录（包括默认xcode和用户指定的）
+			dirs := []string{xcodepath}
+			dirs = append(dirs, b.config.Works.PumpSearchLinkDir...)
+
+			// 搜索所有symlink
+			files := make(map[string]string, 100)
+			searchLinks(dirs, files)
+
+			// 保存结果
+			linkresultfile := getLinkFile(pumpdir, xcodepath)
+			b.saveLinks(files, linkresultfile)
 		}
 	}
+}
+
+// check pump cache
+func (b *Booster) checkPumpCache(pumpdir string) {
+	if b.config.Works.PumpCache || b.config.Works.PumpCacheRemoveAll {
+		blog.Infof("booster: ready clean pump cache dir:%s", pumpdir)
+		if b.config.Works.PumpCacheRemoveAll {
+			os.RemoveAll(pumpdir)
+		} else {
+			limitsize := int64(b.config.Works.PumpCacheSizeMaxMB * 1024 * 1024)
+			cleanDirByTime(pumpdir, limitsize)
+		}
+	}
+}
+
+// get default xcode link path
+func getXcodeIncludeLinkDir() (string, error) {
+	sandbox := dcSyscall.Sandbox{}
+
+	exefullpath := "xcode-select"
+	params := []string{"-p"}
+	blog.Infof("booster: ready execute command from dir(%s): %s %s",
+		sandbox.Dir, exefullpath, strings.Join(params, " "))
+	_, stdout, _, err := sandbox.ExecCommandWithMessage(exefullpath, params...)
+
+	if err != nil || stdout == nil {
+		blog.Warnf("booster: run xcode-select -p with error:[%v] or no output", err)
+		return "", err
+	}
+
+	xcodepath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms/MacOSX.platform/Developer/SDKs")
+	info, err := os.Stat(xcodepath)
+	if info != nil && (err == nil || os.IsExist(err)) {
+		fis, err := ioutil.ReadDir(xcodepath)
+		if err != nil {
+			return "", err
+		}
+
+		for _, fi := range fis {
+			if fi.Mode()&os.ModeSymlink != 0 {
+				linkfile := filepath.Join(xcodepath, fi.Name())
+				originFile, err := os.Readlink(linkfile)
+
+				if err != nil {
+					blog.Warnf("booster: readlink %s with error:%v", linkfile, err)
+					continue
+				}
+
+				blog.Infof("booster: Resolved symlink %s to %s", linkfile, originFile)
+
+				if strings.HasSuffix(originFile, "MacOSX.sdk") {
+					blog.Infof("booster: found target link dir %s", linkfile)
+
+					xcodepath = filepath.Join(linkfile, "usr/include")
+
+					// // 记录该目录下的所有链接关系
+					// linkmap, err := searchSymlink(xcodepath)
+					// if err == nil {
+					// 	blog.Debugf("booster: %+v", linkmap)
+
+					// 	// TOOD : save map to file
+					// 	md5str := md5.Sum([]byte(xcodepath))
+					// 	linkresult := filepath.Join(pumpdir, fmt.Sprintf("link_%x.txt", md5str))
+
+					// 	err = dcPump.SaveLinkData(linkmap, linkresult)
+					// 	if err == nil {
+					// 		// set link result
+					// 		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpSearchLinkResult), linkresult)
+					// 		b.config.Works.PumpSearchLinkFile = linkresult
+					// 		blog.Infof("booster: set link result file to %s", linkresult)
+					// 	}
+					// }
+
+					// break
+					return xcodepath, nil
+				}
+			}
+		}
+	}
+
+	return "", nil
+}
+
+func getLinkFile(pumpdir string, xcodepath string) string {
+	md5str := md5.Sum([]byte(xcodepath))
+	return filepath.Join(pumpdir, fmt.Sprintf("link_%x.txt", md5str))
+}
+
+func searchLinks(dirs []string, result map[string]string) error {
+	for _, v := range dirs {
+		// 记录该目录下的所有链接关系
+		_ = searchSymlink(v, result)
+	}
+
+	return nil
+}
+
+func (b *Booster) saveLinks(result map[string]string, f string) error {
+	err := dcPump.SaveLinkData(result, f)
+	if err == nil {
+		// set link result
+		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpSearchLinkResult), f)
+		b.config.Works.PumpSearchLinkFile = f
+		blog.Infof("booster: set link result file to %s", f)
+	}
+
+	return err
 }

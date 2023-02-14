@@ -76,6 +76,10 @@ const (
 	FlagPumpCacheRemoveAll   = "pump_cache_remove_all"
 	FlagPumpBlackList        = "pump_black_list"
 	FlagPumpMinActionNum     = "pump_min_action_num"
+	FlagPumpDisableStatCache = "pump_disable_stat_cache"
+	FlagPumpSearchLink       = "pump_search_link"
+	FlagPumpSearchLinkFile   = "pump_search_link_file"
+	FlagPumpSearchLinkDir    = "pump_search_link_dir"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -317,6 +321,22 @@ var (
 		commandCli.IntFlag{
 			Name:  "pump_min_action_num",
 			Usage: "do not use pump if total actions less this",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_disable_stat_cache",
+			Usage: "whether disable pump depend file stat info cache, default is false",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_search_link",
+			Usage: "whether search link files",
+		},
+		commandCli.StringFlag{
+			Name:  "pump_search_link_file",
+			Usage: "specify the file which record link result",
+		},
+		commandCli.StringSliceFlag{
+			Name:  "pump_search_link_dir",
+			Usage: "specify the dir where to search link files",
 		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",

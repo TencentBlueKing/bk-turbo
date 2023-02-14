@@ -38,6 +38,7 @@ var (
 	ErrorNotSupportGch          = fmt.Errorf("output with .gch, must be local")
 	ErrorNoPumpHeadFile         = fmt.Errorf("pump head file not exist")
 	ErrorNoDependFile           = fmt.Errorf("depend file not exist")
+	ErrorInvalidDependFile      = fmt.Errorf("depend file invalid")
 	ErrorNotSupportRemote       = fmt.Errorf("not support to remote execute")
 	ErrorInPumpBlack            = fmt.Errorf("in pump black list")
 )
