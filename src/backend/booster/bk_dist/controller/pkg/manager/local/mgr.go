@@ -285,5 +285,5 @@ func (m *Mgr) getTryTimes(e *executor) int {
 	if e.remoteTryTimes() > 1 {
 		return e.remoteTryTimes()
 	}
-	return m.work.Config().RemoteRetryTimes
+	return m.work.Config().RemoteRetryTimes + 1
 }
