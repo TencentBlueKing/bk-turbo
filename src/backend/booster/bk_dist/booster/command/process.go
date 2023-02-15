@@ -231,8 +231,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		netErrLimit = c.Int(FlagNetErrorLimit)
 	}
 
-	remoteRetryTimes := 1
-	if c.IsSet(FlagRemoteRetryTimes) && c.Int(FlagRemoteRetryTimes) > 0 {
+	remoteRetryTimes := 0
+	if c.IsSet(FlagRemoteRetryTimes) && c.Int(FlagRemoteRetryTimes) >= 0 {
 		remoteRetryTimes = c.Int(FlagRemoteRetryTimes)
 	}
 
