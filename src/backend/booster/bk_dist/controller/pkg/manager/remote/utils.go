@@ -121,7 +121,7 @@ func isCaredNetError(err error) bool {
 	case *os.SyscallError:
 		if errno, ok := t.Err.(syscall.Errno); ok {
 			switch errno {
-			case syscall.ECONNREFUSED:
+			case syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED:
 				return true
 			case syscall.ETIMEDOUT:
 				return true
