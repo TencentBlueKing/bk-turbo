@@ -226,11 +226,23 @@ func (s *sdk) launchServer() error {
 		sendcork = "--send_cork"
 	}
 
+	netErrorLimit := 5
+	if s.config.NetErrorLimit > 0 {
+		netErrorLimit = s.config.NetErrorLimit
+	}
+
+	remoteRetryTimes := 0
+	if s.config.RemoteRetryTimes > 0 {
+		remoteRetryTimes = s.config.RemoteRetryTimes
+	}
+
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
 		"%s --res_idle_secs_for_free=%d"+
-		" %s",
+		" %s"+
+		" --net_error_limit=%d"+
+		" --remote_retry_times=%d",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -248,6 +260,8 @@ func (s *sdk) launchServer() error {
 		autoResourceMgr,
 		s.config.ResIdleSecsForFree,
 		sendcork,
+		netErrorLimit,
+		remoteRetryTimes,
 	))
 }
 
