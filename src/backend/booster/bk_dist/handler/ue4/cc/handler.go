@@ -286,6 +286,30 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	return nil, nil
 }
 
+func formatFilePath(f string) string {
+	f = strings.Replace(f, "\\", "/", -1)
+
+	// 转小写 （TODO: linux下或许有问题，但是现在linux不支持pump，先不管）
+	f = strings.ToLower(f)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, "/")
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, "/")
+	}
+
+	return f
+}
+
 func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	blog.Infof("cc: copy pump head file: %s to: %s", cc.sourcedependfile, cc.pumpHeadFile)
 	data, err := ioutil.ReadFile(cc.sourcedependfile)
@@ -332,7 +356,8 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 				if !filepath.IsAbs(targetf) {
 					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
 				}
-				includes = append(includes, targetf)
+
+				includes = append(includes, formatFilePath(targetf))
 			}
 		}
 	}
@@ -344,9 +369,9 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
-	for i := range includes {
-		includes[i] = strings.Replace(includes[i], "\\", "/", -1)
-	}
+	// for i := range includes {
+	// 	includes[i] = strings.Replace(includes[i], "\\", "/", -1)
+	// }
 	uniqlines := uniqArr(includes)
 
 	// TODO : append symlink or symlinked if need
