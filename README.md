@@ -1,11 +1,11 @@
 ![LOGO](docs/resource/img/bkci_cn.png)
 ---
-[![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/Tencent/bk-ci/blob/master/LICENSE.txt) [![Release Version](https://img.shields.io/github/v/release/Tencent/bk-ci?include_prereleases)](https://github.com/Tencent/bk-ci/releases) [![Backend CI](https://github.com/Tencent/bk-ci/workflows/Backend%20CI/badge.svg?branch=master)](https://img.shields.io/github/workflow/status/Tencent/bk-ci/Tag%20Realse)
+[![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/TencentBlueKing/bk-turbo/blob/master/LICENSE.txt) [![Release Version](https://img.shields.io/github/v/release/TencentBlueKing/bk-turbo?include_prereleases)](https://github.com/TencentBlueKing/bk-turbo/releases) 
 
 [English](README_EN.md) | 简体中文
 
 > **重要提示**: `master` 分支在开发过程中可能处于 *不稳定或者不可用状态* 。
-请通过[releases](https://github.com/tencent/bk-ci/releases) 而非 `master` 去获取稳定的二进制文件。
+请通过[releases](https://github.com/TencentBlueKing/bk-turbo/releases) 而非 `master` 去获取稳定的二进制文件。
 
 bk-ci是一个免费并开源的CI服务，可助你自动化构建-测试-发布工作流，持续、快速、高质量地交付你的产品。
 
