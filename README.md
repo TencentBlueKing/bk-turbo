@@ -13,6 +13,15 @@
 
 ![image](https://user-images.githubusercontent.com/25241966/222373415-94172897-fd7d-4132-a438-9d539c82ba08.png)
 
+![image](https://user-images.githubusercontent.com/25241966/222376537-2d6e61e0-3621-4d7a-8d1e-6d996cc3b299.png)
+
+disttask各模块功能介绍如下：
+1： remoter worker 运行在分布式环境中，负责接收，执行和返回分布式任务
+2： local server 运行在构建机上，实现分布式任务底层基础功能，并可扩展不同应用场景的分布式任务实现
+3： disttask_executor 通用任务执行器，接管实际编译中的编译命令(如 gcc命令，clang命令)，是构建工具和分布式基础服务之间的桥梁
+4： 基于disttask提供的接口，根据实际场景需要，实现独立的构建工具
+
+
 - [架构设计](docs/overview/architecture.md)
 - [代码目录](docs/overview/code_framework.md)
 - [设计理念](docs/overview/design.md)
