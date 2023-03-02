@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -98,7 +99,12 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 	// query
 	tempis := make(map[string]*dcFile.Info, len(notfound))
 	for _, f := range notfound {
-		i := dcFile.Lstat(f)
+		var i *dcFile.Info
+		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+			i = dcFile.GetFileInfoByEnumDir(f)
+		} else {
+			i = dcFile.Lstat(f)
+		}
 		tempis[f] = i
 
 		if mustexisted && !i.Exist() {

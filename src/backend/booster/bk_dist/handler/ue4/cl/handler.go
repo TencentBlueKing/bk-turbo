@@ -402,9 +402,6 @@ type sourceDependencies struct {
 func formatFilePath(f string) string {
 	f = strings.Replace(f, "/", "\\", -1)
 
-	// 转小写
-	f = strings.ToLower(f)
-
 	// 去掉路径中的..
 	if strings.Contains(f, "..") {
 		p := strings.Split(f, "\\")

@@ -289,9 +289,6 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 func formatFilePath(f string) string {
 	f = strings.Replace(f, "\\", "/", -1)
 
-	// 转小写 （TODO: linux下或许有问题，但是现在linux不支持pump，先不管）
-	f = strings.ToLower(f)
-
 	// 去掉路径中的..
 	if strings.Contains(f, "..") {
 		p := strings.Split(f, "/")
