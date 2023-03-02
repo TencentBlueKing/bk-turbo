@@ -1,4 +1,4 @@
-![LOGO](docs/resource/img/bkci_cn.png)
+![LOGO](docs/resource/img/bkturbo_cn.png)
 ---
 [![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/TencentBlueKing/bk-turbo/blob/master/LICENSE.txt) [![Release Version](https://img.shields.io/github/v/release/TencentBlueKing/bk-turbo?include_prereleases)](https://github.com/TencentBlueKing/bk-turbo/releases) 
 
