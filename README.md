@@ -2,16 +2,12 @@
 ---
 [![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/TencentBlueKing/bk-turbo/blob/master/LICENSE.txt) [![Release Version](https://img.shields.io/github/v/release/TencentBlueKing/bk-turbo?include_prereleases)](https://github.com/TencentBlueKing/bk-turbo/releases) 
 
-[English](README_EN.md) | 简体中文
-
 > **重要提示**: `master` 分支在开发过程中可能处于 *不稳定或者不可用状态* 。
 请通过[releases](https://github.com/TencentBlueKing/bk-turbo/releases) 而非 `master` 去获取稳定的二进制文件。
 
 编译构建是项目开发和发布过程中的重要环节，同时也是非常耗时的环境，有些项目执行一次完整的构建需要几十分钟甚至几个小时，各种编译构建加速工具都能在一定程度上减小构建时长。bk-turbo是一个跨平台统一分布式编译加速服务，目前已经支持linux C++编译，UE4多平台C++，shader编译加速，并可快速扩展支持不同编译场景。
 
 ## Overview
-
-![image](https://user-images.githubusercontent.com/25241966/222373415-94172897-fd7d-4132-a438-9d539c82ba08.png)
 
 ![image](https://user-images.githubusercontent.com/25241966/222376537-2d6e61e0-3621-4d7a-8d1e-6d996cc3b299.png)
 
@@ -20,11 +16,6 @@ disttask各模块功能介绍如下：
 2： local server 运行在构建机上，实现分布式任务底层基础功能，并可扩展不同应用场景的分布式任务实现
 3： disttask_executor 通用任务执行器，接管实际编译中的编译命令(如 gcc命令，clang命令)，是构建工具和分布式基础服务之间的桥梁
 4： 基于disttask提供的接口，根据实际场景需要，实现独立的构建工具
-
-
-- [架构设计](docs/overview/architecture.md)
-- [代码目录](docs/overview/code_framework.md)
-- [设计理念](docs/overview/design.md)
 
 ## Features
 - 支持linux C/C++编译加速，不受构建工具和构建脚本实现方式限制
