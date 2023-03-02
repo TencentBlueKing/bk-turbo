@@ -9,7 +9,7 @@
 
 ## Overview
 
-![image](docs/resource/img/bkturbo_cn.png)
+![image](docs/resource/img/bkturbo_arch.png)
 
 disttask各模块功能介绍如下：
 1： remoter worker 运行在分布式环境中，负责接收，执行和返回分布式任务
