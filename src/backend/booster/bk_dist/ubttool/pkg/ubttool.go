@@ -21,20 +21,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/booster/pkg"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api"
-	v1 "github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api/v1"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/ubttool/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/pkg"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
+	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 
-	shaderToolComm "github.com/Tencent/bk-ci/src/booster/bk_dist/shadertool/common"
+	shaderToolComm "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
 
 	"github.com/google/shlex"
 )
@@ -211,8 +211,8 @@ func (h *UBTTool) executeActions() error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("UBTTool: got action result:%+v", r)
-			if r.Exitcode != 0 {
-				err := fmt.Errorf("exit code:%d", r.Exitcode)
+			if r.Exitcode != 0 || r.Err != nil {
+				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("UBTTool: %v", err)
 				return err
 			}
@@ -449,6 +449,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 		Outputmsg: "",
 		Errormsg:  "",
 		Exitcode:  retcode,
+		Err:       err,
 	}
 
 	actionchan <- r

@@ -10,8 +10,8 @@
 package common
 
 import (
-	v1 "github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api/v1"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
+	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 )
 
 // GetV1Manager 获取controller manager的单例

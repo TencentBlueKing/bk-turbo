@@ -15,11 +15,11 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/flock"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/monitor/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/flock"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/monitor/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	"github.com/shirou/gopsutil/process"
 )
 

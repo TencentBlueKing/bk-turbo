@@ -10,9 +10,9 @@
 package common
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // Flags to desc flag of this tool
@@ -51,6 +51,7 @@ type Actionresult struct {
 	Outputmsg string
 	Errormsg  string
 	Exitcode  int
+	Err       error
 }
 
 func uniqueAndCheck(strlist []string, allindex map[string]bool) []string {

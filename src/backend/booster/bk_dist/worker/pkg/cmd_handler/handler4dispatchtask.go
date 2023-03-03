@@ -19,16 +19,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 
-	dcConfig "github.com/Tencent/bk-ci/src/booster/bk_dist/common/config"
-	dcEnv "github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/protocol"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // Handle4DispatchReq handler for dispatch task request

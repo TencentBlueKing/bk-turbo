@@ -8,10 +8,10 @@
 package api
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/config"
-	rd "github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/register-discover"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/store"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/config"
+	rd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/register-discover"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/store"
 )
 
 // DistCCControllerAPIResource describe the distcc controller api resource

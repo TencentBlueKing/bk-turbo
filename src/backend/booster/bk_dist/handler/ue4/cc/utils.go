@@ -20,13 +20,15 @@ import (
 	"sync"
 	"time"
 
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	commonUtil "github.com/Tencent/bk-ci/src/booster/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	"github.com/google/shlex"
 	"github.com/saintfish/chardet"
@@ -1483,4 +1485,50 @@ func getResourceDir(cmd string) (string, error) {
 
 	blog.Infof("cc: found final resource dir:%s by exe dir:%s", maxversion, exepfullath)
 	return maxversion, nil
+}
+
+var (
+	XcodeIncludeLinkFileslock sync.RWMutex
+	XcodeIncludeReal2link     = make(map[string]string, 0)
+	XcodeIncludeLink2real     = make(map[string]string, 0)
+	XcodeIncludeLinkResolved  = false
+)
+
+func getIncludeLinks(env *env.Sandbox, uniqlines []string) ([]string, error) {
+	if !dcPump.SupportPumpSearchLink(env) {
+		return nil, nil
+	}
+
+	if !XcodeIncludeLinkResolved {
+		XcodeIncludeLinkFileslock.Lock()
+
+		if !XcodeIncludeLinkResolved {
+			XcodeIncludeLinkResolved = true
+
+			var err error
+			resultfile := dcPump.LinkResultFile(env)
+			XcodeIncludeLink2real, XcodeIncludeReal2link, err = dcPump.ResolveLinkData(resultfile)
+			if err != nil {
+				blog.Infof("cc: resolve link file %s with error:%v", resultfile, err)
+			}
+		}
+
+		XcodeIncludeLinkFileslock.Unlock()
+	}
+
+	if XcodeIncludeLink2real != nil {
+		temparr := make([]string, 0, 10)
+		for _, l := range uniqlines {
+			if v, ok := XcodeIncludeLink2real[l]; ok {
+				temparr = append(temparr, v)
+			}
+			if v, ok := XcodeIncludeReal2link[l]; ok {
+				temparr = append(temparr, v)
+			}
+		}
+		return temparr, nil
+	}
+
+	return nil, nil
+
 }

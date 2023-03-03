@@ -23,19 +23,19 @@ import (
 	"strings"
 	"time"
 
-	dcConfig "github.com/Tencent/bk-ci/src/booster/bk_dist/common/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcEnv "github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcPump "github.com/Tencent/bk-ci/src/booster/bk_dist/common/pump"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/handler"
-	commonUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/handler/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
@@ -443,19 +443,6 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		lines := strings.Split(string(data), sep)
 		for _, l := range lines {
 			l = strings.Trim(l, " \r\n\\")
-			// // TODO : the file path maybe contains space, should support this condition
-			// fields := strings.Split(l, " ")
-			// if len(fields) >= 1 {
-			// 	for i, f := range fields {
-			// 		if strings.HasSuffix(f, ".o:") {
-			// 			continue
-			// 		}
-			// 		if !filepath.IsAbs(f) {
-			// 			fields[i], _ = filepath.Abs(filepath.Join(workdir, f))
-			// 		}
-			// 		includes = append(includes, fields[i])
-			// 	}
-			// }
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -1002,15 +989,17 @@ ERROREND:
 }
 
 func (cl *TaskCL) finalExecute([]string) {
-	if cl.needcopypumpheadfile {
-		go cl.copyPumpHeadFile(cl.sandbox.Dir)
-	}
+	go func() {
+		if cl.needcopypumpheadfile {
+			cl.copyPumpHeadFile(cl.sandbox.Dir)
+		}
 
-	if cl.saveTemp() {
-		return
-	}
+		if cl.saveTemp() {
+			return
+		}
 
-	go cl.cleanTmpFile()
+		cl.cleanTmpFile()
+	}()
 }
 
 func (cl *TaskCL) saveTemp() bool {

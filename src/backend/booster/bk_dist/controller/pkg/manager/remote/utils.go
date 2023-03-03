@@ -11,12 +11,15 @@ package remote
 
 import (
 	"fmt"
+	"net"
+	"os"
 	"strings"
+	"syscall"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 )
 
 func getFileDetailsFromExecuteRequest(req *types.RemoteTaskExecuteRequest) []*types.FilesDetails {
@@ -95,4 +98,36 @@ func workerSideCache(sandbox *dcSyscall.Sandbox) bool {
 		return false
 	}
 	return sandbox.Env.GetEnv(env.KeyExecutorWorkerSideCache) != ""
+}
+
+func isCaredNetError(err error) bool {
+	netErr, ok := err.(net.Error)
+	if !ok {
+		return false
+	}
+
+	if netErr.Timeout() {
+		return true
+	}
+
+	opErr, ok := netErr.(*net.OpError)
+	if !ok {
+		return false
+	}
+
+	switch t := opErr.Err.(type) {
+	case *net.DNSError:
+		return true
+	case *os.SyscallError:
+		if errno, ok := t.Err.(syscall.Errno); ok {
+			switch errno {
+			case syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED:
+				return true
+			case syscall.ETIMEDOUT:
+				return true
+			}
+		}
+	}
+
+	return false
 }

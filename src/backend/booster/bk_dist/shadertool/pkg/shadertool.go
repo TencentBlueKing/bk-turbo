@@ -21,20 +21,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/booster/pkg"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api"
-	v1 "github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api/v1"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/shadertool/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/pkg"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
+	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 
 	"github.com/google/shlex"
 	"github.com/shirou/gopsutil/process"
@@ -390,8 +390,8 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("ShaderTool: got action result:%+v", r)
-			if r.Exitcode != 0 {
-				err := fmt.Errorf("exit code:%d", r.Exitcode)
+			if r.Exitcode != 0 || r.Err != nil {
+				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("ShaderTool: %v", err)
 				return err
 			}
@@ -481,6 +481,7 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 		Outputmsg: "",
 		Errormsg:  "",
 		Exitcode:  retcode,
+		Err:       err,
 	}
 
 	actionchan <- r

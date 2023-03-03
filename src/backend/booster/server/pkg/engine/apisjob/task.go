@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
 
 const (

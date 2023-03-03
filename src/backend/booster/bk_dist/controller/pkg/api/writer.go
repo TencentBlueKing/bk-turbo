@@ -12,7 +12,7 @@ package api
 import (
 	"net/http"
 
-	http2 "github.com/Tencent/bk-ci/src/booster/common/http"
+	http2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 
 	"github.com/emicklei/go-restful"
 )

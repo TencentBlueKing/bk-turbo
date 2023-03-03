@@ -10,7 +10,7 @@
 package main
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/shadertool/command"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/command"
 )
 
 func main() {

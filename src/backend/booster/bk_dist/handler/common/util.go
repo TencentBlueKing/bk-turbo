@@ -13,15 +13,16 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // GetHandlerEnv get env by booster type
@@ -97,15 +98,38 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 	// query
 	tempis := make(map[string]*dcFile.Info, len(notfound))
 	for _, f := range notfound {
-		i := dcFile.Stat(f)
+		i := dcFile.Lstat(f)
 		tempis[f] = i
 
 		if mustexisted && !i.Exist() {
 			continue
 		}
+
+		if i.Basic().Mode()&os.ModeSymlink != 0 {
+			originFile, err := os.Readlink(f)
+			if err == nil {
+				if !filepath.IsAbs(originFile) {
+					originFile, err = filepath.Abs(filepath.Join(filepath.Dir(f), originFile))
+					if err == nil {
+						i.LinkTarget = originFile
+						blog.Infof("common util: symlink %s to %s", f, originFile)
+					} else {
+						blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
+							f, originFile, err)
+					}
+				} else {
+					i.LinkTarget = originFile
+					blog.Infof("common util: symlink %s to %s", f, originFile)
+				}
+			} else {
+				blog.Infof("common util: symlink %s Readlink error:%s", f, err)
+			}
+		}
+
 		if notdir && i.Basic().IsDir() {
 			continue
 		}
+
 		is = append(is, i)
 	}
 

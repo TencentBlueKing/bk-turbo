@@ -12,13 +12,13 @@ package custom
 import (
 	"fmt"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/handler"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/handler/custom/plugin"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/custom/plugin"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
 
 type Type int

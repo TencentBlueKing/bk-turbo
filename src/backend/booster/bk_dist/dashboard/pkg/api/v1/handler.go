@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/compress"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/disttask"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/compress"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/dashboard/pkg/api"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	commonMySQL "github.com/Tencent/bk-ci/src/booster/common/mysql"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
 
 	"github.com/emicklei/go-restful"
 )

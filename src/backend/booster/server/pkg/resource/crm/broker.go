@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/util"
-	op "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
+	op "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
 )
 
 // NewBrokerSet get a new, empty broker set.

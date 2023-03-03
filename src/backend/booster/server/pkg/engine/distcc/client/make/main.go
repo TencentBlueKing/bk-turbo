@@ -10,7 +10,7 @@
 package main
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/client/pkg"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg"
 )
 
 func main() {

@@ -14,11 +14,11 @@ import (
 	"os/user"
 	"time"
 
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 )
 
 // WorkRegisterConfig describe the config of registering work
@@ -184,12 +184,13 @@ type LocalSlotsFreeConfig struct {
 
 // RemoteTaskExecuteRequest describe the remote task execution param
 type RemoteTaskExecuteRequest struct {
-	Pid       int
-	Server    *dcProtocol.Host
-	Req       *dcSDK.BKDistCommand
-	Stats     *dcSDK.ControllerJobStats
-	Sandbox   *dcSyscall.Sandbox
-	IOTimeout int
+	Pid           int
+	Server        *dcProtocol.Host
+	Req           *dcSDK.BKDistCommand
+	Stats         *dcSDK.ControllerJobStats
+	Sandbox       *dcSyscall.Sandbox
+	IOTimeout     int
+	BanWorkerList []*dcProtocol.Host
 }
 
 // RemoteTaskExecuteResult describe the remote task execution result

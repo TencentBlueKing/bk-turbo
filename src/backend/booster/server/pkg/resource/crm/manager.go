@@ -16,20 +16,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/rd"
-	dcmac "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator/dc_mac"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/rd"
+	dcmac "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator/dc_mac"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	commonMySQL "github.com/Tencent/bk-ci/src/booster/common/mysql"
-	"github.com/Tencent/bk-ci/src/booster/server/config"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/manager/normal"
-	rsc "github.com/Tencent/bk-ci/src/booster/server/pkg/resource"
-	op "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator/k8s"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator/mesos"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/manager/normal"
+	rsc "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource"
+	op "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator/k8s"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator/mesos"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 )
 
 //DefaultNamespace define default namespace for resourcemanager

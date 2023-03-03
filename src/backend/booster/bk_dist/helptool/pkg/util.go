@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 )
 
 func downloadFile(filepath string, url string) (err error) {

@@ -13,18 +13,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/dashboard/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/dashboard/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/pkg/api"
 
 	// 初始化api资源
-	_ "github.com/Tencent/bk-ci/src/booster/bk_dist/dashboard/pkg/api/v1"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/dashboard/pkg/dashboard"
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/encrypt"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/disttask"
+	_ "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/pkg/api/v1"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/pkg/dashboard"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/encrypt"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
 )
 
 // Server local server

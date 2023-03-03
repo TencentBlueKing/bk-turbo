@@ -13,10 +13,10 @@ import (
 	"context"
 	"time"
 
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/analyser"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/analyser"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 )
 
 // Mgr describe a manager for handling all actions in controller
