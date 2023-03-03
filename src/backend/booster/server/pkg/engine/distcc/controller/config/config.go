@@ -20,9 +20,9 @@ package config
 import (
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
-	"github.com/Tencent/bk-ci/src/booster/common/static"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/types"
 )
 
 // DistCCControllerConfig describe the controller server config

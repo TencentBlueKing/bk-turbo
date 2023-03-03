@@ -12,11 +12,11 @@ package remote
 import (
 	"sync"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/client"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
 )
 
 func newFileMessageBank() *fileMessageBank {

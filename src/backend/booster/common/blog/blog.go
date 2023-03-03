@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog/glog"
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog/glog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
 )
 
 // GlogWriter serves as a bridge between the standard log package and the glog package.

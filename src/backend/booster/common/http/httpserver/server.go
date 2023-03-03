@@ -15,8 +15,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/ssl"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/ssl"
 
 	"github.com/emicklei/go-restful"
 	"github.com/gorilla/mux"

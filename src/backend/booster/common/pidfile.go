@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
 )
 
 var pidFile string

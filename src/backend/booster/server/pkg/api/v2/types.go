@@ -9,7 +9,7 @@
 
 package v2
 
-import "github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
+import "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 
 const (
 	queryTaskIDKey = "task_id"

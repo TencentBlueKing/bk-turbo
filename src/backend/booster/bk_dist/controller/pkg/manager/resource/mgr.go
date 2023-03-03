@@ -18,17 +18,17 @@ import (
 	"sync"
 	"time"
 
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/compress"
-	commonHTTP "github.com/Tencent/bk-ci/src/booster/common/http"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpclient"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/disttask"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/compress"
+	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
 )
 
 // NewMgr get a new ResourceMgr

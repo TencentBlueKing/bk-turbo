@@ -14,19 +14,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/recorder"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/recorder"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/basic"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/local"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/remote"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/resource"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/util"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/basic"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/local"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/remote"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/resource"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 )
 
 var (

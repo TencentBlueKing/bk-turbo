@@ -13,18 +13,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/flock"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/flock"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
 
 	// 初始化api资源
-	_ "github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api/v1"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/dashboard"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
+	_ "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/dashboard"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 )
 
 var (

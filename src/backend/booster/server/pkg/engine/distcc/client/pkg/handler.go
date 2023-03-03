@@ -21,9 +21,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/types"
-	"github.com/Tencent/bk-ci/src/booster/common/version"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version"
 )
 
 func applyDistCCResources(sets types.DistccServerSets) (*types.DistccServerInfo, bool, error) {
