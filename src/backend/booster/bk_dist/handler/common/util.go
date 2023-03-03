@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -69,7 +68,7 @@ var (
 )
 
 // 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
-func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
+func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) []*dcFile.Info {
 	// read
 	fileInfoCacheLock.RLock()
 	notfound := []string{}
@@ -100,7 +99,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 	tempis := make(map[string]*dcFile.Info, len(notfound))
 	for _, f := range notfound {
 		var i *dcFile.Info
-		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		if statbysearchdir {
 			i = dcFile.GetFileInfoByEnumDir(f)
 		} else {
 			i = dcFile.Lstat(f)

@@ -240,7 +240,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
-		return commonUtil.GetFileInfo(uniqlines, true, true), nil
+		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env)), nil
 	} else {
 		includes := []*dcFile.Info{}
 		for _, l := range uniqlines {

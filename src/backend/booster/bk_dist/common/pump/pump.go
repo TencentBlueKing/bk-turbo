@@ -240,3 +240,8 @@ func ResolveLinkData(f string) (map[string]string, map[string]string, error) {
 func LinkResultFile(env *env.Sandbox) string {
 	return env.GetEnv(dcEnv.KeyExecutorPumpSearchLinkResult)
 }
+
+// 是否支持通过搜索目录来获取文件的stat信息
+func SupportPumpLstatByDir(env *env.Sandbox) bool {
+	return env.GetEnv(dcEnv.KeyExecutorPumpLstatByDir) != "" && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
+}

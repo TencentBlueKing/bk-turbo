@@ -115,6 +115,7 @@ type BoosterWorks struct {
 	PumpSearchLink       bool
 	PumpSearchLinkFile   string
 	PumpSearchLinkDir    []string
+	PumpLstatByDir       bool
 
 	ForceLocalList []string
 
