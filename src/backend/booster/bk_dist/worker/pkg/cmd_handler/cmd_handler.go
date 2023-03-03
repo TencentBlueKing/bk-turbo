@@ -12,9 +12,9 @@ package pbcmd
 import (
 	"time"
 
-	dcConfig "github.com/Tencent/bk-ci/src/booster/bk_dist/common/config"
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/protocol"
+	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
 )
 
 // Handler describe

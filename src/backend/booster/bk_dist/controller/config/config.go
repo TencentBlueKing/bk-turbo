@@ -12,9 +12,9 @@ package config
 import (
 	"runtime"
 
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
-	"github.com/Tencent/bk-ci/src/booster/common/static"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static"
 )
 
 // ServerConfig : server config

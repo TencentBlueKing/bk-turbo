@@ -12,7 +12,7 @@ package disttask
 import (
 	"fmt"
 
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 )
 
 const (

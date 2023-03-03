@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	selfMetric "github.com/Tencent/bk-ci/src/booster/server/pkg/metric"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 )
 
 // TaskBasicLayer or TaskCache maintains the unterminated task snapshot cache from all available engines

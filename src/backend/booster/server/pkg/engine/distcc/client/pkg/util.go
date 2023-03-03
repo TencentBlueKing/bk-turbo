@@ -19,7 +19,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Tencent/bk-ci/src/booster/common/hook"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/hook"
 )
 
 const (

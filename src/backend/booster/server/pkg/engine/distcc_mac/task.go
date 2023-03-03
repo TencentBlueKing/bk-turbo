@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	ds "github.com/Tencent/bk-ci/src/booster/common/store/distcc_server"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	ds "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/store/distcc_server"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc"
 )
 
 const (

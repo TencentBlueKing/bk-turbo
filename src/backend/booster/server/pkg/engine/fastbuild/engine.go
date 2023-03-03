@@ -13,12 +13,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	commonMySQL "github.com/Tencent/bk-ci/src/booster/common/mysql"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	resource "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/direct"
-	respack "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/direct"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	resource "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct"
+	respack "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct"
 
 	"github.com/jinzhu/gorm"
 )

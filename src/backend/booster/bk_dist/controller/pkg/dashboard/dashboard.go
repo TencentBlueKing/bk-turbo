@@ -12,7 +12,7 @@ package dashboard
 import (
 	"net/http"
 
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 
 	"github.com/gobuffalo/packr/v2"
 )

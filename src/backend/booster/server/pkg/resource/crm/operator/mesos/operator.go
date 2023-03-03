@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	commonHttp "github.com/Tencent/bk-ci/src/booster/common/http"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpclient"
-	commonTypes "github.com/Tencent/bk-ci/src/booster/common/types"
-	"github.com/Tencent/bk-ci/src/booster/server/config"
-	op "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonHttp "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
+	op "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/types"
 )
 
 const (

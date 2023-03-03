@@ -15,3 +15,5 @@ bk_dist/dashboard/pkg/dashboard/packrd/packed-packr.go
 go.sum
 .temp
 build.yml
+.codecc
+.idea

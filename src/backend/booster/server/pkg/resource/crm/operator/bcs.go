@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/metric/controllers"
-	"github.com/Tencent/bk-ci/src/booster/server/config"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	selfMetric "github.com/Tencent/bk-ci/src/booster/server/pkg/metric"
-	rsc "github.com/Tencent/bk-ci/src/booster/server/pkg/resource"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
+	rsc "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource"
 )
 
 // Operator define a bcs handler to do all operations.

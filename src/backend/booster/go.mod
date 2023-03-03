@@ -1,4 +1,4 @@
-module github.com/Tencent/bk-ci/src/booster
+module github.com/TencentBlueKing/bk-turbo/src/backend/booster
 
 go 1.13
 

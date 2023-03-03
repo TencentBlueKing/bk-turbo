@@ -1,17 +1,17 @@
 package pkg
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/config"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/api"
-	rd "github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/register-discover"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/api"
+	rd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/register-discover"
 
 	// 初始化api资源
-	_ "github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/api/v1http"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/controller"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/pkg/store"
+	_ "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/api/v1http"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/controller"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/pkg/store"
 )
 
 // DistCCController describe the controller http server
