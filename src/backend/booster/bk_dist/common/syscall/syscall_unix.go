@@ -192,8 +192,8 @@ func (s *Sandbox) ExecCommand(name string, arg ...string) (int, error) {
 		//return -1, err
 	}
 
-	blog.Debugf("syscall: cmd of [%+v] start", *cmd)
-	defer blog.Debugf("syscall: cmd of [%+v] finished", *cmd)
+	blog.Infof("syscall: cmd of [%+v] start", *cmd)
+	defer blog.Infof("syscall: cmd of [%+v] finished", *cmd)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
