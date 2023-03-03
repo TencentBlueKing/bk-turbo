@@ -21,6 +21,7 @@ import (
 	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/analyser"
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
+	hlCommon "github.com/Tencent/bk-ci/src/booster/bk_dist/handler/common"
 	"github.com/Tencent/bk-ci/src/booster/common/blog"
 )
 
@@ -60,6 +61,8 @@ type Mgr struct {
 // Init do the initialization for local manager
 func (m *Mgr) Init() {
 	blog.Infof("local: init for work:%s", m.work.ID())
+
+	hlCommon.ResetFileInfoCache()
 }
 
 // Start start resource slots for local manager

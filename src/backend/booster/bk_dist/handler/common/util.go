@@ -67,6 +67,13 @@ var (
 	fileInfoCache     = map[string]*dcFile.Info{}
 )
 
+func ResetFileInfoCache() {
+	fileInfoCacheLock.Lock()
+	defer fileInfoCacheLock.Unlock()
+
+	fileInfoCache = map[string]*dcFile.Info{}
+}
+
 // 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
 func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) []*dcFile.Info {
 	// read
