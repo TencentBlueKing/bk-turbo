@@ -17,6 +17,7 @@ import (
 
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/recorder"
 
+	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
 	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/analyser"
 	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
@@ -169,24 +170,28 @@ func (m *Mgr) ExecuteTask(
 	}
 
 	var r *types.RemoteTaskExecuteResult
-	for i := 0; i < e.remoteTryTimes(); i++ {
+	remoteReq := &types.RemoteTaskExecuteRequest{
+		Pid:           req.Pid,
+		Req:           c,
+		Stats:         req.Stats,
+		Sandbox:       e.sandbox,
+		IOTimeout:     e.ioTimeout,
+		BanWorkerList: []*protocol.Host{},
+	}
+
+	for i := 0; i < m.getTryTimes(e); i++ {
 		req.Stats.RemoteTryTimes = i + 1
-		r, err = m.work.Remote().ExecuteTask(&types.RemoteTaskExecuteRequest{
-			Pid:       req.Pid,
-			Req:       c,
-			Stats:     req.Stats,
-			Sandbox:   e.sandbox,
-			IOTimeout: e.ioTimeout,
-		})
+		r, err = m.work.Remote().ExecuteTask(remoteReq)
 		if err != nil {
 			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v", m.work.ID(), req.Pid, i, err)
 			req.Stats.RemoteErrorMessage = err.Error()
-			// do not retry if remote timeout
-			if req.Stats.RemoteWorkTimeout {
-				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with remote timeout, error: %v",
+			if !needRetry(req) {
+				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with error: %v",
 					m.work.ID(), req.Pid, i, err)
 				break
 			}
+			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) with error(%v),ban (%d) worker:(%s)",
+				m.work.ID(), i+1, req.Pid, err.Error(), len(remoteReq.BanWorkerList), remoteReq.BanWorkerList)
 		} else {
 			break
 		}
@@ -194,6 +199,8 @@ func (m *Mgr) ExecuteTask(
 	m.work.Basic().Info().DecPrepared()
 	m.work.Remote().DecRemoteJobs()
 	if err != nil {
+		blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d), turn it local",
+			m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
 		return e.executeLocalTask(), nil
 	}
 
@@ -263,4 +270,20 @@ func (m *Mgr) waitApplyFinish() error {
 			return fmt.Errorf("wait apply status timeout")
 		}
 	}
+}
+
+func needRetry(req *types.LocalTaskExecuteRequest) bool {
+	// do not retry if remote timeout
+	if req.Stats.RemoteWorkTimeout {
+		return false
+	}
+	return true
+}
+
+func (m *Mgr) getTryTimes(e *executor) int {
+	// hander 配置优先
+	if e.remoteTryTimes() > 1 {
+		return e.remoteTryTimes()
+	}
+	return m.work.Config().RemoteRetryTimes + 1
 }

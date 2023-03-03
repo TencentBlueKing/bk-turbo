@@ -38,7 +38,8 @@ func Lstat(fp string) *Info {
 
 // Info describe the os.FileInfo and handle some actions
 type Info struct {
-	filePath string
+	filePath   string
+	LinkTarget string
 
 	// info and err are return from os.Stat
 	info os.FileInfo
