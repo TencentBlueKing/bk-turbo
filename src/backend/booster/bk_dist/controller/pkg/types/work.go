@@ -16,12 +16,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/manager/recorder"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/recorder"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
 
 const (

@@ -14,12 +14,12 @@ import (
 	"net"
 	"strings"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/types"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/api"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/manager"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/manager"
 
 	"github.com/emicklei/go-restful"
 )

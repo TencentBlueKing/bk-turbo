@@ -14,7 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 )
 
 // File describe the cache file instance

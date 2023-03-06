@@ -3,9 +3,9 @@ package sdk
 import (
 	"fmt"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 )
 
 // RemoteWorker describe the remote worker SDK

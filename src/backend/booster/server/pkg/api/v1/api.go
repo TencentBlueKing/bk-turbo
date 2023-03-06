@@ -10,10 +10,10 @@
 package v1
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/api"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/api/v1/dcc"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/api/v1/fb"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v1/dcc"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v1/fb"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 )
 
 // InitStorage associated the url and handle

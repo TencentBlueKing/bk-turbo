@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 
 	"github.com/shirou/gopsutil/process"
 )

@@ -5,27 +5,27 @@ BUILDTIME = $(shell date +%Y-%m-%dT%T%z)
 GITHASH=$(shell git rev-parse HEAD)
 VERSION=${GITTAG}-$(shell date +%y.%m.%d)
 
-LDFLAG=-s -w -X github.com/Tencent/bk-ci/src/booster/common/static.EncryptionKey=${encryption_key} \
- -X github.com/Tencent/bk-ci/src/booster/common/static.ServerCertPwd=${server_cert_pwd} \
- -X github.com/Tencent/bk-ci/src/booster/common/static.ClientCertPwd=${client_cert_pwd} \
- -X github.com/Tencent/bk-ci/src/booster/common/version.Version=${VERSION} \
- -X github.com/Tencent/bk-ci/src/booster/common/version.BuildTime=${BUILDTIME} \
- -X github.com/Tencent/bk-ci/src/booster/common/version.GitHash=${GITHASH} \
- -X github.com/Tencent/bk-ci/src/booster/common/version.Tag=${GITTAG} \
- -X github.com/Tencent/bk-ci/src/booster/common/encrypt.Disabled=${disable_encrypt} \
- -X github.com/Tencent/bk-ci/src/booster/server/pkg/resource/crm/operator/k8s.EnableBCSApiGw=${enable_bcs_gateway} \
- -X github.com/Tencent/bk-ci/src/booster/common/version.DisttaskRepo=${gateway_repo_url}
+LDFLAG=-s -w -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.EncryptionKey=${encryption_key} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ServerCertPwd=${server_cert_pwd} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ClientCertPwd=${client_cert_pwd} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Version=${VERSION} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.BuildTime=${BUILDTIME} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.GitHash=${GITHASH} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Tag=${GITTAG} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/encrypt.Disabled=${disable_encrypt} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator/k8s.EnableBCSApiGw=${enable_bcs_gateway} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.DisttaskRepo=${gateway_repo_url}
 
-DISTCC_LDFLAG=-X github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/client/pkg.ProdDistCCServerDomain=${distcc_server_prod_domain} \
- -X github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/client/pkg.ProdDistCCServerPort=${distcc_server_prod_port} \
- -X github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/client/pkg.TestDistCCServerDomain=${distcc_server_test_domain} \
- -X github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/client/pkg.TestDistCCServerPort=${distcc_server_test_port}
+DISTCC_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg.ProdDistCCServerDomain=${distcc_server_prod_domain} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg.ProdDistCCServerPort=${distcc_server_prod_port} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg.TestDistCCServerDomain=${distcc_server_test_domain} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg.TestDistCCServerPort=${distcc_server_test_port}
 
-BuildBooster_LDFLAG=-X github.com/Tencent/bk-ci/src/booster/bk_dist/booster/command.ProdBuildBoosterServerDomain=${distcc_server_prod_domain} \
- -X github.com/Tencent/bk-ci/src/booster/bk_dist/booster/command.ProdBuildBoosterServerPort=${distcc_server_prod_port} \
- -X github.com/Tencent/bk-ci/src/booster/bk_dist/booster/command.TestBuildBoosterServerDomain=${distcc_server_test_domain} \
- -X github.com/Tencent/bk-ci/src/booster/bk_dist/booster/command.TestBuildBoosterServerPort=${distcc_server_test_port} \
- -X github.com/Tencent/bk-ci/src/booster/bk_dist/booster/command.ServerNecessary=${booster_server_necessary}
+BuildBooster_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerDomain=${distcc_server_prod_domain} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerPort=${distcc_server_prod_port} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerDomain=${distcc_server_test_domain} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerPort=${distcc_server_test_port} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ServerNecessary=${booster_server_necessary}
 
 BIN_PATH=./build
 DISTCC_BIN_PATH=${BIN_PATH}/distcc
@@ -91,10 +91,10 @@ buildbooster_dashboard:buildbooster_prepare
 
 buildbooster:buildbooster_server buildbooster_gateway buildbooster_agent buildbooster_dashboard
 
-ALERT_LDFLAG=-X github.com/Tencent/bk-ci/src/booster/alertserver/pkg/types.Sendurl=${sendurl} \
- -X github.com/Tencent/bk-ci/src/booster/alertserver/pkg/types.AppCode=${app_appcode} \
- -X github.com/Tencent/bk-ci/src/booster/alertserver/pkg/types.AppSecret=${app_secret} \
- -X github.com/Tencent/bk-ci/src/booster/alertserver/pkg/types.Operator=${operator}
+ALERT_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/alertserver/pkg/types.Sendurl=${sendurl} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/alertserver/pkg/types.AppCode=${app_appcode} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/alertserver/pkg/types.AppSecret=${app_secret} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/alertserver/pkg/types.Operator=${operator}
 
 ALERT_BIN_PATH=${BIN_PATH}/alertserver
 

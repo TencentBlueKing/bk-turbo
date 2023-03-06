@@ -19,12 +19,12 @@ import (
 	"strings"
 	"time"
 
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/cache"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cache"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 
 	"github.com/gogo/protobuf/proto"
 )

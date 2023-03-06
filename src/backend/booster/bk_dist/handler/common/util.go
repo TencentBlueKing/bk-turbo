@@ -17,12 +17,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // GetHandlerEnv get env by booster type

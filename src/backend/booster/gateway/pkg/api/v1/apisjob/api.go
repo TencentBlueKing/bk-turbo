@@ -10,8 +10,8 @@
 package apisjob
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/gateway/pkg/api"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/apisjob"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/apisjob"
 )
 
 const (

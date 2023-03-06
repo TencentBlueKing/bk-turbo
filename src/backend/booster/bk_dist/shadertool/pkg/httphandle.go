@@ -15,12 +15,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/shadertool/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	http2 "github.com/Tencent/bk-ci/src/booster/common/http"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	commonTypes "github.com/Tencent/bk-ci/src/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	http2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 
 	"github.com/emicklei/go-restful"
 )

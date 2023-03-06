@@ -10,7 +10,7 @@
 package manager
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 )
 
 // Manager describe the build-booster server exported methods

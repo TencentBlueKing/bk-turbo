@@ -12,11 +12,11 @@ package config
 import (
 	"strings"
 
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
-	"github.com/Tencent/bk-ci/src/booster/common/encrypt"
-	"github.com/Tencent/bk-ci/src/booster/common/net"
-	"github.com/Tencent/bk-ci/src/booster/common/static"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/encrypt"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/net"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 )
 
 // ServerConfig define

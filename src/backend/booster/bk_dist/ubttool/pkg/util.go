@@ -15,9 +15,9 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/ubttool/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
 
 func defaultCPULimit(custom int) int {

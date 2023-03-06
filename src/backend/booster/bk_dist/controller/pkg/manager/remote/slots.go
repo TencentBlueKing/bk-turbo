@@ -15,9 +15,9 @@ import (
 	"runtime"
 	"sync"
 
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/shirou/gopsutil/mem"
 )
 

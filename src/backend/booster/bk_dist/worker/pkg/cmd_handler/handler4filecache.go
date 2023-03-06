@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	dcConfig "github.com/Tencent/bk-ci/src/booster/bk_dist/common/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/cache"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/worker/pkg/protocol"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cache"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 var defaultCM cache.Manager

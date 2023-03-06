@@ -14,11 +14,11 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcProtocol "github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // NewCommonRemoteWorker get a new remote worker SDK
