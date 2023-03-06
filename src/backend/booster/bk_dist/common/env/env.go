@@ -51,6 +51,7 @@ const (
 	KeyExecutorPumpDisableStatCache    = "PUMP_DISABLE_STAT_CACHE"
 	KeyExecutorPumpSearchLink          = "PUMP_SEARCH_LINK"
 	KeyExecutorPumpSearchLinkResult    = "PUMP_SEARCH_LINK_RESULT"
+	KeyExecutorPumpLstatByDir          = "PUMP_LSTAT_BY_DIR"
 	KeyExecutorForceLocalKeys          = "FORCE_LOCAL_KEYS"
 	KeyExecutorEnvProfile              = "ENV_PROFILE"
 	KeyExecutorWorkerSideCache         = "WORKER_SIDE_CACHE"

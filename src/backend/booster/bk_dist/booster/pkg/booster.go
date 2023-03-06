@@ -319,6 +319,10 @@ func (b *Booster) getWorkersEnv() map[string]string {
 
 	requiredEnv[env.KeyExecutorPumpSearchLinkResult] = b.config.Works.PumpSearchLinkFile
 
+	if b.config.Works.PumpLstatByDir {
+		requiredEnv[env.KeyExecutorPumpLstatByDir] = envValueTrue
+	}
+
 	if b.config.Works.IOTimeoutSecs > 0 {
 		requiredEnv[env.KeyExecutorIOTimeout] = strconv.Itoa(b.config.Works.IOTimeoutSecs)
 	}
