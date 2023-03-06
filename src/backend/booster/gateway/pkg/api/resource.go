@@ -10,13 +10,13 @@
 package api
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	"github.com/Tencent/bk-ci/src/booster/gateway/config"
-	rd "github.com/Tencent/bk-ci/src/booster/gateway/pkg/register-discover"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/apisjob"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/disttask"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/fastbuild"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/config"
+	rd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/pkg/register-discover"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/apisjob"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/fastbuild"
 )
 
 var Rd rd.RegisterDiscover

@@ -8,12 +8,12 @@
 package store
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/common/encrypt"
-	commonMySQL "github.com/Tencent/bk-ci/src/booster/common/mysql"
-	ds "github.com/Tencent/bk-ci/src/booster/common/store/distcc_server"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc/controller/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/encrypt"
+	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
+	ds "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/store/distcc_server"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/controller/config"
 
 	// 启用mysql driver
 	_ "github.com/jinzhu/gorm/dialects/mysql"

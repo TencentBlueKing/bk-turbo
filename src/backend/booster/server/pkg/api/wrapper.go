@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	selfMetric "github.com/Tencent/bk-ci/src/booster/server/pkg/metric"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 
 	"github.com/emicklei/go-restful"
 )

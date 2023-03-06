@@ -12,9 +12,9 @@ package main
 import (
 	"os"
 
-	executor "github.com/Tencent/bk-ci/src/booster/bk_dist/executor/pkg"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
+	executor "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/executor/pkg"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
 )
 
 // bk-dist-executor 远程执行进程子任务，例如: bk-dist-executor gcc a.c -o a.o

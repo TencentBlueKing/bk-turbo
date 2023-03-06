@@ -25,16 +25,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	commonHttp "github.com/Tencent/bk-ci/src/booster/common/http"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpclient"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/resource/direct/agent/config"
-	register_discover "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/direct/agent/pkg/register-discover"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonHttp "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/config"
+	register_discover "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/register-discover"
 
-	localCommon "github.com/Tencent/bk-ci/src/booster/server/pkg/resource/direct/agent/pkg/common"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/resource/direct/agent/pkg/types"
+	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/types"
 )
 
 // Manager : to report resouce and manage local application

@@ -13,21 +13,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/encrypt"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	"github.com/Tencent/bk-ci/src/booster/gateway/config"
-	"github.com/Tencent/bk-ci/src/booster/gateway/pkg/api"
-	rd "github.com/Tencent/bk-ci/src/booster/gateway/pkg/register-discover"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/encrypt"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/pkg/api"
+	rd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/pkg/register-discover"
 
 	// 初始化api资源
-	_ "github.com/Tencent/bk-ci/src/booster/gateway/pkg/api/v1"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/apisjob"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/distcc"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/disttask"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/engine/fastbuild"
+	_ "github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/pkg/api/v1"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/apisjob"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/fastbuild"
 )
 
 // GatewayServer describe the gateway http server

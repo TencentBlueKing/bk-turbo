@@ -10,7 +10,7 @@
 package api
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 )
 
 const (

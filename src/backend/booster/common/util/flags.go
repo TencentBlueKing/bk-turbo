@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Tencent/bk-ci/src/booster/common/version"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version"
 
 	"github.com/spf13/pflag"
 )

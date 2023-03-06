@@ -12,9 +12,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	http2 "github.com/Tencent/bk-ci/src/booster/common/http"
-	commonTypes "github.com/Tencent/bk-ci/src/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	http2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 
 	"github.com/emicklei/go-restful"
 )
