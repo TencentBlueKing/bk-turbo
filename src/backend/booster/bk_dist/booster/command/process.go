@@ -295,6 +295,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			PumpSearchLink:       c.Bool(FlagPumpSearchLink),
 			PumpSearchLinkFile:   c.String(FlagPumpSearchLinkFile),
 			PumpSearchLinkDir:    c.StringSlice(FlagPumpSearchLinkDir),
+			PumpLstatByDir:       c.Bool(FlagPumpLstatByDir),
 			ForceLocalList:       c.StringSlice(FlagForceLocalList),
 			NoWork:               c.Bool(FlagNoWork),
 			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),

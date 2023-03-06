@@ -223,7 +223,7 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 }
 
 func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
-	blog.Infof("executor: try to execute local-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor: try to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
@@ -284,7 +284,7 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 	}
 
 	e.stats.LocalWorkSuccess = true
-	blog.Infof("executor: success to execute local-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor: success to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
 	return &types.LocalTaskExecuteResult{
 		Result: &dcSDK.LocalTaskResult{
 			ExitCode: code,

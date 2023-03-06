@@ -240,7 +240,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
-		return commonUtil.GetFileInfo(uniqlines, true, true), nil
+		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env)), nil
 	} else {
 		includes := []*dcFile.Info{}
 		for _, l := range uniqlines {
@@ -284,6 +284,27 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	}
 
 	return nil, nil
+}
+
+func formatFilePath(f string) string {
+	f = strings.Replace(f, "\\", "/", -1)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, "/")
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, "/")
+	}
+
+	return f
 }
 
 func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
@@ -332,7 +353,8 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 				if !filepath.IsAbs(targetf) {
 					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
 				}
-				includes = append(includes, targetf)
+
+				includes = append(includes, formatFilePath(targetf))
 			}
 		}
 	}
@@ -344,9 +366,9 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
-	for i := range includes {
-		includes[i] = strings.Replace(includes[i], "\\", "/", -1)
-	}
+	// for i := range includes {
+	// 	includes[i] = strings.Replace(includes[i], "\\", "/", -1)
+	// }
 	uniqlines := uniqArr(includes)
 
 	// TODO : append symlink or symlinked if need

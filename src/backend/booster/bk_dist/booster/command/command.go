@@ -80,6 +80,7 @@ const (
 	FlagPumpSearchLink       = "pump_search_link"
 	FlagPumpSearchLinkFile   = "pump_search_link_file"
 	FlagPumpSearchLinkDir    = "pump_search_link_dir"
+	FlagPumpLstatByDir       = "pump_lstat_by_dir"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -337,6 +338,10 @@ var (
 		commandCli.StringSliceFlag{
 			Name:  "pump_search_link_dir",
 			Usage: "specify the dir where to search link files",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_lstat_by_dir",
+			Usage: "whether get file stat info by search dir",
 		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",

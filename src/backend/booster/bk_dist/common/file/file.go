@@ -13,7 +13,12 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // Stat do the os.Stat and return an Info
@@ -33,6 +38,46 @@ func Lstat(fp string) *Info {
 		filePath: fp,
 		info:     info,
 		err:      err,
+	}
+}
+
+// get file info by enum dir
+// TODO : not ok for linux, do not call in linux
+func GetFileInfoByEnumDir(fp string) *Info {
+	fis, err := ioutil.ReadDir(filepath.Dir(fp))
+	if err != nil {
+		return &Info{
+			filePath: fp,
+			info:     nil,
+			err:      err,
+		}
+	} else {
+		for _, fi := range fis {
+			if strings.EqualFold(fi.Name(), filepath.Base(fp)) {
+				newfp := fp
+				if !strings.HasSuffix(fp, fi.Name()) {
+					old := filepath.Base(fp)
+					new := fi.Name()
+					i := strings.LastIndex(fp, old)
+					if i >= 0 {
+						newfp = fp[:i] + new + fp[i+len(old):]
+						blog.Infof("common file: from [%s] to [%s]", fp, newfp)
+					}
+				}
+
+				return &Info{
+					filePath: newfp,
+					info:     fi,
+					err:      err,
+				}
+			}
+		}
+
+		return &Info{
+			filePath: fp,
+			info:     nil,
+			err:      fmt.Errorf("%s not existed", fp),
+		}
 	}
 }
 
