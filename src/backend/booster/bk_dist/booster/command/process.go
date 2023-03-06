@@ -23,15 +23,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/booster/pkg"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/pkg"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
 
 	"github.com/shirou/gopsutil/process"
 	commandCli "github.com/urfave/cli"
@@ -226,6 +226,16 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		pumpMinActionNum = c.Int(FlagPumpMinActionNum)
 	}
 
+	netErrLimit := 5
+	if c.IsSet(FlagNetErrorLimit) && c.Int(FlagNetErrorLimit) > 0 {
+		netErrLimit = c.Int(FlagNetErrorLimit)
+	}
+
+	remoteRetryTimes := 0
+	if c.IsSet(FlagRemoteRetryTimes) && c.Int(FlagRemoteRetryTimes) >= 0 {
+		remoteRetryTimes = c.Int(FlagRemoteRetryTimes)
+	}
+
 	// generate a new booster.
 	cmdConfig := dcType.BoosterConfig{
 		Type:      dcType.GetBoosterType(bt),
@@ -281,6 +291,11 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			PumpCacheRemoveAll:   c.Bool(FlagPumpCacheRemoveAll),
 			PumpBlackList:        c.StringSlice(FlagPumpBlackList),
 			PumpMinActionNum:     int32(pumpMinActionNum),
+			PumpDisableStatCache: c.Bool(FlagPumpDisableStatCache),
+			PumpSearchLink:       c.Bool(FlagPumpSearchLink),
+			PumpSearchLinkFile:   c.String(FlagPumpSearchLinkFile),
+			PumpSearchLinkDir:    c.StringSlice(FlagPumpSearchLinkDir),
+			PumpLstatByDir:       c.Bool(FlagPumpLstatByDir),
 			ForceLocalList:       c.StringSlice(FlagForceLocalList),
 			NoWork:               c.Bool(FlagNoWork),
 			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),
@@ -324,6 +339,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			AutoResourceMgr:    c.Bool(FlagAutoResourceMgr),
 			ResIdleSecsForFree: resIdleSecsForFree,
 			SendCork:           c.Bool(FlagSendCork),
+			NetErrorLimit:      netErrLimit,
+			RemoteRetryTimes:   remoteRetryTimes,
 		},
 	}
 

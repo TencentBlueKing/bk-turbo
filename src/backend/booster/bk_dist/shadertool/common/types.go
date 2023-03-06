@@ -10,10 +10,10 @@
 package common
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // define const vars
@@ -82,6 +82,7 @@ type Actionresult struct {
 	Outputmsg string
 	Errormsg  string
 	Exitcode  int
+	Err       error
 }
 
 func uniqueAndCheck(strlist []string, allindex map[string]bool) []string {

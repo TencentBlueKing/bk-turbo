@@ -12,9 +12,9 @@ package config
 import (
 	"runtime"
 
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	"github.com/Tencent/bk-ci/src/booster/common/conf"
-	"github.com/Tencent/bk-ci/src/booster/common/static"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static"
 )
 
 // ServerConfig : server config
@@ -42,6 +42,9 @@ type ServerConfig struct {
 	ResIdleSecsForFree int  `json:"res_idle_secs_for_free" value:"120" usage:"controller free resource while detect resource has been idle over this"`
 
 	SendCork bool `json:"send_cork" value:"false" usage:"if true, controller will send files like tcp cork"`
+
+	NetErrorLimit    int `json:"net_error_limit" value:"3" usage:"define net error limit,make a worker disabled when it's net errors reach this limit"`
+	RemoteRetryTimes int `json:"remote_retry_times" value:"1" usage:"define retry times when remote execute failed"`
 }
 
 // CertConfig  configuration of Cert

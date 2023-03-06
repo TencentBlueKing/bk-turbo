@@ -18,16 +18,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	commonHttp "github.com/Tencent/bk-ci/src/booster/common/http"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpclient"
-	"github.com/Tencent/bk-ci/src/booster/common/http/httpserver"
-	"github.com/Tencent/bk-ci/src/booster/common/metric/controllers"
-	"github.com/Tencent/bk-ci/src/booster/server/config"
-	selfMetric "github.com/Tencent/bk-ci/src/booster/server/pkg/metric"
-	"github.com/Tencent/bk-ci/src/booster/server/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonHttp "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
+	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 )
 
 // const vars

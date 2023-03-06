@@ -16,7 +16,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/Tencent/bk-ci/src/booster/common/static"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static"
 )
 
 var (

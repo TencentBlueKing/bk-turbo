@@ -20,16 +20,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcEnv "github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcPump "github.com/Tencent/bk-ci/src/booster/bk_dist/common/pump"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	commonUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/handler/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
@@ -225,8 +225,8 @@ func uniqArr(arr []string) []string {
 	return newarr
 }
 
-func (cc *TaskCC) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, error) {
-	data, err := ioutil.ReadFile(f)
+func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Info, error) {
+	data, err := ioutil.ReadFile(dependf)
 	if err != nil {
 		return nil, err
 	}
@@ -236,23 +236,42 @@ func (cc *TaskCC) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 		sep = "\r\n"
 	}
 	lines := strings.Split(string(data), sep)
-	includes := []*dcFile.Info{}
 	uniqlines := uniqArr(lines)
-	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), f)
+	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
-	for _, l := range uniqlines {
-		if !filepath.IsAbs(l) {
-			l, _ = filepath.Abs(filepath.Join(workdir, l))
+	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
+		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env)), nil
+	} else {
+		includes := []*dcFile.Info{}
+		for _, l := range uniqlines {
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			fstat := dcFile.Lstat(l)
+			if fstat.Exist() && !fstat.Basic().IsDir() {
+				if fstat.Basic().Mode()&os.ModeSymlink != 0 {
+					originFile, err := os.Readlink(l)
+					if err == nil {
+						if !filepath.IsAbs(originFile) {
+							originFile, err = filepath.Abs(filepath.Join(filepath.Dir(l), originFile))
+							if err == nil {
+								fstat.LinkTarget = originFile
+								blog.Infof("cc: symlink %s to %s", l, originFile)
+							}
+						} else {
+							fstat.LinkTarget = originFile
+							blog.Infof("cc: symlink %s to %s", l, originFile)
+						}
+					}
+				}
+				includes = append(includes, fstat)
+			} else {
+				blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
+			}
 		}
-		fstat := dcFile.Stat(l)
-		if fstat.Exist() && !fstat.Basic().IsDir() {
-			includes = append(includes, fstat)
-		} else {
-			blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, f)
-		}
+
+		return includes, nil
 	}
-
-	return includes, nil
 }
 
 func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -265,6 +284,27 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	}
 
 	return nil, nil
+}
+
+func formatFilePath(f string) string {
+	f = strings.Replace(f, "\\", "/", -1)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, "/")
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, "/")
+	}
+
+	return f
 }
 
 func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
@@ -286,22 +326,59 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		// TODO : the file path maybe contains space, should support this condition
 		fields := strings.Split(l, " ")
 		if len(fields) >= 1 {
-			for i, f := range fields {
-				if strings.HasSuffix(f, ".o:") {
+			// for i, f := range fields {
+			for index := len(fields) - 1; index >= 0; index-- {
+				var targetf string
+				// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
+				// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
+				// 向前依附到不为空的字符串为止
+				if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
+					for targetindex := index - 1; targetindex >= 0; targetindex-- {
+						if len(fields[targetindex]) > 0 {
+							fields[targetindex] = strings.Trim(fields[targetindex], "\\")
+							targetf = strings.Join(fields[targetindex:index+1], " ")
+							index = targetindex
+							break
+						}
+					}
+				} else if len(fields[index]) > 0 {
+					targetf = fields[index]
+				} else {
 					continue
 				}
-				if !filepath.IsAbs(f) {
-					fields[i], _ = filepath.Abs(filepath.Join(workdir, f))
+
+				if strings.HasSuffix(targetf, ".o:") {
+					continue
 				}
-				includes = append(includes, fields[i])
+				if !filepath.IsAbs(targetf) {
+					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
+				}
+
+				includes = append(includes, formatFilePath(targetf))
 			}
 		}
 	}
 
 	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
 
+	if len(includes) == 0 {
+		blog.Warnf("cc: depend file: %s data:[%s] is invalid", cc.sourcedependfile, string(data))
+		return ErrorInvalidDependFile
+	}
+
+	// for i := range includes {
+	// 	includes[i] = strings.Replace(includes[i], "\\", "/", -1)
+	// }
+	uniqlines := uniqArr(includes)
+
+	// TODO : append symlink or symlinked if need
+	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
+	if links != nil {
+		uniqlines = append(uniqlines, links...)
+	}
+
 	// TODO : save to cc.pumpHeadFile
-	newdata := strings.Join(includes, sep)
+	newdata := strings.Join(uniqlines, sep)
 	err = ioutil.WriteFile(cc.pumpHeadFile, []byte(newdata), os.ModePerm)
 	if err != nil {
 		blog.Warnf("cc: copy pump head failed to write file: %s with err:%v", cc.pumpHeadFile, err)
@@ -422,7 +499,7 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			cc.sourcedependfile = sourcedependfile
 		} else {
 			// TODO : 我们可以主动加上 /showIncludes 参数得到依赖列表，生成一个临时的 cl.sourcedependfile 文件
-			blog.Infof("cl: trypump not found depend file, try append it")
+			blog.Infof("cc: trypump not found depend file, try append it")
 			if cc.forceDepend() != nil {
 				return nil, ErrorNoDependFile, nil
 			}
@@ -484,6 +561,7 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				Md5:                "",
 				Filemode:           fileMode,
 				Targetrelativepath: filepath.Dir(fpath),
+				LinkTarget:         f.LinkTarget,
 				NoDuplicated:       true,
 				// Priority:           priority,
 			})
@@ -767,15 +845,17 @@ ERROREND:
 }
 
 func (cc *TaskCC) finalExecute([]string) {
-	if cc.saveTemp() {
-		return
-	}
+	go func() {
+		if cc.needcopypumpheadfile {
+			cc.copyPumpHeadFile(cc.sandbox.Dir)
+		}
 
-	if cc.needcopypumpheadfile {
-		cc.copyPumpHeadFile(cc.sandbox.Dir)
-	}
+		if cc.saveTemp() {
+			return
+		}
 
-	cc.cleanTmpFile()
+		cc.cleanTmpFile()
+	}()
 }
 
 func (cc *TaskCC) saveTemp() bool {

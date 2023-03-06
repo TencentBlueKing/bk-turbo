@@ -1,3 +1,4 @@
+//go:build linux || darwin
 // +build linux darwin
 
 /*
@@ -23,9 +24,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
@@ -190,6 +191,9 @@ func (s *Sandbox) ExecCommand(name string, arg ...string) (int, error) {
 		_, _ = s.Stderr.Write([]byte(fmt.Sprintf("run command failed: %v ,try relative path cmd\n", err.Error())))
 		//return -1, err
 	}
+
+	blog.Infof("syscall: cmd of [%+v] start", *cmd)
+	defer blog.Infof("syscall: cmd of [%+v] finished", *cmd)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

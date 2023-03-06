@@ -23,19 +23,19 @@ import (
 	"strings"
 	"time"
 
-	dcConfig "github.com/Tencent/bk-ci/src/booster/bk_dist/common/config"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcEnv "github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcPump "github.com/Tencent/bk-ci/src/booster/bk_dist/common/pump"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	dcSyscall "github.com/Tencent/bk-ci/src/booster/bk_dist/common/syscall"
-	dcType "github.com/Tencent/bk-ci/src/booster/bk_dist/common/types"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/handler"
-	commonUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/handler/common"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
+	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
@@ -352,23 +352,27 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	}
 
 	lines := strings.Split(string(data), "\r\n")
-	includes := []*dcFile.Info{}
 	uniqlines := uniqArr(lines)
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
-	for _, l := range uniqlines {
-		if !filepath.IsAbs(l) {
-			l, _ = filepath.Abs(filepath.Join(workdir, l))
+	if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
+		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env)), nil
+	} else {
+		includes := []*dcFile.Info{}
+		for _, l := range uniqlines {
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			fstat := dcFile.Stat(l)
+			if fstat.Exist() && !fstat.Basic().IsDir() {
+				includes = append(includes, fstat)
+			} else {
+				blog.Infof("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+			}
 		}
-		fstat := dcFile.Stat(l)
-		if fstat.Exist() && !fstat.Basic().IsDir() {
-			includes = append(includes, fstat)
-		} else {
-			blog.Infof("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
-		}
-	}
 
-	return includes, nil
+		return includes, nil
+	}
 }
 
 func (cl *TaskCL) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -393,6 +397,27 @@ type sourceDependenciesData struct {
 type sourceDependencies struct {
 	Version string                 `json:"Version"`
 	Data    sourceDependenciesData `json:"Data"`
+}
+
+func formatFilePath(f string) string {
+	f = strings.Replace(f, "/", "\\", -1)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, "\\")
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, "\\")
+	}
+
+	return f
 }
 
 func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
@@ -423,13 +448,13 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, l)
+			includes = append(includes, formatFilePath(l))
 
 			for _, l := range depend.Data.Includes {
 				if !filepath.IsAbs(l) {
 					l, _ = filepath.Abs(filepath.Join(workdir, l))
 				}
-				includes = append(includes, l)
+				includes = append(includes, formatFilePath(l))
 			}
 		} else {
 			blog.Warnf("cl: failed to resolve depend file: %s with err:%s", cl.sourcedependfile, err)
@@ -439,23 +464,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		lines := strings.Split(string(data), sep)
 		for _, l := range lines {
 			l = strings.Trim(l, " \r\n\\")
-			// // TODO : the file path maybe contains space, should support this condition
-			// fields := strings.Split(l, " ")
-			// if len(fields) >= 1 {
-			// 	for i, f := range fields {
-			// 		if strings.HasSuffix(f, ".o:") {
-			// 			continue
-			// 		}
-			// 		if !filepath.IsAbs(f) {
-			// 			fields[i], _ = filepath.Abs(filepath.Join(workdir, f))
-			// 		}
-			// 		includes = append(includes, fields[i])
-			// 	}
-			// }
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, l)
+			includes = append(includes, formatFilePath(l))
 		}
 	}
 
@@ -465,7 +477,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		if !filepath.IsAbs(l) {
 			l, _ = filepath.Abs(filepath.Join(workdir, l))
 		}
-		includes = append(includes, l)
+		includes = append(includes, formatFilePath(l))
 	}
 
 	blog.Infof("cl: copy pump head got %d uniq include file from file: %s", len(includes), cl.sourcedependfile)
@@ -475,8 +487,13 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
+	// for i := range includes {
+	// 	includes[i] = strings.Replace(includes[i], "/", "\\", -1)
+	// }
+	uniqlines := uniqArr(includes)
+
 	// TODO : save to cc.pumpHeadFile
-	newdata := strings.Join(includes, sep)
+	newdata := strings.Join(uniqlines, sep)
 	err = ioutil.WriteFile(cl.pumpHeadFile, []byte(newdata), os.ModePerm)
 	if err != nil {
 		blog.Warnf("cl: copy pump head failed to write file: %s with err:%v", cl.pumpHeadFile, err)
@@ -993,15 +1010,17 @@ ERROREND:
 }
 
 func (cl *TaskCL) finalExecute([]string) {
-	if cl.saveTemp() {
-		return
-	}
+	go func() {
+		if cl.needcopypumpheadfile {
+			cl.copyPumpHeadFile(cl.sandbox.Dir)
+		}
 
-	if cl.needcopypumpheadfile {
-		cl.copyPumpHeadFile(cl.sandbox.Dir)
-	}
+		if cl.saveTemp() {
+			return
+		}
 
-	cl.cleanTmpFile()
+		cl.cleanTmpFile()
+	}()
 }
 
 func (cl *TaskCL) saveTemp() bool {

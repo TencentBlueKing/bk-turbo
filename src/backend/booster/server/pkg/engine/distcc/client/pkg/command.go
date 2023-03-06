@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Tencent/bk-ci/src/booster/common/version"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version"
 
 	commandCli "github.com/urfave/cli"
 )

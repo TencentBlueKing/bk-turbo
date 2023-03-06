@@ -10,7 +10,7 @@
 package main
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/idleloop/command"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/idleloop/command"
 )
 
 func main() {

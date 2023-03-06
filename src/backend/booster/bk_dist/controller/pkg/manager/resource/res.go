@@ -12,8 +12,8 @@ package resource
 import (
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 )
 
 // Status save resource status

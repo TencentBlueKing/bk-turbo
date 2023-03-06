@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	dcFile "github.com/Tencent/bk-ci/src/booster/bk_dist/common/file"
-	v2 "github.com/Tencent/bk-ci/src/booster/server/pkg/api/v2"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 )
 
 // ControllerSDK describe the controller handler SDK
@@ -129,6 +129,8 @@ type ControllerConfig struct {
 	AutoResourceMgr    bool
 	ResIdleSecsForFree int
 	SendCork           bool
+	NetErrorLimit      int
+	RemoteRetryTimes   int
 }
 
 // Target return the server ip and port of controller

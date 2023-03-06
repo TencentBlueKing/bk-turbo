@@ -22,10 +22,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/protocol"
-	dcSDK "github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
-	"github.com/Tencent/bk-ci/src/booster/common/blog"
-	"github.com/Tencent/bk-ci/src/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 
 	"github.com/shirou/gopsutil/process"
 )
@@ -217,4 +217,36 @@ func cleanDirByTime(dir string, limitsize int64) {
 		os.Remove(fullpath)
 		totalsize -= fi.Size()
 	}
+}
+
+func searchSymlink(dirPth string, files map[string]string) (err error) {
+	if files == nil {
+		files = make(map[string]string, 100)
+	}
+
+	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error {
+		if fi.IsDir() {
+			return nil
+		}
+
+		if fi.Mode()&os.ModeSymlink != 0 {
+			originFile, err := os.Readlink(filename)
+
+			if err != nil {
+				blog.Infof("booster: readlink file %s with error:%v", filename, err)
+				return nil
+			}
+
+			if !filepath.IsAbs(originFile) {
+				originFile, _ = filepath.Abs(filepath.Join(dirPth, originFile))
+			}
+
+			blog.Infof("booster: Resolved symlink %s to %s\n", filename, originFile)
+			files[filename] = originFile
+		}
+
+		return nil
+	})
+
+	return err
 }

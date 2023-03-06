@@ -10,8 +10,8 @@
 package v1
 
 import (
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/api"
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/controller/pkg/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 )
 
 var (

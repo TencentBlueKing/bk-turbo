@@ -13,7 +13,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 )
 
 // BoosterConfig describe the whole data that distribute workers booster should hold.
@@ -111,6 +111,11 @@ type BoosterWorks struct {
 	PumpCacheRemoveAll   bool
 	PumpBlackList        []string
 	PumpMinActionNum     int32
+	PumpDisableStatCache bool
+	PumpSearchLink       bool
+	PumpSearchLinkFile   string
+	PumpSearchLinkDir    []string
+	PumpLstatByDir       bool
 
 	ForceLocalList []string
 

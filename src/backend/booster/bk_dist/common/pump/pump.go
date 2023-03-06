@@ -11,13 +11,16 @@ package pump
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
-	dcEnv "github.com/Tencent/bk-ci/src/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
@@ -150,8 +153,8 @@ func IsPump(env *env.Sandbox) bool {
 }
 
 func SupportPump(env *env.Sandbox) bool {
-	// return IsPump(env) && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
-	return IsPump(env) && runtime.GOOS == "windows"
+	return IsPump(env) && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
+	// return IsPump(env) && runtime.GOOS == "windows"
 }
 
 func IsPumpCache(env *env.Sandbox) bool {
@@ -188,4 +191,57 @@ func PumpMinActionNum(env *env.Sandbox) int32 {
 	}
 
 	return 0
+}
+
+// 是否支持依赖文件的stat信息的缓存
+func SupportPumpStatCache(env *env.Sandbox) bool {
+	return env.GetEnv(dcEnv.KeyExecutorPumpDisableStatCache) == ""
+}
+
+// 是否支持添加xcode的头文件中的链接文件
+func SupportPumpSearchLink(env *env.Sandbox) bool {
+	return runtime.GOOS == "darwin" && env.GetEnv(dcEnv.KeyExecutorPumpSearchLink) != ""
+}
+
+func SaveLinkData(data map[string]string, f string) error {
+	temparr := make([]string, 0, len(data))
+	for k, v := range data {
+		temparr = append(temparr, fmt.Sprintf("%s->%s", k, v))
+	}
+
+	newdata := strings.Join(temparr, "\n")
+	return ioutil.WriteFile(f, []byte(newdata), os.ModePerm)
+}
+
+// first map  : symlink->realfile
+// second map : realfile->symlink
+func ResolveLinkData(f string) (map[string]string, map[string]string, error) {
+	data, err := ioutil.ReadFile(f)
+	if err != nil {
+		blog.Warnf("pump: read link file %s with err:%v", f, err)
+		return nil, nil, err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	link2real := make(map[string]string, len(lines))
+	real2link := make(map[string]string, len(lines))
+	for _, l := range lines {
+		l = strings.Trim(l, " \r\n")
+		fields := strings.Split(l, "->")
+		if len(fields) == 2 {
+			link2real[fields[0]] = fields[1]
+			real2link[fields[1]] = fields[0]
+		}
+	}
+
+	return link2real, real2link, nil
+}
+
+func LinkResultFile(env *env.Sandbox) string {
+	return env.GetEnv(dcEnv.KeyExecutorPumpSearchLinkResult)
+}
+
+// 是否支持通过搜索目录来获取文件的stat信息
+func SupportPumpLstatByDir(env *env.Sandbox) bool {
+	return env.GetEnv(dcEnv.KeyExecutorPumpLstatByDir) != "" && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
 }

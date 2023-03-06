@@ -14,9 +14,9 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/Tencent/bk-ci/src/booster/bk_dist/booster/pkg"
-	dcUtil "github.com/Tencent/bk-ci/src/booster/bk_dist/common/util"
-	"github.com/Tencent/bk-ci/src/booster/common/version"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/pkg"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version"
 
 	commandCli "github.com/urfave/cli"
 )
@@ -76,6 +76,11 @@ const (
 	FlagPumpCacheRemoveAll   = "pump_cache_remove_all"
 	FlagPumpBlackList        = "pump_black_list"
 	FlagPumpMinActionNum     = "pump_min_action_num"
+	FlagPumpDisableStatCache = "pump_disable_stat_cache"
+	FlagPumpSearchLink       = "pump_search_link"
+	FlagPumpSearchLinkFile   = "pump_search_link_file"
+	FlagPumpSearchLinkDir    = "pump_search_link_dir"
+	FlagPumpLstatByDir       = "pump_lstat_by_dir"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -91,6 +96,8 @@ const (
 	FlagAutoResourceMgr      = "auto_resource_mgr"
 	FlagResIdleSecsForFree   = "res_idle_secs_for_free"
 	FlagSendCork             = "send_cork"
+	FlagNetErrorLimit        = "net_error_limit"
+	FlagRemoteRetryTimes     = "remote_retry_times"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -316,6 +323,26 @@ var (
 			Name:  "pump_min_action_num",
 			Usage: "do not use pump if total actions less this",
 		},
+		commandCli.BoolFlag{
+			Name:  "pump_disable_stat_cache",
+			Usage: "whether disable pump depend file stat info cache, default is false",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_search_link",
+			Usage: "whether search link files",
+		},
+		commandCli.StringFlag{
+			Name:  "pump_search_link_file",
+			Usage: "specify the file which record link result",
+		},
+		commandCli.StringSliceFlag{
+			Name:  "pump_search_link_dir",
+			Usage: "specify the dir where to search link files",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_lstat_by_dir",
+			Usage: "whether get file stat info by search dir",
+		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",
 			Usage: "key list which will be force executed locally",
@@ -375,6 +402,14 @@ var (
 		commandCli.BoolFlag{
 			Name:  "send_cork",
 			Usage: "send files like tcp cork",
+		},
+		commandCli.IntFlag{
+			Name:  "net_error_limit",
+			Usage: "disable a remote worker which's continuous net errors reach this limit",
+		},
+		commandCli.IntFlag{
+			Name:  "remote_retry_times",
+			Usage: "retry a remote failed task for serveral times before degrad it to local",
 		},
 	}
 )

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/Tencent/bk-ci/src/booster/bk_dist/helptool/pkg"
+import "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/helptool/pkg"
 
 func main() {
 	pkg.Run()

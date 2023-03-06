@@ -48,6 +48,10 @@ const (
 	KeyExecutorPumpCacheSizeMaxMB      = "PUMP_CACHE_SIZE_MAX_MB" // cache pump inlude files
 	KeyExecutorPumpBlackKeys           = "PUMP_BLACK_KEYS"
 	KeyExecutorPumpMinActionNum        = "PUMP_MIN_ACTION_NUM"
+	KeyExecutorPumpDisableStatCache    = "PUMP_DISABLE_STAT_CACHE"
+	KeyExecutorPumpSearchLink          = "PUMP_SEARCH_LINK"
+	KeyExecutorPumpSearchLinkResult    = "PUMP_SEARCH_LINK_RESULT"
+	KeyExecutorPumpLstatByDir          = "PUMP_LSTAT_BY_DIR"
 	KeyExecutorForceLocalKeys          = "FORCE_LOCAL_KEYS"
 	KeyExecutorEnvProfile              = "ENV_PROFILE"
 	KeyExecutorWorkerSideCache         = "WORKER_SIDE_CACHE"
