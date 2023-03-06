@@ -35,17 +35,13 @@ disttask各模块功能介绍如下：
 
 
 ## Experience
-- [bk-ci in docker](https://hub.docker.com/r/blueking/bk-ci)
-- [bk-repo in docker](https://hub.docker.com/r/bkrepo/bkrepo)
+
 
 ## Getting started
-- [下载与编译](docs/overview/source_compile.md)
-- [一分钟安装部署](docs/overview/installation.md)
-- [独立部署制品库](docs/storage/README.md)
+
 
 ## Support
-1. [GitHub讨论区](https://github.com/Tencent/bk-ci/discussions)
-2. QQ群：495299374
+
 
 ## BlueKing Community
 - [BK-BCS](https://github.com/Tencent/bk-bcs)：蓝鲸容器管理平台是以容器技术为基础，为微服务业务提供编排管理的基础服务平台。
@@ -55,11 +51,11 @@ disttask各模块功能介绍如下：
 - [BK-SOPS](https://github.com/Tencent/bk-sops)：蓝鲸标准运维（SOPS）是通过可视化的图形界面进行任务流程编排和执行的系统，是蓝鲸体系中一款轻量级的调度编排类SaaS产品。
 
 ## Contributing
-- 关于 bk-ci 分支管理、issue 以及 pr 规范，请阅读 [Contributing](CONTRIBUTING.md)
+- 关于 bk-turbo 分支管理、issue 以及 pr 规范，请阅读 [Contributing](CONTRIBUTING.md)
 - [腾讯开源激励计划](https://opensource.tencent.com/contribution) 鼓励开发者的参与和贡献，期待你的加入
 
 
 ## License
-BK-CI 是基于 MIT 协议， 详细请参考 [LICENSE](LICENSE.txt)
+BK-TURBO 是基于 MIT 协议， 详细请参考 [LICENSE](LICENSE.txt)
 
 我们承诺未来不会更改适用于交付给任何人的当前项目版本的开源许可证（MIT 协议）。
