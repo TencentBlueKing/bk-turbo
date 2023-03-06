@@ -1,10 +1,10 @@
-# Contributing to BK-CI
+# Contributing to BK-TURBO
 
 蓝鲸团队秉持开放的态度，欢迎志同道合的开发者一起贡献项目。在开始之前，请认真阅读以下指引。
 
 ## 代码协议
 
-[MIT LICENSE](LICENSE.txt) 为 BK-CI 的开源协议，任何人贡献的代码也会受此协议保护，贡献代码前也请明确是否可以接受该协议。
+[MIT LICENSE](LICENSE.txt) 为 BK-TURBO 的开源协议，任何人贡献的代码也会受此协议保护，贡献代码前也请明确是否可以接受该协议。
 
 ## 设计文档
 
@@ -13,7 +13,7 @@
 
 ## 贡献功能与特性
 
-如果想对BK-CI项目贡献功能与特性，请参考以下步骤：
+如果想对BK-TURBO项目贡献功能与特性，请参考以下步骤：
 
 * 联系蓝鲸团队反馈相关的功能需求；
 * 一旦团队认同该功能，则创建需要issue追溯该特性。 issue应该至少包含特性需要解决的问题、用例、相关设计、实现细节以及可能遇到的问题
@@ -76,11 +76,11 @@ git commit -m 'fix: 部分第三方构建机上出现worker-agent.jar进程延�
 
 对于issue的修复，蓝鲸团队希望一个PR/MR能涵盖所有相关的内容，包括但不限于代码，修复文档与使用说明。
 
-相关的review流程请参照：[BK-CI review相关流程](./docs/specification/review.md)
+相关的review流程请参照：[BK-TURBO review相关流程](./docs/specification/review.md)
 
 ## Issues
 
-蓝鲸团队使用[issues](https://github.com/Tencent/bk-ci/issues)进行bugs追踪、特性追踪等。
+蓝鲸团队使用[issues](https://github.com/TencentBlueKing/bk-turbo/issues)进行bugs追踪、特性追踪等。
 
 当提交相关的bug时，请查找已存在或者相类似的issue，从而保证不存在冗余。
 
