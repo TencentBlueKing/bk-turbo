@@ -72,5 +72,13 @@ class MicroServiceTarget<T> constructor(
 
     override fun name() = serviceName
 
-    private fun ServiceInstance.url() = "${if (isSecure) "https" else "http"}://$host:$port/api"
+//    private fun ServiceInstance.url() = "${if (isSecure) "https" else "http"}://$host:$port/api"
+    private fun ServiceInstance.url(): String {
+        val finalHost = if (host.isNotBlank() && host.contains(":") && !host.startsWith("[")) {
+            "[$host]"
+        } else {
+            host
+        }
+        return "${if (isSecure) "https" else "http"}://$finalHost:$port/api"
+    }
 }
