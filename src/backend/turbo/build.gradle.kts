@@ -35,6 +35,7 @@ allprojects {
             dependencySet("io.micrometer:${Versions.micrometerVersion}") {
                 entry("micrometer-registry-prometheus")
             }
+            dependency("com.squareup.okhttp3:okhttp:${Versions.okHttpVersion}")
 		}
 	}
 }

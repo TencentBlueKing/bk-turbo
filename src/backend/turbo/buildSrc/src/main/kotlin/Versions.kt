@@ -9,4 +9,5 @@ object Versions {
     const val jjwtVersion = "0.9.0"
     const val ciAuthVersion = "1.8.0-RC.3-RELEASE"
     const val micrometerVersion = "1.6.6"
+    const val okHttpVersion = "4.9.0"
 }
