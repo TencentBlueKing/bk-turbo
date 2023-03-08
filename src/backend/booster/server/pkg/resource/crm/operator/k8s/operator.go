@@ -257,7 +257,7 @@ func (o *operator) getClient(timeoutSecond int) *httpclient.HTTPClient {
 func (o *operator) request(method, uri string, requestHeader http.Header, data []byte) (raw []byte, err error) {
 	var r *httpclient.HttpResponse
 
-	client := o.getClient(30) // 超时时间设置为30s
+	client := o.getClient(10) // 超时时间设置为10s
 	before := time.Now().Local()
 
 	// add auth token in header
@@ -289,8 +289,8 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 	raw = r.Reply
 
 	now := time.Now().Local()
-	if before.Add(1 * time.Second).Before(now) {
-		blog.Errorf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
+	if before.Add(3 * time.Second).Before(now) { //慢查询告警时间设置为3s
+		blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
 	}
 
 	if r.StatusCode != http.StatusOK {
@@ -372,15 +372,15 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 	url := fmt.Sprintf(bcsAPIFederatedURI, o.conf.BcsAPIPool.GetAddress(), clusterID, o.conf.BcsNamespace)
 	for _, ist := range o.conf.InstanceType {
 		result, err := o.getFederationTotalNum(url, ist)
-		if err != nil {
-			blog.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s) : %v",
+		if err != nil { //接口请求失败，直接返回错误
+			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s) : %v",
 				url, clusterID, ist.Group, ist.Platform, err)
-			continue
+			return nodeInfoList, err
 		}
-		if result.Code != 0 {
-			blog.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): (%v)%s",
+		if result.Code != 0 { //接口返回错误，直接返回错误
+			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): (%v)%s",
 				url, clusterID, ist.Group, ist.Platform, result.Code, result.Msg)
-			continue
+			return nodeInfoList, err
 		}
 		totalIst := float64(result.Data.Total)
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
