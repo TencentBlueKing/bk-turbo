@@ -250,5 +250,6 @@ func newGlobalWork(conf *config.ServerConfig) *types.Work {
 		LocalTotalLimit: conf.LocalSlots,
 	})
 	work.Local().Init()
+	work.Local().Start()
 	return work
 }
