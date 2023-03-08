@@ -448,9 +448,11 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 			w = worker
 		}
 	}
-	/*if w == nil {
-		w = wr.worker[0]
-	}*/
+
+	// if w == nil {
+	// 	w = wr.worker[0]
+	// }
+
 	return w
 }
 
@@ -486,8 +488,10 @@ func (wr *resource) getWorkerLargeFileFirst(f string) *worker {
 			w = worker
 		}
 	}
+
 	if w == nil {
-		w = wr.worker[0]
+		// w = wr.worker[0]
+		return w
 	}
 
 	if f != "" && !w.hasFile(f) {
