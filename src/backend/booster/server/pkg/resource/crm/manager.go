@@ -435,7 +435,10 @@ func (rm *resourceManager) sync() {
 		blog.Errorf("crm: sync resource failed, clusterId(%s): %v", rm.conf.BcsClusterID, err)
 		return
 	}
-
+	if len(nodeInfoList) == 0 {
+		blog.Errorf("crm: sync resource failed, clusterId(%s): node list is empty", rm.conf.BcsClusterID)
+		return
+	}
 	rm.nodeInfoPool.UpdateResources(nodeInfoList)
 	blog.V(5).Infof(rm.nodeInfoPool.GetStats())
 }

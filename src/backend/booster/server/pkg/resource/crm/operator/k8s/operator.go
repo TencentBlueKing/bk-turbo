@@ -248,14 +248,16 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 	return nodeInfoList, nil
 }
 
-func (o *operator) getClient() *httpclient.HTTPClient {
-	return httpclient.NewHTTPClient()
+func (o *operator) getClient(timeoutSecond int) *httpclient.HTTPClient {
+	client := httpclient.NewHTTPClient()
+	client.SetTimeOut(time.Duration(timeoutSecond) * time.Second)
+	return client
 }
 
 func (o *operator) request(method, uri string, requestHeader http.Header, data []byte) (raw []byte, err error) {
 	var r *httpclient.HttpResponse
 
-	client := o.getClient()
+	client := o.getClient(30) // 超时时间设置为30s
 	before := time.Now().Local()
 
 	// add auth token in header
@@ -288,7 +290,7 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 
 	now := time.Now().Local()
 	if before.Add(1 * time.Second).Before(now) {
-		blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
+		blog.Errorf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
 	}
 
 	if r.StatusCode != http.StatusOK {
@@ -362,6 +364,7 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (F
 }
 
 func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, error) {
+	blog.Debugf("k8s-operator: begin to get federation resource %s, %s", clusterID, o.conf.BcsNamespace)
 	nodeInfoList := make([]*op.NodeInfo, 0, 1000)
 	if o.conf.BcsNamespace == "" {
 		return nil, fmt.Errorf("crm: get federation resource request failed clusterID(%s): namespace is nil", clusterID)
@@ -393,7 +396,7 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 		})
 
 	}
-	blog.Debugf("k8s-operator: success to get federation resource clusterID(%s)", clusterID)
+	blog.Debugf("k8s-operator: success to get federation resource clusterID(%s), ns(%s)", clusterID, o.conf.BcsNamespace)
 	return nodeInfoList, nil
 }
 
