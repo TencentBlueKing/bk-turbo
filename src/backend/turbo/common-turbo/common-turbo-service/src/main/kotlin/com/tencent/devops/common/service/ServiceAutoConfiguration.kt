@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.PropertySource
 import org.springframework.core.Ordered
+import org.springframework.core.env.Environment
 
 @Configuration
 @PropertySource("classpath:/common-service.properties")
@@ -21,6 +22,9 @@ class ServiceAutoConfiguration {
 
     @Bean
     fun gray() = Gray()
+
+    @Bean
+    fun profile(environment: Environment) = Profile(environment)
 
     @Bean
     fun meterRegistry() = SimpleMeterRegistry()

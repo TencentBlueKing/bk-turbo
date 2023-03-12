@@ -29,7 +29,7 @@ object JsonUtil {
         configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
     }
 
-    private fun getObjectMapper() = objectMapper
+    fun getObjectMapper() = objectMapper
 
     /**
      * 转成Json
