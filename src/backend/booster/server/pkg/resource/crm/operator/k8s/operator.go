@@ -341,8 +341,7 @@ func getCPUAndMemIst(ist config.InstanceType) (float64, float64) {
 	return varCPU, varMem
 }
 
-func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (FederationResult, error) {
-	var result FederationResult
+func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*FederationResult, error) {
 	varCPU, varMem := getCPUAndMemIst(ist)
 	param := &FederationResourceParam{
 		Resources: ResRequests{
@@ -364,9 +363,9 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (F
 	res, err := o.request("POST", url, header, data)
 	if err != nil {
 		blog.Errorf("k8s operator: get federation resource param(%v), token(%v) failed: %v", param, header, err)
-		return result, err
+		return nil, err
 	}
-
+	result := &FederationResult{}
 	if err = codec.DecJSON(res, &result); err != nil {
 		blog.Errorf("k8s operator: get federation decode url(%s) param(%v) token(%v) failed: %v", url, param, header, err)
 		return result, err
