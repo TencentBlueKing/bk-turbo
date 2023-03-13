@@ -397,15 +397,7 @@ func (rm *resourceManager) recover() error {
 		return err
 	}
 
-	varCPU := rm.conf.BcsCPUPerInstance
-	varMem := rm.conf.BcsMemPerInstance
-	if rm.conf.BcsCPUPerInstanceOffset > 0.0 && rm.conf.BcsCPUPerInstanceOffset < varCPU {
-		varCPU = varCPU - rm.conf.BcsCPUPerInstanceOffset
-	}
-	if rm.conf.BcsMemPerInstanceOffset > 0.0 && rm.conf.BcsMemPerInstanceOffset < varMem {
-		varMem = varMem - rm.conf.BcsMemPerInstanceOffset
-	}
-	rm.nodeInfoPool = op.NewNodeInfoPool(varCPU, varMem, 1, rm.conf.InstanceType)
+	rm.nodeInfoPool = op.NewNodeInfoPool(rm.conf.BcsCPUPerInstance, rm.conf.BcsMemPerInstance, 1, rm.conf.InstanceType)
 
 	rm.registeredResourceMapLock.Lock()
 	defer rm.registeredResourceMapLock.Unlock()
