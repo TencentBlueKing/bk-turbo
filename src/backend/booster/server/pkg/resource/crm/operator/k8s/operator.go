@@ -56,8 +56,8 @@ const (
 	envKeyHostPort = "HOST_PORT_"
 	envKeyRandPort = "RAND_PORT_"
 
-	reqTimeoutSecs  = 10
-	reqSlowWarnSecs = 3
+	reqTimeoutSecs  = 10 // 超时时间设置为10s
+	reqSlowWarnSecs = 3  //慢查询告警时间设置为3s
 
 	templateVarImage            = "__crm_image__"
 	templateVarName             = "__crm_name__"
@@ -260,7 +260,7 @@ func (o *operator) getClient(timeoutSecond int) *httpclient.HTTPClient {
 func (o *operator) request(method, uri string, requestHeader http.Header, data []byte) (raw []byte, err error) {
 	var r *httpclient.HttpResponse
 
-	client := o.getClient(reqTimeoutSecs) // 超时时间设置为10s
+	client := o.getClient(reqTimeoutSecs)
 	before := time.Now().Local()
 
 	// add auth token in header
@@ -292,7 +292,7 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 	raw = r.Reply
 
 	now := time.Now().Local()
-	if before.Add(reqSlowWarnSecs * time.Second).Before(now) { //慢查询告警时间设置为3s
+	if before.Add(reqSlowWarnSecs * time.Second).Before(now) {
 		blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
 	}
 
