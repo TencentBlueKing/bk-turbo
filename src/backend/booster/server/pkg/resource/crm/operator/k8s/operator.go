@@ -638,8 +638,10 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 
 	//set instance default value
 	varCPU, varMem := getCPUAndMemIst(config.InstanceType{
-		CPUPerInstance: o.conf.BcsCPUPerInstance,
-		MemPerInstance: o.conf.BcsMemPerInstance,
+		CPUPerInstance:       o.conf.BcsCPUPerInstance,
+		MemPerInstance:       o.conf.BcsMemPerInstance,
+		CPUPerInstanceOffset: o.conf.BcsCPUPerInstanceOffset,
+		MemPerInstanceOffset: o.conf.BcsMemPerInstanceOffset,
 	})
 	varLimitCPU := o.conf.BcsCPUPerInstance
 	varLimitMem := o.conf.BcsMemPerInstance
