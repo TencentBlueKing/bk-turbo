@@ -56,6 +56,9 @@ const (
 	envKeyHostPort = "HOST_PORT_"
 	envKeyRandPort = "RAND_PORT_"
 
+	reqTimeoutSecs  = 10
+	reqSlowWarnSecs = 3
+
 	templateVarImage            = "__crm_image__"
 	templateVarName             = "__crm_name__"
 	templateVarNamespace        = "__crm_namespace__"
@@ -257,7 +260,7 @@ func (o *operator) getClient(timeoutSecond int) *httpclient.HTTPClient {
 func (o *operator) request(method, uri string, requestHeader http.Header, data []byte) (raw []byte, err error) {
 	var r *httpclient.HttpResponse
 
-	client := o.getClient(10) // 超时时间设置为10s
+	client := o.getClient(reqTimeoutSecs) // 超时时间设置为10s
 	before := time.Now().Local()
 
 	// add auth token in header
@@ -289,7 +292,7 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 	raw = r.Reply
 
 	now := time.Now().Local()
-	if before.Add(3 * time.Second).Before(now) { //慢查询告警时间设置为3s
+	if before.Add(reqSlowWarnSecs * time.Second).Before(now) { //慢查询告警时间设置为3s
 		blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
 	}
 
@@ -332,7 +335,6 @@ type FederationResult struct {
 }
 
 func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*FederationResult, error) {
-	result := &FederationResult{}
 	param := &FederationResourceParam{
 		Resources: ResRequests{
 			Requests: ResRequest{
@@ -356,6 +358,7 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*
 		return nil, err
 	}
 
+	result := &FederationResult{}
 	if err = codec.DecJSON(res, result); err != nil {
 		blog.Errorf("k8s operator: get federation decode url(%s) param(%v) token(%v) failed: %v", url, param, header, err)
 		return nil, err
@@ -377,7 +380,12 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 				url, clusterID, ist.Group, ist.Platform, err)
 			return nodeInfoList, err
 		}
-		if result == nil || result.Code != 0 { //接口返回错误，直接返回错误
+		if result == nil { //无结果返回，直接返回错误
+			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): result is nil",
+				url, clusterID, ist.Group, ist.Platform)
+			return nodeInfoList, err
+		}
+		if result.Code != 0 { //接口返回错误，直接返回错误
 			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): (%v)%s",
 				url, clusterID, ist.Group, ist.Platform, result.Code, result.Msg)
 			return nodeInfoList, err
