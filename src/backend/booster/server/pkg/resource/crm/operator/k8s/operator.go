@@ -334,12 +334,25 @@ type FederationResult struct {
 	Data FederationData `json:"data"`
 }
 
+func getCPUAndMemIst(ist config.InstanceType) (float64, float64) {
+	varCPU := ist.CPUPerInstance
+	varMem := ist.MemPerInstance
+	if ist.CPUPerInstanceOffset > 0.0 && ist.CPUPerInstanceOffset < varCPU {
+		varCPU = varCPU - ist.CPUPerInstanceOffset
+	}
+	if ist.MemPerInstanceOffset > 0.0 && ist.MemPerInstanceOffset < varMem {
+		varMem = varMem - ist.MemPerInstanceOffset
+	}
+	return varCPU, varMem
+}
+
 func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*FederationResult, error) {
+	varCPU, varMem := getCPUAndMemIst(ist)
 	param := &FederationResourceParam{
 		Resources: ResRequests{
 			Requests: ResRequest{
-				CPU:    fmt.Sprintf("%f", ist.CPUPerInstance),
-				Memory: fmt.Sprintf("%fM", ist.MemPerInstance),
+				CPU:    fmt.Sprintf("%f", varCPU),
+				Memory: fmt.Sprintf("%fM", varMem),
 			},
 		},
 		NodeSelector: map[string]string{
@@ -635,8 +648,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	data = strings.ReplaceAll(data, templateVarCityKey, o.cityLabelKey)
 
 	//set instance default value
-	varCPU := o.conf.BcsCPUPerInstance
-	varMem := o.conf.BcsMemPerInstance
+	varCPU, varMem := getCPUAndMemIst(config.InstanceType{
+		CPUPerInstance:       o.conf.BcsCPUPerInstance,
+		MemPerInstance:       o.conf.BcsMemPerInstance,
+		CPUPerInstanceOffset: o.conf.BcsCPUPerInstanceOffset,
+		MemPerInstanceOffset: o.conf.BcsMemPerInstanceOffset,
+	})
 	varLimitCPU := o.conf.BcsCPUPerInstance
 	varLimitMem := o.conf.BcsMemPerInstance
 	if o.conf.BcsCPULimitPerInstance > 0.0 {
@@ -651,13 +668,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 			continue
 		}
 		if istItem.CPUPerInstance > 0.0 {
-			varCPU = istItem.CPUPerInstance
 			varLimitCPU = istItem.CPUPerInstance
 		}
 		if istItem.MemPerInstance > 0.0 {
-			varMem = istItem.MemPerInstance
 			varLimitMem = istItem.MemPerInstance
 		}
+		varCPU, varMem = getCPUAndMemIst(istItem)
 		if istItem.CPULimitPerInstance > 0.0 {
 			varLimitCPU = istItem.CPULimitPerInstance
 		}
