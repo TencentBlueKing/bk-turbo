@@ -92,12 +92,14 @@ type DirectResourceConfig struct {
 
 //InstanceType define type of an instance
 type InstanceType struct {
-	Platform            string  `json:"platform"`
-	Group               string  `json:"group"`
-	CPUPerInstance      float64 `json:"cpu_per_instance"`
-	MemPerInstance      float64 `json:"mem_per_instance"`
-	CPULimitPerInstance float64 `json:"cpu_limit_per_instance,omitempty"`
-	MemLimitPerInstance float64 `json:"mem_limit_per_instance,omitempty"`
+	Platform             string  `json:"platform"`
+	Group                string  `json:"group"`
+	CPUPerInstance       float64 `json:"cpu_per_instance"`
+	MemPerInstance       float64 `json:"mem_per_instance"`
+	CPUPerInstanceOffset float64 `json:"cpu_per_instance_offset"`
+	MemPerInstanceOffset float64 `json:"mem_per_instance_offset"`
+	CPULimitPerInstance  float64 `json:"cpu_limit_per_instance,omitempty"`
+	MemLimitPerInstance  float64 `json:"mem_limit_per_instance,omitempty"`
 }
 
 // ContainerResourceConfig defines configs for resource from bcs.
@@ -111,6 +113,8 @@ type ContainerResourceConfig struct {
 	BcsCPUPerInstance          float64        `json:"crm_bcs_cpu_per_instance"`
 	BcsMemPerInstance          float64        `json:"crm_bcs_mem_per_instance"`
 	BcsStoragePerInstance      float64        `json:"crm_bcs_storage_per_instance,omitempty"`
+	BcsCPUPerInstanceOffset    float64        `json:"crm_bcs_cpu_per_instance_offset"`
+	BcsMemPerInstanceOffset    float64        `json:"crm_bcs_mem_per_instance_offset"`
 	BcsCPULimitPerInstance     float64        `json:"crm_bcs_cpu_limit_per_instance,omitempty"`
 	BcsMemLimitPerInstance     float64        `json:"crm_bcs_mem_limit_per_instance,omitempty"`
 	BcsStorageLimitPerInstance float64        `json:"crm_bcs_storage_limit_per_instance,omitempty"`
