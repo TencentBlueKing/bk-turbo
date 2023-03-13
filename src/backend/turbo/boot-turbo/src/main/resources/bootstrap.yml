@@ -1,0 +1,9 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  cloud:
+    kubernetes:
+      config:
+        enabled: true
+        sources:
+          - name: ${server.fullname:turbo}

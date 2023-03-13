@@ -50,9 +50,14 @@ abstract class FeignTarget<T>(
     override fun type() = type
 
     override fun name() = serviceName
-
-    protected fun ServiceInstance.url() = "${if (isSecure) "https" else "http"}://$host:$port$commonUrlPrefix"
-
+    protected fun ServiceInstance.url(): String {
+        val finalHost = if (host.isNotBlank() && host.contains(":") && !host.startsWith("[")) {
+            "[$host]"
+        } else {
+            host
+        }
+        return "${if (isSecure) "https" else "http"}://$finalHost:$port$commonUrlPrefix"
+    }
     protected abstract fun choose(serviceName: String): ServiceInstance
 
     override fun url(): String {
