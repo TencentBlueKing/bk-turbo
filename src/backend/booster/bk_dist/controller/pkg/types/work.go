@@ -158,7 +158,7 @@ func (w *Work) GetRecorder(key string) (*recorder.Recorder, error) {
 
 	r, err := w.rp.GetRecorder(key)
 	if err != nil {
-		blog.Errorf("mgr: get recorder for %s failed: %v", key, err)
+		blog.Info("mgr: get recorder for %s failed: %v", key, err)
 		return nil, err
 	}
 

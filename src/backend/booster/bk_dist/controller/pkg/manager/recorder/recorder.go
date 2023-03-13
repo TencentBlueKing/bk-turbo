@@ -107,7 +107,7 @@ func (rr *Recorder) parseFromFile() error {
 		f, err = os.OpenFile(rr.path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
 	}
 	if err != nil {
-		blog.Errorf("recorder: open file(%s) failed: %v", rr.path, err)
+		blog.Info("recorder: open file(%s) failed: %v", rr.path, err)
 		return err
 	}
 
