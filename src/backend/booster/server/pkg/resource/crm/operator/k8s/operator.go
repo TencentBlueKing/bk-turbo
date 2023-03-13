@@ -331,8 +331,8 @@ type FederationResult struct {
 	Data FederationData `json:"data"`
 }
 
-func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (FederationResult, error) {
-	var result FederationResult
+func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*FederationResult, error) {
+	result := &FederationResult{}
 	param := &FederationResourceParam{
 		Resources: ResRequests{
 			Requests: ResRequest{
@@ -353,12 +353,12 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (F
 	res, err := o.request("POST", url, header, data)
 	if err != nil {
 		blog.Errorf("k8s operator: get federation resource param(%v), token(%v) failed: %v", param, header, err)
-		return result, err
+		return nil, err
 	}
 
-	if err = codec.DecJSON(res, &result); err != nil {
+	if err = codec.DecJSON(res, result); err != nil {
 		blog.Errorf("k8s operator: get federation decode url(%s) param(%v) token(%v) failed: %v", url, param, header, err)
-		return result, err
+		return nil, err
 	}
 	return result, nil
 }
@@ -377,7 +377,7 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 				url, clusterID, ist.Group, ist.Platform, err)
 			return nodeInfoList, err
 		}
-		if result.Code != 0 { //接口返回错误，直接返回错误
+		if result == nil || result.Code != 0 { //接口返回错误，直接返回错误
 			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): (%v)%s",
 				url, clusterID, ist.Group, ist.Platform, result.Code, result.Msg)
 			return nodeInfoList, err
