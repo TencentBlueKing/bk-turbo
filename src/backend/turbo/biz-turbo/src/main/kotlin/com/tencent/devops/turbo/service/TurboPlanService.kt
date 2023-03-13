@@ -5,6 +5,7 @@ import com.tencent.devops.common.api.exception.code.TURBO_NO_DATA_FOUND
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
 import com.tencent.devops.common.api.pojo.Page
+import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.service.prometheus.BkTimed
 import com.tencent.devops.common.util.JsonUtil
@@ -40,7 +41,7 @@ class TurboPlanService @Autowired constructor(
     private val turboPlanRepository: TurboPlanRepository,
     private val turboPlanInstanceService: TurboPlanInstanceService,
     private val turboEngineConfigService: TurboEngineConfigService,
-    private val serviceProjectResource: ServiceProjectResource
+    private val client: Client
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(TurboPlanService::class.java)
@@ -134,7 +135,7 @@ class TurboPlanService @Autowired constructor(
             // 2. 通过projectId获取组织架构信息
             val projectVO = try {
                 if (!turboPlanModel.projectId.isNullOrBlank()) {
-                    val projectResult = serviceProjectResource.get(turboPlanModel.projectId!!)
+                    val projectResult = client.get(ServiceProjectResource::class.java).get(turboPlanModel.projectId!!)
                     if (projectResult.isOk() && projectResult.data != null) {
                         projectResult.data
                     } else {
