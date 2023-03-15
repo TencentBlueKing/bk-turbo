@@ -1,57 +1,50 @@
-![LOGO](docs/resource/img/bkci_cn.png)
+![LOGO](docs/resource/img/bkturbo_cn.png)
 ---
-[![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/Tencent/bk-ci/blob/master/LICENSE.txt) [![Release Version](https://img.shields.io/github/v/release/Tencent/bk-ci?include_prereleases)](https://github.com/Tencent/bk-ci/releases) [![Backend CI](https://github.com/Tencent/bk-ci/workflows/Backend%20CI/badge.svg?branch=master)](https://img.shields.io/github/workflow/status/Tencent/bk-ci/Tag%20Realse)
-
-[English](README_EN.md) | 简体中文
+[![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/TencentBlueKing/bk-turbo/blob/master/LICENSE.txt) [![Release Version](https://img.shields.io/github/v/release/TencentBlueKing/bk-turbo?include_prereleases)](https://github.com/TencentBlueKing/bk-turbo/releases) 
 
 > **重要提示**: `master` 分支在开发过程中可能处于 *不稳定或者不可用状态* 。
-请通过[releases](https://github.com/tencent/bk-ci/releases) 而非 `master` 去获取稳定的二进制文件。
+请通过[releases](https://github.com/TencentBlueKing/bk-turbo/releases) 而非 `master` 去获取稳定的二进制文件。
 
-bk-ci是一个免费并开源的CI服务，可助你自动化构建-测试-发布工作流，持续、快速、高质量地交付你的产品。
-
-使用bk-ci屏蔽掉所有研发流程中的繁琐环节，让你聚焦于编码。它通常被用于：
-- 工程编译
-- 静态代码检查
-- 运行测试用例，及时发现BUG
-- 部署与发布
-
-bk-ci提供了流水线、代码检查、代码库、凭证管理、环境管理、研发商店、编译加速、制品库 8 大核心服务，多重组合，满足企业不同场景的需求：
-- **流水线**：将团队现有的研发流程以可视化方式呈现出来，编译、测试、部署，一条流水线搞定
-- **代码检查**：提供专业的代码检查解决方案，检查缺陷、安全漏洞、规范等多种维度代码问题，为产品质量保驾护航。
-- **代码库**：将企业内已有的代码托管服务关联至bk-ci
-- **凭证管理**：为代码库、流水线等服务提供不同类型的凭据、证书管理功能
-- **环境管理**：可以将企业内部的开发编译机托管至bk-ci
-- **研发商店**：由流水线插件和流水线模板组成，插件用于对接企业内部的各种第三方服务，模板助力企业内部的研发流程规范化
-- **编译加速**：基于蓝鲸自研加速引擎，支持C/C++编译、UE4 代码编译、UE4 Shader 编译等多场景下的加速，让构建任务飞起来
-- **制品库**：基于分布式存储，可无限扩展，数据持久化使用对象存储，支持COS、S3。功能包含制品扫描、分发、晋级、代理、包管理等，提供多种依赖源仓库，如generic(二进制文件)、maven、npm、pypi、oci、docker、helm、composer、nuget
+编译构建是项目开发和发布过程中的重要环节，同时也是非常耗时的环境，有些项目执行一次完整的构建需要几十分钟甚至几个小时，各种编译构建加速工具都能在一定程度上减小构建时长。bk-turbo是一个跨平台统一分布式编译加速服务，目前已经支持linux C++编译，UE4多平台C++，shader编译加速，并可快速扩展支持不同编译场景。
 
 ## Overview
-- [架构设计](docs/overview/architecture.md)
-- [代码目录](docs/overview/code_framework.md)
-- [设计理念](docs/overview/design.md)
+bk_turbo架构如下：
+- 编译加速工具包运行于用户构建机，为构建机上的编译任务接入加速服务
+- TBS服务为集中式部署，负责接受编译加速工具包加速请求，调度加速资源，并负责加速任务过程全生命周期管理
+- 分布式资源集群通过TBS服务统一动态调度，直接为用户编译提供分布式加速
+![image](docs/resource/img/turbo-arch.png)
+
+
+bk_turbo分布式加速底层通过disttask分布式任务引擎实现，disttask各模块功能介绍如下：
+- remoter worker 运行在分布式资源集群中中，负责接收，执行和返回分布式任务
+- local server 运行在构建机上，实现分布式任务底层基础功能，并可扩展不同应用场景的分布式任务实现
+- disttask_executor 通用任务执行器，接管实际编译中的编译命令(如 gcc命令，clang命令)，是构建工具和分布式基础服务之间的桥梁
+- 基于disttask提供的接口，根据实际场景需要，实现独立的构建工具
 
 ## Features
-- 持续集成和持续交付: 由于框架的可扩展性，bk-ci既可以用作简单的CI场景，也可以成为企业内所有项目的持续交付中心
-- 所见即所得:  bk-ci提供了灵活的可视化编排流水线，动动指尖，将研发流程描述与此
-- 架构平行可扩展: 灵活的架构设计可以随意横向扩容，满足企业大规模使用
-- 分布式: bk-ci可以便捷的管控多台构建机，助你更快的跨多平台构建、测试和部署
-- 流水线插件: bk-ci拥有完善的插件开发体系，其具备了低门槛、灵活可扩展等特性
-- 流水线模板: 流水线模板将是企业内部推行研发规范的一大助力
-- 代码检查规则集：沉淀团队的代码要求，并能跨项目共享和升级
-- 制品库：单一可信源，统一制品仓库，方便管理，提供软件供应链保护
+- 支持linux C/C++编译加速，不受构建工具和构建脚本实现方式限制
+- 支持UE4 linux C++编译加速
+- 支持UE4 mac C++和shader编译加速
+- 支持UE4 windows C++和shader编译加速，跨平台出包等
+- 构建过程可视化展示
+- 支持扩展实现多种平台的分布式任务，不局限于编译构建任务
+- 支持linux，windows平台下容器资源调度
+- 支持linux，windows，mac平台主机资源管理
+- 支持快速对接不同资源管理平台
+- 支持资源分组管理和调配，并支持用户自建资源组加入和使用
+- 支持make，cmake，bazel，blade，ninja，vs，ue4，xcodebuild等多种构建工具接入
+- 支持修改构建文件和命令的接入方式和系统hook命令方式
+- 支持IP,mac地址,业务token等多种访问控制手段
+
 
 ## Experience
-- [bk-ci in docker](https://hub.docker.com/r/blueking/bk-ci)
-- [bk-repo in docker](https://hub.docker.com/r/bkrepo/bkrepo)
+
 
 ## Getting started
-- [下载与编译](docs/overview/source_compile.md)
-- [一分钟安装部署](docs/overview/installation.md)
-- [独立部署制品库](docs/storage/README.md)
+
 
 ## Support
-1. [GitHub讨论区](https://github.com/Tencent/bk-ci/discussions)
-2. QQ群：495299374
+
 
 ## BlueKing Community
 - [BK-BCS](https://github.com/Tencent/bk-bcs)：蓝鲸容器管理平台是以容器技术为基础，为微服务业务提供编排管理的基础服务平台。
@@ -61,11 +54,11 @@ bk-ci提供了流水线、代码检查、代码库、凭证管理、环境管理
 - [BK-SOPS](https://github.com/Tencent/bk-sops)：蓝鲸标准运维（SOPS）是通过可视化的图形界面进行任务流程编排和执行的系统，是蓝鲸体系中一款轻量级的调度编排类SaaS产品。
 
 ## Contributing
-- 关于 bk-ci 分支管理、issue 以及 pr 规范，请阅读 [Contributing](CONTRIBUTING.md)
+- 关于 bk-turbo 分支管理、issue 以及 pr 规范，请阅读 [Contributing](CONTRIBUTING.md)
 - [腾讯开源激励计划](https://opensource.tencent.com/contribution) 鼓励开发者的参与和贡献，期待你的加入
 
 
 ## License
-BK-CI 是基于 MIT 协议， 详细请参考 [LICENSE](LICENSE.txt)
+BK-TURBO 是基于 MIT 协议， 详细请参考 [LICENSE](LICENSE.txt)
 
 我们承诺未来不会更改适用于交付给任何人的当前项目版本的开源许可证（MIT 协议）。
