@@ -67,8 +67,15 @@ var (
 	fileInfoCache     = map[string]*dcFile.Info{}
 )
 
+func ResetFileInfoCache() {
+	fileInfoCacheLock.Lock()
+	defer fileInfoCacheLock.Unlock()
+
+	fileInfoCache = map[string]*dcFile.Info{}
+}
+
 // 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
-func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
+func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) []*dcFile.Info {
 	// read
 	fileInfoCacheLock.RLock()
 	notfound := []string{}
@@ -98,7 +105,12 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool) []*dcFile.Info {
 	// query
 	tempis := make(map[string]*dcFile.Info, len(notfound))
 	for _, f := range notfound {
-		i := dcFile.Lstat(f)
+		var i *dcFile.Info
+		if statbysearchdir {
+			i = dcFile.GetFileInfoByEnumDir(f)
+		} else {
+			i = dcFile.Lstat(f)
+		}
 		tempis[f] = i
 
 		if mustexisted && !i.Exist() {

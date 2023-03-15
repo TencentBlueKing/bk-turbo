@@ -56,6 +56,9 @@ const (
 	envKeyHostPort = "HOST_PORT_"
 	envKeyRandPort = "RAND_PORT_"
 
+	reqTimeoutSecs  = 10 // 超时时间设置为10s
+	reqSlowWarnSecs = 3  //慢查询告警时间设置为3s
+
 	templateVarImage            = "__crm_image__"
 	templateVarName             = "__crm_name__"
 	templateVarNamespace        = "__crm_namespace__"
@@ -248,14 +251,16 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 	return nodeInfoList, nil
 }
 
-func (o *operator) getClient() *httpclient.HTTPClient {
-	return httpclient.NewHTTPClient()
+func (o *operator) getClient(timeoutSecond int) *httpclient.HTTPClient {
+	client := httpclient.NewHTTPClient()
+	client.SetTimeOut(time.Duration(timeoutSecond) * time.Second)
+	return client
 }
 
 func (o *operator) request(method, uri string, requestHeader http.Header, data []byte) (raw []byte, err error) {
 	var r *httpclient.HttpResponse
 
-	client := o.getClient()
+	client := o.getClient(reqTimeoutSecs)
 	before := time.Now().Local()
 
 	// add auth token in header
@@ -287,7 +292,7 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 	raw = r.Reply
 
 	now := time.Now().Local()
-	if before.Add(1 * time.Second).Before(now) {
+	if before.Add(reqSlowWarnSecs * time.Second).Before(now) {
 		blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
 	}
 
@@ -329,13 +334,25 @@ type FederationResult struct {
 	Data FederationData `json:"data"`
 }
 
-func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (FederationResult, error) {
-	var result FederationResult
+func getCPUAndMemIst(ist config.InstanceType) (float64, float64) {
+	varCPU := ist.CPUPerInstance
+	varMem := ist.MemPerInstance
+	if ist.CPUPerInstanceOffset > 0.0 && ist.CPUPerInstanceOffset < varCPU {
+		varCPU = varCPU - ist.CPUPerInstanceOffset
+	}
+	if ist.MemPerInstanceOffset > 0.0 && ist.MemPerInstanceOffset < varMem {
+		varMem = varMem - ist.MemPerInstanceOffset
+	}
+	return varCPU, varMem
+}
+
+func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*FederationResult, error) {
+	varCPU, varMem := getCPUAndMemIst(ist)
 	param := &FederationResourceParam{
 		Resources: ResRequests{
 			Requests: ResRequest{
-				CPU:    fmt.Sprintf("%f", ist.CPUPerInstance),
-				Memory: fmt.Sprintf("%fM", ist.MemPerInstance),
+				CPU:    fmt.Sprintf("%f", varCPU),
+				Memory: fmt.Sprintf("%fM", varMem),
 			},
 		},
 		NodeSelector: map[string]string{
@@ -351,17 +368,19 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (F
 	res, err := o.request("POST", url, header, data)
 	if err != nil {
 		blog.Errorf("k8s operator: get federation resource param(%v), token(%v) failed: %v", param, header, err)
-		return result, err
+		return nil, err
 	}
 
-	if err = codec.DecJSON(res, &result); err != nil {
+	result := &FederationResult{}
+	if err = codec.DecJSON(res, result); err != nil {
 		blog.Errorf("k8s operator: get federation decode url(%s) param(%v) token(%v) failed: %v", url, param, header, err)
-		return result, err
+		return nil, err
 	}
 	return result, nil
 }
 
 func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, error) {
+	blog.Debugf("k8s-operator: begin to get federation resource %s, %s", clusterID, o.conf.BcsNamespace)
 	nodeInfoList := make([]*op.NodeInfo, 0, 1000)
 	if o.conf.BcsNamespace == "" {
 		return nil, fmt.Errorf("crm: get federation resource request failed clusterID(%s): namespace is nil", clusterID)
@@ -369,15 +388,20 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 	url := fmt.Sprintf(bcsAPIFederatedURI, o.conf.BcsAPIPool.GetAddress(), clusterID, o.conf.BcsNamespace)
 	for _, ist := range o.conf.InstanceType {
 		result, err := o.getFederationTotalNum(url, ist)
-		if err != nil {
-			blog.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s) : %v",
+		if err != nil { //接口请求失败，直接返回错误
+			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s) : %v",
 				url, clusterID, ist.Group, ist.Platform, err)
-			continue
+			return nodeInfoList, err
 		}
-		if result.Code != 0 {
-			blog.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): (%v)%s",
+		if result == nil { //无结果返回，直接返回错误
+			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): result is nil",
+				url, clusterID, ist.Group, ist.Platform)
+			return nodeInfoList, err
+		}
+		if result.Code != 0 { //接口返回错误，直接返回错误
+			err := fmt.Errorf("crm: get federation resource request failed url(%s) clusterID(%s) group(%s), platform(%s): (%v)%s",
 				url, clusterID, ist.Group, ist.Platform, result.Code, result.Msg)
-			continue
+			return nodeInfoList, err
 		}
 		totalIst := float64(result.Data.Total)
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
@@ -393,7 +417,7 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 		})
 
 	}
-	blog.Debugf("k8s-operator: success to get federation resource clusterID(%s)", clusterID)
+	blog.Debugf("k8s-operator: success to get federation resource clusterID(%s), ns(%s)", clusterID, o.conf.BcsNamespace)
 	return nodeInfoList, nil
 }
 
@@ -624,8 +648,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	data = strings.ReplaceAll(data, templateVarCityKey, o.cityLabelKey)
 
 	//set instance default value
-	varCPU := o.conf.BcsCPUPerInstance
-	varMem := o.conf.BcsMemPerInstance
+	varCPU, varMem := getCPUAndMemIst(config.InstanceType{
+		CPUPerInstance:       o.conf.BcsCPUPerInstance,
+		MemPerInstance:       o.conf.BcsMemPerInstance,
+		CPUPerInstanceOffset: o.conf.BcsCPUPerInstanceOffset,
+		MemPerInstanceOffset: o.conf.BcsMemPerInstanceOffset,
+	})
 	varLimitCPU := o.conf.BcsCPUPerInstance
 	varLimitMem := o.conf.BcsMemPerInstance
 	if o.conf.BcsCPULimitPerInstance > 0.0 {
@@ -640,13 +668,12 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 			continue
 		}
 		if istItem.CPUPerInstance > 0.0 {
-			varCPU = istItem.CPUPerInstance
 			varLimitCPU = istItem.CPUPerInstance
 		}
 		if istItem.MemPerInstance > 0.0 {
-			varMem = istItem.MemPerInstance
 			varLimitMem = istItem.MemPerInstance
 		}
+		varCPU, varMem = getCPUAndMemIst(istItem)
 		if istItem.CPULimitPerInstance > 0.0 {
 			varLimitCPU = istItem.CPULimitPerInstance
 		}
