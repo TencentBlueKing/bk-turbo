@@ -171,6 +171,8 @@ func NewClientSession(ip string, port int32, url string) *Session {
 
 	s.clientStart()
 
+	blog.Infof("[session] Dial to :%s:%d/%s succeed", ip, port, url)
+
 	return s
 }
 
@@ -638,7 +640,7 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32) *Client
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	globalSessionPool = &ClientSessionPool{
+	tempSessionPool := &ClientSessionPool{
 		ctx:             ctx,
 		cancel:          cancel,
 		ip:              ip,
@@ -649,24 +651,25 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32) *Client
 		checkNotifyChan: make(chan bool, size*2),
 	}
 
-	blog.Debugf("[session] ready new client sessions")
+	blog.Infof("[session] client pool ready new client sessions")
 	for i := 0; i < int(size); i++ {
 		client := NewClientSession(ip, port, url)
 		if client != nil {
-			globalSessionPool.sessions[i] = client
+			tempSessionPool.sessions[i] = client
 		} else {
-			blog.Warnf("[session] new client session failed with %s:%d/%s", ip, port, url)
-			globalSessionPool.sessions[i] = nil
+			blog.Warnf("[session] client pool new client session failed with %s:%d/%s", ip, port, url)
+			tempSessionPool.sessions[i] = nil
 		}
 	}
 
 	// 启动检查 session的协程，用于检查和恢复
-	blog.Debugf("[session] ready start check go routine")
+	blog.Infof("[session] client pool ready start check go routine")
 	var wg = sync.WaitGroup{}
 	wg.Add(1)
-	go globalSessionPool.check(&wg)
+	go tempSessionPool.check(&wg)
 	wg.Wait()
 
+	globalSessionPool = tempSessionPool
 	return globalSessionPool
 }
 
