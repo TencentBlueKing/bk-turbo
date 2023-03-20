@@ -24,6 +24,7 @@ import (
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/websocket"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -45,22 +46,23 @@ func NewSDK(config dcSDK.ControllerConfig) dcSDK.ControllerSDK {
 }
 
 const (
-	availableURI        = "api/v1/dist/available"
-	registerURI         = "api/v1/dist/work/register"
-	commonConfigURI     = "api/v1/dist/work/commonconfig"
-	heartbeatURI        = "api/v1/dist/work/%s/heartbeat"
-	unregisterURI       = "api/v1/dist/work/%s/unregister"
-	occupyLocalSlotsURI = "api/v1/dist/work/%s/slots/local/occupy"
-	freeLocalSlotsURI   = "api/v1/dist/work/%s/slots/local/free"
-	startURI            = "api/v1/dist/work/%s/start"
-	endURI              = "api/v1/dist/work/%s/end"
-	statusURI           = "api/v1/dist/work/%s/status"
-	settingsURI         = "api/v1/dist/work/%s/settings"
-	jobStatsURI         = "api/v1/dist/work/%s/job/stats"
-	workStatsURI        = "api/v1/dist/work/%s/stats"
-	remoteExecURI       = "api/v1/dist/work/%s/remote/execute"
-	remoteSendURI       = "api/v1/dist/work/%s/remote/send"
-	localExecURI        = "api/v1/dist/work/%s/local/execute"
+	availableURI          = "api/v1/dist/available"
+	registerURI           = "api/v1/dist/work/register"
+	commonConfigURI       = "api/v1/dist/work/commonconfig"
+	heartbeatURI          = "api/v1/dist/work/%s/heartbeat"
+	unregisterURI         = "api/v1/dist/work/%s/unregister"
+	occupyLocalSlotsURI   = "api/v1/dist/work/%s/slots/local/occupy"
+	freeLocalSlotsURI     = "api/v1/dist/work/%s/slots/local/free"
+	startURI              = "api/v1/dist/work/%s/start"
+	endURI                = "api/v1/dist/work/%s/end"
+	statusURI             = "api/v1/dist/work/%s/status"
+	settingsURI           = "api/v1/dist/work/%s/settings"
+	jobStatsURI           = "api/v1/dist/work/%s/job/stats"
+	workStatsURI          = "api/v1/dist/work/%s/stats"
+	remoteExecURI         = "api/v1/dist/work/%s/remote/execute"
+	remoteSendURI         = "api/v1/dist/work/%s/remote/send"
+	localExecURI          = "api/v1/dist/work/%s/local/execute"
+	localExeWebSocketcURI = "api/v1/dist/work/%s/local/execute_websocket"
 
 	serverEnsureTime = 60 * time.Second
 )
@@ -775,6 +777,79 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 
 	r := &LocalTaskExecuteResp{}
 	httpcode, httpmessage, err := r.Read(resp.Reply)
+	if err != nil {
+		return httpcode, httpmessage, nil, err
+	}
+
+	return httpcode, httpmessage, &dcSDK.LocalTaskResult{
+		ExitCode: r.Result.ExitCode,
+		Stdout:   r.Result.Stdout,
+		Stderr:   r.Result.Stderr,
+		Message:  r.Result.Message,
+	}, nil
+}
+
+// ExecuteLocalTaskWithWebSocket do the task in local controller with websocket
+func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
+	// 获取session
+	url := fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id)
+	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10)
+
+	servercode := int(api.ServerErrOK)
+	servermessage := ""
+	session, err := sp.GetSession()
+	if err != nil && session == nil {
+		return servercode, servermessage, nil, err
+	}
+
+	// 准备要发送的数据
+	var data []byte
+
+	dir := ""
+	if workdir != "" {
+		dir = workdir
+	} else {
+		dir, _ = os.Getwd()
+		// if realDir, err := os.Readlink(dir); err == nil {
+		if realDir, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = realDir
+		}
+	}
+
+	if !filepath.IsAbs(dir) {
+		dir, _ = filepath.Abs(dir)
+	}
+
+	u, _ := user.Current()
+	if u == nil {
+		u = &user.User{}
+	}
+	_ = codec.EncJSON(&LocalTaskExecuteParam{
+		Pid:          os.Getpid(),
+		Dir:          dir,
+		Commands:     commands,
+		Environments: os.Environ(),
+		Stats:        wj.stats,
+		User:         *u,
+	}, &data)
+
+	// 发送和接收结果
+	ret := session.Send(data, true)
+	if ret == nil {
+		return servercode, servermessage, nil, fmt.Errorf("got nil result")
+	}
+
+	if ret.Err != nil {
+		return servercode, servermessage, nil, ret.Err
+	}
+
+	// resp, err := wj.sdk.sdk.requestRaw("POST", fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id), data, true)
+	// if err != nil {
+	// 	return servercode, servermessage, nil, err
+	// }
+
+	r := &LocalTaskExecuteResp{}
+	httpcode, httpmessage, err := r.Read(ret.Data)
 	if err != nil {
 		return httpcode, httpmessage, nil, err
 	}

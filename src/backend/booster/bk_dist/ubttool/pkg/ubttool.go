@@ -98,6 +98,9 @@ type UBTTool struct {
 	// settings
 	projectSettingFile string
 	settings           *shaderToolComm.ApplyParameters
+
+	// whether use web socket
+	usewebsocket bool
 }
 
 // Run run the tool
@@ -124,6 +127,7 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 		blog.Errorf("UBTTool: ensure controller failed: %v", ErrorInvalidWorkID)
 		return 1, ErrorInvalidWorkID
 	}
+	h.executor.usewebsocket = h.usewebsocket
 
 	// run actions now
 	err = h.runActions()
@@ -575,6 +579,8 @@ func (h *UBTTool) initsettings() error {
 
 		if k == "BK_DIST_LOG_LEVEL" {
 			common.SetLogLevel(v)
+		} else if k == "BK_DIST_USE_WEBSOCKET" {
+			h.usewebsocket = true
 		}
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")
