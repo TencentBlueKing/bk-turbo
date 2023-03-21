@@ -793,7 +793,7 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
 	// 获取session
 	url := fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id)
-	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10)
+	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10, nil)
 
 	servercode := int(api.ServerErrOK)
 	servermessage := ""

@@ -74,7 +74,7 @@ type Session struct {
 	conn  net.Conn
 	valid bool // 连接是否可用
 
-	// server端的回调函数
+	// 收到数据后的回调函数
 	callback WebSocketFunc
 
 	// 发送
@@ -142,7 +142,7 @@ func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSoc
 }
 
 // client端创建session，需要指定目标server的ip和端口
-func NewClientSession(ip string, port int32, url string) *Session {
+func NewClientSession(ip string, port int32, url string, callback WebSocketFunc) *Session {
 	ctx, cancel := context.WithCancel(context.Background())
 	conn, _, _, err := ws.DefaultDialer.Dial(ctx, fmt.Sprintf("ws://%s:%d/%s", ip, port, url))
 	if err != nil || conn == nil {
@@ -166,6 +166,7 @@ func NewClientSession(ip string, port int32, url string) *Session {
 		waitMap:        make(map[MessageID]*Message),
 		errorChan:      errorChan,
 		valid:          true,
+		callback:       callback,
 		id:             0,
 	}
 
@@ -394,9 +395,13 @@ func (s *Session) clientReceive(wg *sync.WaitGroup) {
 			blog.Warnf("[session] received data is invalid with error: %v", ret.Err)
 		} else {
 			blog.Debugf("[session] received response with ID: %s", ret.UniqID)
-			err = s.returnWait(ret)
-			if err != nil {
-				blog.Warnf("[session] notify wait message failed with error: %v", err)
+			if s.callback != nil {
+				go s.callback(s.req, ret.UniqID, ret.Data, s)
+			} else {
+				err = s.returnWait(ret)
+				if err != nil {
+					blog.Warnf("[session] notify wait message failed with error: %v", err)
+				}
 			}
 		}
 
@@ -426,7 +431,14 @@ func (s *Session) serverReceive(wg *sync.WaitGroup) {
 			blog.Errorf("[session] received data is invalid with error: %v", ret.Err)
 		} else {
 			blog.Debugf("[session] received request with ID: %s", ret.UniqID)
-			go s.callback(s.req, ret.UniqID, ret.Data, s)
+			if s.callback != nil {
+				go s.callback(s.req, ret.UniqID, ret.Data, s)
+			} else {
+				err = s.returnWait(ret)
+				if err != nil {
+					blog.Warnf("[session] notify wait message failed with error: %v", err)
+				}
+			}
 		}
 
 		select {
@@ -610,6 +622,7 @@ type ClientSessionPool struct {
 	ip       string // 远端的ip
 	port     int32  // 远端的port
 	url      string
+	callback WebSocketFunc
 	size     int32
 	sessions []*Session
 	mutex    sync.RWMutex
@@ -625,7 +638,7 @@ var globalmutex sync.RWMutex
 var globalSessionPool *ClientSessionPool
 
 // 用于初始化并返回全局客户端的session pool
-func GetGlobalSessionPool(ip string, port int32, url string, size int32) *ClientSessionPool {
+func GetGlobalSessionPool(ip string, port int32, url string, size int32, callback WebSocketFunc) *ClientSessionPool {
 	// 初始化全局pool，并返回一个可用的
 	if globalSessionPool != nil {
 		return globalSessionPool
@@ -646,6 +659,7 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32) *Client
 		ip:              ip,
 		port:            port,
 		url:             url,
+		callback:        callback,
 		size:            size,
 		sessions:        make([]*Session, size, size),
 		checkNotifyChan: make(chan bool, size*2),
@@ -653,7 +667,7 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32) *Client
 
 	blog.Infof("[session] client pool ready new client sessions")
 	for i := 0; i < int(size); i++ {
-		client := NewClientSession(ip, port, url)
+		client := NewClientSession(ip, port, url, callback)
 		if client != nil {
 			tempSessionPool.sessions[i] = client
 		} else {
@@ -751,7 +765,7 @@ func (sp *ClientSessionPool) checkSessions() {
 		blog.Debugf("[session] session check found %d invalid sessions", len(invalidIndex))
 
 		for i := 0; i < len(invalidIndex); i++ {
-			client := NewClientSession(sp.ip, sp.port, sp.url)
+			client := NewClientSession(sp.ip, sp.port, sp.url, sp.callback)
 			if client != nil {
 				blog.Debugf("[session] got Lock")
 				sessionid := invalidIndex[i]
