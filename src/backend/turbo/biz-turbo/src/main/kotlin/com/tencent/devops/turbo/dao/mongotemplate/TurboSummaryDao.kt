@@ -1,6 +1,6 @@
 package com.tencent.devops.turbo.dao.mongotemplate
 
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.model.TTurboDaySummaryEntity
 import com.tencent.devops.turbo.pojo.TurboDaySummaryOverviewModel
 import org.bson.Document
@@ -44,9 +44,9 @@ class TurboSummaryDao @Autowired constructor(
         if (createFlag) {
             update.inc("execute_count", 1)
         }
-        update.set("created_by", codeccAdmin)
+        update.set("created_by", SYSTEM_ADMIN)
             .set("created_date", LocalDateTime.now())
-            .set("updated_by", codeccAdmin)
+            .set("updated_by", SYSTEM_ADMIN)
             .set("updated_date", LocalDateTime.now())
 
         val findAndModifyOptions = FindAndModifyOptions()
@@ -122,7 +122,7 @@ class TurboSummaryDao @Autowired constructor(
         query.addCriteria(Criteria.where("project_id").`is`(projectId).and("summary_day").`is`(summaryDay))
         val update = Update()
         update.set("estimate_time", estimateTime)
-            .set("updated_by", codeccAdmin)
+            .set("updated_by", SYSTEM_ADMIN)
             .set("updated_date", LocalDateTime.now())
         mongoTemplate.updateFirst(query, update, TTurboDaySummaryEntity::class.java)
     }

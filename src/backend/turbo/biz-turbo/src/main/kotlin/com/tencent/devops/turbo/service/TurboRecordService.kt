@@ -12,7 +12,7 @@ import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
 import com.tencent.devops.common.util.constants.EXCHANGE_TURBO_PLUGIN
 import com.tencent.devops.common.util.constants.ROUTE_TURBO_PLUGIN_DATA
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.common.web.mq.CORE_RABBIT_TEMPLATE_NAME
 import com.tencent.devops.turbo.dao.mongotemplate.TurboRecordDao
 import com.tencent.devops.turbo.dao.repository.TurboRecordRepository
@@ -113,9 +113,9 @@ class TurboRecordService @Autowired constructor(
             status = status,
             startTime = Instant.ofEpochSecond(if (startTime == 0L) (System.currentTimeMillis() / 1000L) else startTime).atZone(ZoneOffset.ofHours(8)).toLocalDateTime(),
             createdDate = LocalDateTime.now(),
-            createdBy = codeccAdmin,
+            createdBy = SYSTEM_ADMIN,
             updatedDate = LocalDateTime.now(),
-            updatedBy = codeccAdmin
+            updatedBy = SYSTEM_ADMIN
         )
         if (status == EnumDistccTaskStatus.FINISH.getTBSStatus()) {
             val endTime = (turboDataMap["end_time"] as? Int?)?.toLong() ?: (System.currentTimeMillis() / 1000)

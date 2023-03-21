@@ -1,7 +1,7 @@
 package com.tencent.devops.turbo.dao.mongotemplate
 
 import com.tencent.devops.common.api.pojo.Page
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.model.TTurboPlanInstanceEntity
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.Pageable
@@ -42,7 +42,7 @@ class TurboPlanInstanceDao @Autowired constructor(
         }
         update.set("latest_start_time", startTime)
             .set("latest_status", status)
-            .set("updated_by", codeccAdmin)
+            .set("updated_by", SYSTEM_ADMIN)
             .set("updated_date", LocalDateTime.now())
         mongoTemplate.updateFirst(query, update, TTurboPlanInstanceEntity::class.java)
     }
@@ -85,7 +85,7 @@ class TurboPlanInstanceDao @Autowired constructor(
         query.addCriteria(Criteria.where("_id").`is`(turboPlanInstanceId))
         val update = Update()
         update.set("total_estimate_time", estimateTime)
-        update.set("updated_by", codeccAdmin)
+        update.set("updated_by", SYSTEM_ADMIN)
         update.set("updated_date", LocalDateTime.now())
         mongoTemplate.updateFirst(query, update, TTurboPlanInstanceEntity::class.java)
     }

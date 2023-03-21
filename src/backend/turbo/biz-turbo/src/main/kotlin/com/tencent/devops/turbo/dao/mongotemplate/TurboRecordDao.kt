@@ -1,7 +1,7 @@
 package com.tencent.devops.turbo.dao.mongotemplate
 
 import com.tencent.devops.common.api.pojo.Page
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.dto.TurboRecordRefreshModel
 import com.tencent.devops.turbo.enums.EnumDistccTaskStatus
 import com.tencent.devops.turbo.model.TTurboRecordEntity
@@ -115,7 +115,7 @@ class TurboRecordDao @Autowired constructor(
         if (!turboRatio.isNullOrBlank()) {
             update.set("turbo_ratio", turboRatio)
         }
-        update.set("updated_by", codeccAdmin)
+        update.set("updated_by", SYSTEM_ADMIN)
             .set("updated_date", LocalDateTime.now())
 
         val findAndModifyOptions = FindAndModifyOptions()
@@ -264,7 +264,7 @@ class TurboRecordDao @Autowired constructor(
         if (!turboRatio.isNullOrBlank()) {
             update.set("turbo_ratio", turboRatio)
         }
-        update.set("updated_by", codeccAdmin)
+        update.set("updated_by", SYSTEM_ADMIN)
             .set("updated_date", LocalDateTime.now())
         val findAndModifyOptions = FindAndModifyOptions()
         findAndModifyOptions.returnNew(true)

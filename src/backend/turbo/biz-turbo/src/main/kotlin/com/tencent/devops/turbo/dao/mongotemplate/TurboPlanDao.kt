@@ -1,7 +1,7 @@
 package com.tencent.devops.turbo.dao.mongotemplate
 
 import com.tencent.devops.common.api.pojo.Page
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.model.TTurboPlanEntity
 import com.tencent.devops.turbo.pojo.TurboDaySummaryOverviewModel
 import org.springframework.beans.factory.annotation.Autowired
@@ -249,7 +249,7 @@ class TurboPlanDao @Autowired constructor(
         query.addCriteria(Criteria.where("_id").`is`(turboPlanId))
         val update = Update()
         update.set("estimate_time", estimateTime.toDouble().div(3600))
-        update.set("updated_by", codeccAdmin)
+        update.set("updated_by", SYSTEM_ADMIN)
         update.set("updated_date", LocalDateTime.now())
         mongoTemplate.updateFirst(query, update, TTurboPlanEntity::class.java)
     }

@@ -2,7 +2,7 @@ package com.tencent.devops.turbo.component
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.tencent.devops.common.util.JsonUtil
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.dto.TurboRecordCreateDto
 import com.tencent.devops.turbo.dto.TurboRecordPluginUpdateDto
 import com.tencent.devops.turbo.dto.TurboRecordUpdateDto
@@ -93,7 +93,7 @@ class TurboRecordConsumer @Autowired constructor(
                     tbsRecordId = turboRecordUpdateDto.tbsTurboRecordId,
                     buildId = turboRecordUpdateDto.buildId,
                     status = EnumDistccTaskStatus.FAILED.getTBSStatus(),
-                    user = codeccAdmin
+                    user = SYSTEM_ADMIN
                 )
             }
             logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update turbo record and update stats finished!")
@@ -102,7 +102,7 @@ class TurboRecordConsumer @Autowired constructor(
             logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update turbo record fail! message: ${e.message}")
             turboRecordService.updateRecordStatus(
                 turboRecordUpdateDto.tbsTurboRecordId, turboRecordUpdateDto.buildId,
-                EnumDistccTaskStatus.FAILED.getTBSStatus(), codeccAdmin
+                EnumDistccTaskStatus.FAILED.getTBSStatus(), SYSTEM_ADMIN
             )
         }
     }

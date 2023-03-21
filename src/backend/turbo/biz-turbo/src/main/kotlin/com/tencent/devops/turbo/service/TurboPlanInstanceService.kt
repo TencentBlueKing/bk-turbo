@@ -7,7 +7,7 @@ import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.util.MathUtil
 import com.tencent.devops.common.util.UUIDUtil
-import com.tencent.devops.common.util.constants.codeccAdmin
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.dao.mongotemplate.TurboPlanInstanceDao
 import com.tencent.devops.turbo.dao.repository.TurboPlanInstanceRepository
 import com.tencent.devops.turbo.enums.EnumDistccTaskStatus
@@ -58,9 +58,9 @@ class TurboPlanInstanceService @Autowired constructor(
                 turboPlanId = turboPlanId,
                 projectId = projectId,
                 clientIp = clientIp,
-                updatedBy = codeccAdmin,
+                updatedBy = SYSTEM_ADMIN,
                 updatedDate = LocalDateTime.now(),
-                createdBy = codeccAdmin,
+                createdBy = SYSTEM_ADMIN,
                 createdDate = LocalDateTime.now()
             )
             val newTurboPlanInstanceEntity = turboPlanInstanceRepository.save(turboPlanInstanceEntity)
