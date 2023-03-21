@@ -117,8 +117,7 @@ class TurboRecordDao @Autowired constructor(
         }
         update.set("updated_by", codeccAdmin)
             .set("updated_date", LocalDateTime.now())
-            .set("created_by", codeccAdmin)
-            .set("created_date", LocalDateTime.now())
+
         val findAndModifyOptions = FindAndModifyOptions()
         findAndModifyOptions.returnNew(true)
         return mongoTemplate.findAndModify(query, update, findAndModifyOptions, TTurboRecordEntity::class.java)

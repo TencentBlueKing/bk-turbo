@@ -55,8 +55,7 @@ class TurboPlanDao @Autowired constructor(
         if (createFlag) {
             update.inc("execute_count", 1)
         }
-        update.set("updated_by", codeccAdmin)
-            .set("updated_date", LocalDateTime.now())
+
         mongoTemplate.updateFirst(query, update, TTurboPlanEntity::class.java)
     }
 
