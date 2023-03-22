@@ -951,7 +951,7 @@ func (b *Booster) getProperJobs() int {
 		}
 		jobs = int(float64(jobs) * 1.5)
 
-		if jobs <= 0 {
+		if jobs <= 0 && b.config.Works.Presetjobs > 0 {
 			jobs = b.config.Works.Presetjobs
 		}
 
