@@ -57,25 +57,25 @@ abstract class Client constructor(
     private val interfaces = ConcurrentHashMap<KClass<*>, String>()
 
     private val okHttpClient = okhttp3.OkHttpClient.Builder()
-            .connectTimeout(5L, TimeUnit.SECONDS)
-            .readTimeout(60L, TimeUnit.SECONDS)
-            .writeTimeout(60L, TimeUnit.SECONDS)
-            .build()
+        .connectTimeout(5L, TimeUnit.SECONDS)
+        .readTimeout(60L, TimeUnit.SECONDS)
+        .writeTimeout(60L, TimeUnit.SECONDS)
+        .build()
 
     protected val longRunClient = OkHttpClient(
         okhttp3.OkHttpClient.Builder()
-                .connectTimeout(10L, TimeUnit.SECONDS)
-                .readTimeout(30L, TimeUnit.MINUTES)
-                .writeTimeout(30L, TimeUnit.MINUTES)
-                .build()
+            .connectTimeout(10L, TimeUnit.SECONDS)
+            .readTimeout(30L, TimeUnit.MINUTES)
+            .writeTimeout(30L, TimeUnit.MINUTES)
+            .build()
     )
 
     protected val shortRunClient = OkHttpClient(
         okhttp3.OkHttpClient.Builder()
-                .connectTimeout(5L, TimeUnit.SECONDS)
-                .readTimeout(10L, TimeUnit.SECONDS)
-                .writeTimeout(10L, TimeUnit.SECONDS)
-                .build()
+            .connectTimeout(5L, TimeUnit.SECONDS)
+            .readTimeout(10L, TimeUnit.SECONDS)
+            .writeTimeout(10L, TimeUnit.SECONDS)
+            .build()
     )
 
     protected val feignClient = OkHttpClient(okHttpClient)
@@ -89,6 +89,9 @@ abstract class Client constructor(
     @Value("\${service.suffix:#{null}}")
     private val serviceSuffix: String? = null
 
+    @Value("\${service.inner:#{null}}")
+    private val inner: Boolean? = null
+
     companion object {
 
         const val codeccPackagePath = """com.tencent.bk.codecc.([a-z]+).api.([a-zA-Z]+)"""
@@ -99,24 +102,24 @@ abstract class Client constructor(
     fun <T : Any> getDevopsService(clz: Class<T>): T {
         // 获取为feign定义的拦截器
         val feignProxy = Feign.builder()
-                .client(feignClient)
-                .errorDecoder(clientErrorDecoder)
-                .encoder(jacksonEncoder)
-                .decoder(jacksonDecoder)
-                .contract(jaxRsContract)
-                .options(Request.Options(10000, 30000))
-                .requestInterceptor(
-                    SpringContextUtil.getBean(
-                        RequestInterceptor::class.java,
-                        "devopsRequestInterceptor"
-                    )
+            .client(feignClient)
+            .errorDecoder(clientErrorDecoder)
+            .encoder(jacksonEncoder)
+            .decoder(jacksonDecoder)
+            .contract(jaxRsContract)
+            .options(Request.Options(10000, 30000))
+            .requestInterceptor(
+                SpringContextUtil.getBean(
+                    RequestInterceptor::class.java,
+                    "devopsRequestInterceptor"
                 )
-                .target(
-                    DevopsServiceTarget(
-                        findThridServiceName(clz.kotlin), clz, allProperties.devopsDevUrl
-                            ?: ""
-                    )
+            )
+            .target(
+                DevopsServiceTarget(
+                    findThridServiceName(clz.kotlin), clz, allProperties.devopsDevUrl
+                        ?: ""
                 )
+            )
         val devopsProxy = DevopsProxy(feignProxy, clz)
         return clz.cast(
             Proxy.newProxyInstance(
@@ -130,19 +133,19 @@ abstract class Client constructor(
     fun <T : Any> getThirdService(clz: Class<T>, rootPath: String): T {
         // 获取为feign定义的拦截器
         val feignProxy = Feign.builder()
-                .client(feignClient)
-                .errorDecoder(clientErrorDecoder)
-                .encoder(jacksonEncoder)
-                .decoder(jacksonDecoder)
-                .contract(jaxRsContract)
-                .options(Request.Options(10000, 30000))
-                .requestInterceptor(
-                    SpringContextUtil.getBean(
-                        RequestInterceptor::class.java,
-                        "normalRequestInterceptor"
-                    )
-                ) // 获取为feign定义的拦截器
-                .target(ThirdServiceTarget(findThridServiceName(clz.kotlin), clz, rootPath))
+            .client(feignClient)
+            .errorDecoder(clientErrorDecoder)
+            .encoder(jacksonEncoder)
+            .decoder(jacksonDecoder)
+            .contract(jaxRsContract)
+            .options(Request.Options(10000, 30000))
+            .requestInterceptor(
+                SpringContextUtil.getBean(
+                    RequestInterceptor::class.java,
+                    "normalRequestInterceptor"
+                )
+            ) // 获取为feign定义的拦截器
+            .target(ThirdServiceTarget(findThridServiceName(clz.kotlin), clz, rootPath))
         val devopsProxy = DevopsProxy(feignProxy, clz)
         return clz.cast(
             Proxy.newProxyInstance(
@@ -156,24 +159,24 @@ abstract class Client constructor(
         // 获取为feign定义的拦截器
         DevopsProxy.projectIdThreadLocal.set(projectId)
         val feignProxy = Feign.builder()
-                .client(feignClient)
-                .errorDecoder(clientErrorDecoder)
-                .encoder(jacksonEncoder)
-                .decoder(jacksonDecoder)
-                .contract(jaxRsContract)
-                .options(Request.Options(10000, 30000))
-                .requestInterceptor(
-                    SpringContextUtil.getBean(
-                        RequestInterceptor::class.java, "devopsRequestInterceptor"
-                    )
+            .client(feignClient)
+            .errorDecoder(clientErrorDecoder)
+            .encoder(jacksonEncoder)
+            .decoder(jacksonDecoder)
+            .contract(jaxRsContract)
+            .options(Request.Options(10000, 30000))
+            .requestInterceptor(
+                SpringContextUtil.getBean(
+                    RequestInterceptor::class.java, "devopsRequestInterceptor"
                 )
-                .target(
-                    DevopsServiceTarget(
-                        findThridServiceName(clz.kotlin), clz,
-                        allProperties.devopsDevUrl
-                            ?: ""
-                    )
+            )
+            .target(
+                DevopsServiceTarget(
+                    findThridServiceName(clz.kotlin), clz,
+                    allProperties.devopsDevUrl
+                        ?: ""
                 )
+            )
         val devopsProxy = DevopsProxy(feignProxy, clz)
         return clz.cast(
             Proxy.newProxyInstance(feignProxy.javaClass.classLoader, feignProxy.javaClass.interfaces, devopsProxy)
@@ -186,25 +189,25 @@ abstract class Client constructor(
     fun <T : Any> getShortRunDevopsService(clz: Class<T>): T {
         // 获取为feign定义的拦截器
         val feignProxy = Feign.builder()
-                .client(shortRunClient)
-                .errorDecoder(clientErrorDecoder)
-                .encoder(jacksonEncoder)
-                .decoder(jacksonDecoder)
-                .contract(jaxRsContract)
-                .options(Request.Options(5000, 10000))
-                .requestInterceptor(
-                    SpringContextUtil.getBean(
-                        RequestInterceptor::class.java,
-                        "devopsRequestInterceptor"
-                    )
+            .client(shortRunClient)
+            .errorDecoder(clientErrorDecoder)
+            .encoder(jacksonEncoder)
+            .decoder(jacksonDecoder)
+            .contract(jaxRsContract)
+            .options(Request.Options(5000, 10000))
+            .requestInterceptor(
+                SpringContextUtil.getBean(
+                    RequestInterceptor::class.java,
+                    "devopsRequestInterceptor"
                 )
-                .target(
-                    DevopsServiceTarget(
-                        findThridServiceName(clz.kotlin),
-                        clz, allProperties.devopsDevUrl
-                            ?: ""
-                    )
+            )
+            .target(
+                DevopsServiceTarget(
+                    findThridServiceName(clz.kotlin),
+                    clz, allProperties.devopsDevUrl
+                        ?: ""
                 )
+            )
         val devopsProxy = DevopsProxy(feignProxy, clz)
         return clz.cast(
             Proxy.newProxyInstance(
@@ -252,7 +255,9 @@ abstract class Client constructor(
             }
         }
 
-        return if (prefix.isNullOrBlank() && suffix.isNullOrBlank()) {
+        return if (inner == true) {
+            "$serviceName-bk-ci-$serviceName"
+        } else if (prefix.isNullOrBlank() && suffix.isNullOrBlank()) {
             serviceName
         } else if (suffix.isNullOrBlank()) {
             "$prefix$serviceName"
