@@ -198,6 +198,8 @@ func (h *ShaderTool) launchController() error {
 	if h.controller == nil {
 		h.controllerconfig.RemainTime = h.settings.ControllerIdleRunSeconds
 		h.controllerconfig.NoWait = h.settings.ControllerNoBatchWait
+		h.controllerconfig.SendCork = h.settings.ControllerSendCork
+		h.controllerconfig.LongTCP = h.settings.ControllerLongTCP
 		h.controller = v1.NewSDK(h.controllerconfig)
 	}
 

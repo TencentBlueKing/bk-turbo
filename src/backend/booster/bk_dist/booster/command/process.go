@@ -341,6 +341,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			SendCork:           c.Bool(FlagSendCork),
 			NetErrorLimit:      netErrLimit,
 			RemoteRetryTimes:   remoteRetryTimes,
+			LongTCP:            c.Bool(FlagLongTCP),
 		},
 	}
 

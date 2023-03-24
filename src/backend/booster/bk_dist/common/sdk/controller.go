@@ -133,6 +133,7 @@ type ControllerConfig struct {
 	SendCork           bool
 	NetErrorLimit      int
 	RemoteRetryTimes   int
+	LongTCP            bool
 }
 
 // Target return the server ip and port of controller

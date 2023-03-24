@@ -45,6 +45,8 @@ type ServerConfig struct {
 
 	NetErrorLimit    int `json:"net_error_limit" value:"3" usage:"define net error limit,make a worker disabled when it's net errors reach this limit"`
 	RemoteRetryTimes int `json:"remote_retry_times" value:"1" usage:"define retry times when remote execute failed"`
+
+	LongTCP bool `json:"long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
 }
 
 // CertConfig  configuration of Cert

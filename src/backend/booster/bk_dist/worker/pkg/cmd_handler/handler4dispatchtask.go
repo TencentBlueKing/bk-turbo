@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
 	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -83,12 +84,15 @@ func (h *Handle4DispatchReq) ReceiveBody(client *protocol.TCPClient,
 }
 
 // Handle to handle this cmd
-func (h *Handle4DispatchReq) Handle(client *protocol.TCPClient,
+func (h *Handle4DispatchReq) Handle(
+	client *protocol.TCPClient,
 	head *dcProtocol.PBHead,
 	body interface{},
 	receivedtime time.Time,
 	basedir string,
-	cmdreplacerules []dcConfig.CmdReplaceRule) error {
+	cmdreplacerules []dcConfig.CmdReplaceRule,
+	id *longtcp.MessageID,
+	s *longtcp.Session) error {
 	blog.Infof("handle with base dir:%s", basedir)
 	defer func() {
 		blog.Infof("handle out for base dir:%s", basedir)
@@ -117,7 +121,16 @@ func (h *Handle4DispatchReq) Handle(client *protocol.TCPClient,
 	blog.Infof("succeed to encode dispatch response to messages")
 
 	// send response
-	err = protocol.SendMessages(client, &messages)
+	if client != nil {
+		err = protocol.SendMessages(client, &messages)
+	} else {
+		rspdata := [][]byte{}
+		for _, m := range messages {
+			rspdata = append(rspdata, m.Data)
+		}
+		ret := s.SendWithID(*id, rspdata, false)
+		err = ret.Err
+	}
 	if err != nil {
 		blog.Errorf("failed to send messages for error:%v", err)
 	}

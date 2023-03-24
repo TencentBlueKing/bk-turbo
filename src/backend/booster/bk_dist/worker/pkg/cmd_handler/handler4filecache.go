@@ -19,13 +19,14 @@ import (
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cache"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
-var defaultCM cache.Manager
+var DefaultCM cache.Manager
 
 // Handle4FileCache describe the file cache handler in remote worker
 type Handle4FileCache struct {
@@ -57,7 +58,7 @@ func NewHandle4FileCache() *Handle4FileCache {
 				cacheDir, poolSize)
 		}
 
-		defaultCM = handler.cm
+		DefaultCM = handler.cm
 	}
 
 	return handler
@@ -84,7 +85,9 @@ func (h *Handle4FileCache) Handle(client *protocol.TCPClient,
 	body interface{},
 	receivedtime time.Time,
 	_ string,
-	_ []dcConfig.CmdReplaceRule) error {
+	_ []dcConfig.CmdReplaceRule,
+	id *longtcp.MessageID,
+	s *longtcp.Session) error {
 	blog.Infof("file cache: handle file check cache")
 	// convert to req
 	req, ok := body.(*dcProtocol.PBBodyCheckCacheReq)
@@ -127,7 +130,16 @@ func (h *Handle4FileCache) Handle(client *protocol.TCPClient,
 	blog.Infof("file cache: success to encode check cache response to messages")
 
 	// send response
-	err = protocol.SendMessages(client, &messages)
+	if client != nil {
+		err = protocol.SendMessages(client, &messages)
+	} else {
+		rspdata := [][]byte{}
+		for _, m := range messages {
+			rspdata = append(rspdata, m.Data)
+		}
+		ret := s.SendWithID(*id, rspdata, false)
+		err = ret.Err
+	}
 	if err != nil {
 		blog.Errorf("file cache: failed to send messages for error:%v", err)
 	}

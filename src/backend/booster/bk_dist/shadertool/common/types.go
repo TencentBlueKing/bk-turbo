@@ -66,6 +66,8 @@ type ApplyParameters struct {
 	ShaderToolIdleRunSeconds int               `json:"shader_tool_idle_run_seconds"`
 	ControllerIdleRunSeconds int               `json:"controller_idle_run_seconds" value:"120" usage:"controller remain time after there is no active work (seconds)"`
 	ControllerNoBatchWait    bool              `json:"controller_no_batch_wait" value:"false" usage:"if true, controller will unregister immediately when no more running task"`
+	ControllerSendCork       bool              `json:"controller_send_cork" value:"false" usage:"if true, controller will send file with cork"`
+	ControllerLongTCP        bool              `json:"controller_long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
 	LimitPerWorker           int               `json:"limit_per_worker"`
 	MaxLocalTotalJobs        int               `json:"max_Local_total_jobs"`
 	MaxLocalPreJobs          int               `json:"max_Local_pre_jobs"`

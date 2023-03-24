@@ -13,6 +13,7 @@ import (
 	"time"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
 )
@@ -28,7 +29,9 @@ type Handler interface {
 		body interface{},
 		receivedtime time.Time,
 		basedir string,
-		cmdreplacerules []dcConfig.CmdReplaceRule) error
+		cmdreplacerules []dcConfig.CmdReplaceRule,
+		id *longtcp.MessageID,
+		s *longtcp.Session) error
 }
 
 var handlemap map[dcProtocol.PBCmdType]Handler
