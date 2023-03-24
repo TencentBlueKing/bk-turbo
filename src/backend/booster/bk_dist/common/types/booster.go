@@ -60,6 +60,7 @@ type BoosterWorks struct {
 	LimitPerWorker    int
 	Jobs              int
 	MaxJobs           int
+	Presetjobs        int
 	MaxDegradedJobs   int
 	MaxLocalTotalJobs int
 	MaxLocalPreJobs   int
