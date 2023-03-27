@@ -453,7 +453,6 @@ func (s *Server) initK8sResourceManagers() (k8sRm crm.ResourceManager,
 				blog.Errorf("init k8s(clusterID:%s) container resource manager failed: %v", confItem.BcsClusterID, err)
 				continue
 			}
-			blog.Debugf("k8sList %s:%+v", key, confItem)
 			k8sRmList[key] = k8sResourceManager
 		}
 	}
@@ -465,7 +464,6 @@ func (s *Server) initK8sResourceManagers() (k8sRm crm.ResourceManager,
 				initInstanceType(&k8sConf, istItem)
 			}
 		}
-		blog.Debugf("k8sDefault:%+v", k8sConf)
 		k8sRm, err = s.initContainerResourceManager(&k8sConf, s.rd)
 	}
 	return
