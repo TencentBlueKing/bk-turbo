@@ -187,13 +187,17 @@ func getApplyParam(req *restful.Request) (*manager.TaskCreateParam, error) {
 
 	// get client IP
 	var clientIP string
-	arr := strings.Split(req.Request.Header.Get(api.HeaderRemote), ":")
-	if len(arr) > 0 {
-		remoteIP := arr[0]
-		blog.Infof("get apply param: get remote ip [%s]", remoteIP)
+	if strings.Count(req.Request.Header.Get(api.HeaderRemote), ":") >= 2 { //ipv6
+		clientIP = req.Request.Header.Get(api.HeaderRemote)
+	} else { //ipv4
+		arr := strings.Split(req.Request.Header.Get(api.HeaderRemote), ":")
+		if len(arr) > 0 {
+			remoteIP := arr[0]
+			blog.Infof("get apply param: get remote ip [%s]", remoteIP)
 
-		// use remoteIP for clientIP check, never trust the client one.
-		clientIP = remoteIP
+			// use remoteIP for clientIP check, never trust the client one.
+			clientIP = remoteIP
+		}
 	}
 
 	param := &manager.TaskCreateParam{

@@ -91,6 +91,11 @@ func getFileDetailsFromSendFileRequest(req *types.RemoteTaskSendFileRequest) []*
 }
 
 func getIPFromServer(server string) string {
+	if strings.Count(server, ":") >= 2 { //ipv6
+		// The port starts after the last colon.
+		i := strings.LastIndex(server, ":")
+		return server[:i]
+	}
 	return strings.Split(server, ":")[0]
 }
 
