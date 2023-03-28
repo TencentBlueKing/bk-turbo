@@ -242,6 +242,7 @@ func (s *sdk) launchServer() error {
 		"%s --res_idle_secs_for_free=%d"+
 		" %s"+
 		" --net_error_limit=%d"+
+		" --send_file_memory_limit=%d"+
 		" --remote_retry_times=%d",
 		sudo,
 		ctrlPath,
@@ -260,6 +261,7 @@ func (s *sdk) launchServer() error {
 		autoResourceMgr,
 		s.config.ResIdleSecsForFree,
 		sendcork,
+		s.config.SendFileMemoryLimit,
 		netErrorLimit,
 		remoteRetryTimes,
 	))

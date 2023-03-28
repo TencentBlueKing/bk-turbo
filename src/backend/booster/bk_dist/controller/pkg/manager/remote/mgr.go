@@ -47,9 +47,9 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 		sendCorkTick:          10 * time.Millisecond,
 		// corkSize:              1024 * 512, // 512KB, it will delay much if too big
 		corkSize:      1024 * 10,
-		corkMaxSize:   1024 * 1024 * 100,
+		corkMaxSize:   1024 * 1024 * 10,
 		corkFiles:     make(map[string]*[]*corkFile, 0),
-		memSlot:       newMemorySlot(0),
+		memSlot:       newMemorySlot(work.Config().SendFileMemoryLimit),
 		largeFileSize: 1024 * 1024 * 100, // 100MB
 	}
 }

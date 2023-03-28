@@ -96,6 +96,7 @@ const (
 	FlagAutoResourceMgr      = "auto_resource_mgr"
 	FlagResIdleSecsForFree   = "res_idle_secs_for_free"
 	FlagSendCork             = "send_cork"
+	FlagSendFileMemoryLimit  = "send_file_memory_limit"
 	FlagNetErrorLimit        = "net_error_limit"
 	FlagRemoteRetryTimes     = "remote_retry_times"
 
@@ -402,6 +403,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "send_cork",
 			Usage: "send files like tcp cork",
+		},
+		commandCli.Int64Flag{
+			Name:  "send_file_memory_limit",
+			Usage: "set send file memory limit",
 		},
 		commandCli.IntFlag{
 			Name:  "net_error_limit",
