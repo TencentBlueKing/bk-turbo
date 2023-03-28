@@ -686,6 +686,7 @@ func newMemorySlot(maxSlots int64) *memorySlot {
 	defaultmemroy := int64(1 * 1024 * 1024 * 1024) // 1GB
 	maxmemroy := int64(8 * 1024 * 1024 * 1024)     // 8GB
 
+	blog.Infof("memory slot: maxSlots:%d", maxSlots)
 	if maxSlots <= 0 {
 		// v, err := mem.VirtualMemory()
 		// if err != nil {
@@ -696,6 +697,7 @@ func newMemorySlot(maxSlots int64) *memorySlot {
 		// 	maxSlots = int64(v.Total) / 8
 		// }
 		maxSlots = defaultmemroy
+		blog.Infof("memory slot: maxSlots:%d", maxSlots)
 	}
 
 	if maxSlots < minmemroy {
