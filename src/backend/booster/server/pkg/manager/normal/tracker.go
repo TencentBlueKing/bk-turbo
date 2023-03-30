@@ -169,7 +169,7 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 
 	ok, err := egn.LaunchDone(taskID)
 	if err != nil {
-		blog.Errorf("tracker: check task(%s) launch done failed: %v", taskID, err)
+		blog.Infof("tracker: check task(%s) launch done failed: %v", taskID, err)
 		return false
 	}
 
