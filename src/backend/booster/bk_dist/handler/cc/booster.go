@@ -171,8 +171,10 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 	sandbox := cc.sandbox.Fork()
 	var buf bytes.Buffer
 	sandbox.Stdout = &buf
-	if _, err := sandbox.ExecScripts("ccache -z"); err != nil {
-		blog.Warnf("booster: run ccache -z error: %v", err)
+	if cc.ccacheEnable {
+		if _, err := sandbox.ExecScripts("ccache -z"); err != nil {
+			blog.Warnf("booster: run ccache -z error: %v", err)
+		}
 	}
 
 	if cc.ccacheEnable {
