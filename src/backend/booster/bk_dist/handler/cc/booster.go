@@ -232,13 +232,14 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 
 // PostWork 处理整个编译的后置工作, 收集ccache数据
 func (cc *TaskCC) PostWork(config *dcType.BoosterConfig) error {
-	ccacheStats, err := cc.statisticsCCache()
-	if err != nil {
-		blog.Warnf("booster: get ccache statics failed: %v", err)
-		return nil
+	if cc.ccacheEnable {
+		ccacheStats, err := cc.statisticsCCache()
+		if err != nil {
+			blog.Warnf("booster: get ccache statics failed: %v", err)
+			return nil
+		}
+		cc.ccacheStats = *ccacheStats
 	}
-	cc.ccacheStats = *ccacheStats
-
 	return nil
 }
 
