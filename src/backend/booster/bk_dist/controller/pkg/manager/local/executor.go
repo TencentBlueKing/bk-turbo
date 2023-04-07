@@ -190,10 +190,13 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 		if !e.lock(dcSDK.JobUsageLocalPost, weight) {
 			return types.ErrSlotsLockFailed
 		}
+		blog.Infof("executor: post-task from pid(%d) got lock", e.req.Pid)
 		dcSDK.StatsTimeNow(&e.stats.PostWorkLockTime)
 		defer dcSDK.StatsTimeNow(&e.stats.PostWorkUnlockTime)
 		defer e.unlock(dcSDK.JobUsageLocalPost, weight)
 		e.mgr.work.Basic().UpdateJobStats(e.stats)
+	} else {
+		blog.Infof("executor: post-task from pid(%d) do not need lock", e.req.Pid)
 	}
 
 	dcSDK.StatsTimeNow(&e.stats.PostWorkStartTime)
