@@ -28,6 +28,16 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
+const (
+	// cork机制用于减少和worker之间的短连接
+	// corkSize = 1024 * 10
+	corkSize = 0
+	// corkMaxSize   = 1024 * 1024 * 50
+	corkMaxSize = 1024 * 1024 * 10
+	// corkMaxSize   = 1024 * 1024 * 1024
+	largeFileSize = 1024 * 1024 * 100 // 100MB
+)
+
 // NewMgr get a new Remote Mgr
 func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 	ctx, _ := context.WithCancel(pCtx)
@@ -36,7 +46,7 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 		ctx:                   ctx,
 		work:                  work,
 		resource:              newResource(nil),
-		remoteWorker:          client.NewCommonRemoteWorker(),
+		remoteWorker:          client.NewCommonRemoteWorkerWithSlot(ctx, work.Config().SendFileMemoryLimit),
 		checkSendFileTick:     100 * time.Millisecond,
 		fileSendMap:           make(map[string]*fileSendMap),
 		fileCollectionSendMap: make(map[string]*[]*types.FileCollectionInfo),
@@ -45,12 +55,11 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 		resourceCheckTick:     5 * time.Second,
 		workerCheckTick:       5 * time.Second,
 		sendCorkTick:          10 * time.Millisecond,
-		// corkSize:              1024 * 512, // 512KB, it will delay much if too big
-		corkSize:      1024 * 10,
-		corkMaxSize:   1024 * 1024 * 100,
-		corkFiles:     make(map[string]*[]*corkFile, 0),
-		memSlot:       newMemorySlot(0),
-		largeFileSize: 1024 * 1024 * 100, // 100MB
+		corkSize:              corkSize,
+		corkMaxSize:           corkMaxSize,
+		corkFiles:             make(map[string]*[]*corkFile, 0),
+		// memSlot:               newMemorySlot(work.Config().SendFileMemoryLimit),
+		largeFileSize: largeFileSize,
 	}
 }
 
@@ -67,7 +76,7 @@ type Mgr struct {
 	resource     *resource
 	remoteWorker dcSDK.RemoteWorker
 
-	memSlot *memorySlot
+	// memSlot *memorySlot
 
 	checkSendFileTick time.Duration
 
@@ -251,7 +260,7 @@ func (m *Mgr) Init() {
 
 	m.resource.Handle(ctx)
 
-	m.memSlot.Handle(ctx)
+	// m.memSlot.Handle(ctx)
 
 	// register call back for resource changed
 	m.work.Resource().RegisterCallback(m.callback4ResChanged)
@@ -899,7 +908,7 @@ func (m *Mgr) ensureSingleFile(
 
 	// 同步发送文件
 	t := time.Now().Local()
-	result, err := handler.ExecuteSendFile(host, req, sandbox)
+	result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
@@ -1233,7 +1242,7 @@ func (m *Mgr) ensureOneFileCollection(
 	}
 
 	// 同步发送文件
-	result, err := handler.ExecuteSendFile(host, req, sandbox)
+	result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
@@ -1634,30 +1643,28 @@ func (m *Mgr) getCorkFiles(sendanyway bool) []*[]*corkFile {
 
 	result := make([]*[]*corkFile, 0)
 	for _, v := range m.corkFiles {
-		// srcfiles := *v
 		var totalsize int64
 		index := -1
-		if sendanyway {
-			// index = len(*v) - 1
-			for index = range *v {
-				totalsize += (*v)[index].file.FileSize
-				// 如果数据包超过 m.corkMaxSize 了，则停止获取，下次再发
-				if totalsize > m.corkMaxSize {
-					break
-				}
+		for index = range *v {
+			// debug by tming, 如果有大文件，则考虑将大文件放到下一批再发送
+			// 避免大文件影响当批其它文件的发送时间
+			if (*v)[index].file.FileSize > m.corkMaxSize && index > 0 {
+				blog.Infof("remote: send cork files do not send now for file:%s size:%d for work: %s",
+					(*v)[index].file.FilePath, (*v)[index].file.FileSize, m.work.ID())
+				index -= 1
+				sendanyway = true
+				break
 			}
-		} else {
-			for index = range *v {
-				totalsize += (*v)[index].file.FileSize
-				// 如果数据包超过 m.corkSize 了，则停止获取，下次再发
-				if totalsize > m.corkSize {
-					break
-				}
+
+			totalsize += (*v)[index].file.FileSize
+			// 如果数据包超过 m.corkMaxSize 了，则停止获取，下次再发
+			if totalsize > m.corkMaxSize {
+				break
 			}
 		}
 
 		if index >= 0 {
-			if sendanyway || (!sendanyway && totalsize > m.corkSize) {
+			if sendanyway || totalsize > m.corkSize {
 				// get files
 				num := index + 1
 				start := 0
@@ -1675,12 +1682,6 @@ func (m *Mgr) getCorkFiles(sendanyway bool) []*[]*corkFile {
 			}
 		}
 	}
-
-	// for _, sv := range result {
-	// 	for _, v := range *sv {
-	// 		blog.Infof("remote: selected cork file[%s] ", v.file.FilePath)
-	// 	}
-	// }
 
 	return result
 }
@@ -1736,25 +1737,28 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 	blog.Infof("remote: start send cork %d files with size:%d to server %s for work: %s",
 		len(files), totalsize, host.Server, m.work.ID())
 
-	// in queue to limit total size of sending files, maybe we should deal if failed
-	// blog.Infof("remote: try to get memory lock with file size:%d", totalsize)
-	if m.memSlot.Lock(totalsize) {
-		// blog.Infof("remote: succeed to get memory lock with file size:%d", totalsize)
-		defer func() {
-			m.memSlot.Unlock(totalsize)
-			// total, occu := m.memSlot.GetStatus()
-			// blog.Infof("remote: succeed to free memory lock with file size:%d,occupy:%d, total:%d", totalsize, occu, total)
-		}()
-	} else {
-		blog.Infof("remote: failed to get memory lock with file size:%d", totalsize)
-	}
+	// // in queue to limit total size of sending files, maybe we should deal if failed
+	// // blog.Infof("remote: try to get memory lock with file size:%d", totalsize)
+	// if m.memSlot.Lock(totalsize) {
+	// 	// blog.Infof("remote: succeed to get memory lock with file size:%d", totalsize)
+	// 	defer func() {
+	// 		m.memSlot.Unlock(totalsize)
+	// 		// total, occu := m.memSlot.GetStatus()
+	// 		// blog.Infof("remote: succeed to free memory lock with file size:%d,occupy:%d, total:%d", totalsize, occu, total)
+	// 	}()
+	// 	blog.Infof("remote: got memroy lock for send cork %d files with size:%d to server %s for work: %s",
+	// 		len(files), totalsize, host.Server, m.work.ID())
+
+	// } else {
+	// 	blog.Infof("remote: failed to get memory lock with file size:%d", totalsize)
+	// }
 
 	// add retry here
 	var result *dcSDK.BKSendFileResult
 	waitsecs := 5
 	var err error
 	for i := 0; i < 4; i++ {
-		result, err = handler.ExecuteSendFile(host, req, sandbox)
+		result, err = handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
 		if err == nil {
 			break
 		} else {
@@ -1793,8 +1797,8 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 		// 	v.file.FilePath, host.Server, m.work.ID(), err, retcode)
 	}
 
-	blog.Infof("remote: end send %d files with cork to server %s tick for work: %s with err:%v, retcode:%d",
-		len(files), host.Server, m.work.ID(), err, retcode)
+	blog.Infof("remote: end send cork %d files with size:%d to server %s for work: %s with err:%v, retcode:%d",
+		len(files), totalsize, host.Server, m.work.ID(), err, retcode)
 }
 
 func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {

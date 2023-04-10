@@ -241,6 +241,7 @@ func (s *sdk) launchServer() error {
 		"--use_local_cpu_percent=%d %s"+
 		"%s --res_idle_secs_for_free=%d"+
 		" %s"+
+		" --send_file_memory_limit=%d"+
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d",
 		sudo,
@@ -260,6 +261,7 @@ func (s *sdk) launchServer() error {
 		autoResourceMgr,
 		s.config.ResIdleSecsForFree,
 		sendcork,
+		s.config.SendFileMemoryLimit,
 		netErrorLimit,
 		remoteRetryTimes,
 	))

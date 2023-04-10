@@ -48,7 +48,8 @@ const (
 	cmdCheckIntervalTime     = 100 // time.Millisecond
 	maxWaitConnectionSeconds = 600
 
-	maxCpuUsed      = 90.00
+	// change from 90 to 75
+	maxCpuUsed      = 75.00
 	maxCpuSampleNum = 20
 )
 
@@ -264,7 +265,7 @@ func (o *tcpManager) cleanCreatedFiles(f string) error {
 
 	data, err := ioutil.ReadFile(f)
 	if err != nil {
-		blog.Warnf("failed to read file[%s] with error:%v", err)
+		blog.Infof("failed to read file[%s] with error:%v", f, err)
 		return err
 	}
 
@@ -631,7 +632,7 @@ func (o *tcpManager) obtainChance() bool {
 				total = v.Total
 				maybetotalused := uint64(o.curjobs) * o.memperjob
 				if maybetotalused >= v.Total {
-					blog.Infof("ignore for current total used mem:%d greater than total mem:%d", maybetotalused, v.Total)
+					blog.Infof("ignore for current estimated total used mem:%d greater than real total mem:%d", maybetotalused, v.Total)
 					return false
 				}
 
