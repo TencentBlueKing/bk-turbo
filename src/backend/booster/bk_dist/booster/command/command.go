@@ -44,6 +44,7 @@ const (
 	FlagSaveCode             = "save_code"
 	FlagJobs                 = "jobs"
 	FlagMaxJobs              = "max_jobs"
+	FlagPresetJobs           = "preset_jobs"
 	FlagMaxDegradedJobs      = "max_degraded_jobs"
 	FlagMaxLocalTotalJobs    = "max_local_total_jobs"
 	FlagMaxLocalExeJobs      = "max_local_exe_jobs"
@@ -196,6 +197,10 @@ var (
 			Name: "max_jobs",
 			Usage: "max parallel jobs for working, if the jobs given by server is larger, " +
 				"then use the max_jobs instead",
+		},
+		commandCli.IntFlag{
+			Name:  "preset_jobs",
+			Usage: "preset jobs define the parallel jobs for working while applying resource failed at the first time, ",
 		},
 		commandCli.IntFlag{
 			Name: "max_degraded_jobs",

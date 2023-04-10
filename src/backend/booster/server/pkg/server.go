@@ -406,6 +406,12 @@ func initInstanceType(confItem *config.ContainerResourceConfig, ist *config.Inst
 	ist.MemPerInstance = confItem.BcsMemPerInstance
 	ist.CPULimitPerInstance = confItem.BcsCPUPerInstance
 	ist.MemLimitPerInstance = confItem.BcsMemPerInstance
+	if confItem.BcsCPUPerInstanceOffset > 0.0 {
+		ist.CPUPerInstanceOffset = confItem.BcsCPUPerInstanceOffset
+	}
+	if confItem.BcsMemPerInstanceOffset > 0.0 {
+		ist.MemPerInstanceOffset = confItem.BcsMemPerInstanceOffset
+	}
 	if confItem.BcsCPULimitPerInstance > 0.0 {
 		ist.CPULimitPerInstance = confItem.BcsCPULimitPerInstance
 	}
