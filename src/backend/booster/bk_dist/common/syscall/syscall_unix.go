@@ -309,3 +309,18 @@ func AddPath2Env(p string) {
 	newpath := fmt.Sprintf("%s:%s", p, path)
 	os.Setenv("PATH", newpath)
 }
+
+func RedirectStderror(f string) error {
+	file, err := os.OpenFile(f, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	if err = syscall.Dup2(int(file.Fd()), int(os.Stderr.Fd())); err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	return nil
+}
