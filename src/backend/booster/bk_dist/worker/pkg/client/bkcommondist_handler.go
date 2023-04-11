@@ -13,6 +13,7 @@ import (
 	"context"
 	"net"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -79,10 +80,19 @@ type CommonRemoteHandler struct {
 	slot               *slot
 }
 
+func getRealServer(server string) string {
+	if strings.Count(server, ":") >= 2 { //ipv6 real ip
+		// The port starts after the last colon.
+		i := strings.LastIndex(server, ":")
+		return "[" + server[:i] + "]" + server[i:]
+	}
+	return server //ipv4
+}
+
 // ExecuteSyncTime get the target server's current timestamp
 func (r *CommonRemoteHandler) ExecuteSyncTime(server string) (int64, error) {
 	client := NewTCPClient(r.ioTimeout)
-	if err := client.Connect(server); err != nil {
+	if err := client.Connect(getRealServer(server)); err != nil {
 		blog.Warnf("error: %v", err)
 		return 0, err
 	}
@@ -128,7 +138,7 @@ func (r *CommonRemoteHandler) ExecuteTask(
 	r.recordStats.RemoteWorker = server.Server
 
 	client := NewTCPClient(r.ioTimeout)
-	if err := client.Connect(server.Server); err != nil {
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
 		blog.Warnf("error: %v", err)
 		return nil, err
 	}
@@ -212,7 +222,7 @@ func (r *CommonRemoteHandler) ExecuteTaskWithoutSaveFile(
 	r.recordStats.RemoteWorker = server.Server
 
 	client := NewTCPClient(r.ioTimeout)
-	if err := client.Connect(server.Server); err != nil {
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
 		blog.Warnf("error: %v", err)
 		return nil, err
 	}
@@ -432,7 +442,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	// ready to send now
 	t := time.Now().Local()
 	client := NewTCPClient(r.ioTimeout)
-	if err := client.Connect(server.Server); err != nil {
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
 		blog.Warnf("error: %v", err)
 		return nil, err
 	}
@@ -502,7 +512,7 @@ func (r *CommonRemoteHandler) ExecuteCheckCache(
 	// record the exit status.
 	t := time.Now().Local()
 	client := NewTCPClient(r.ioTimeout)
-	if err := client.Connect(server.Server); err != nil {
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
 		blog.Warnf("error: %v", err)
 		return nil, err
 	}

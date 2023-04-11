@@ -252,6 +252,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			LimitPerWorker:       c.Int(FlagLimit),
 			Jobs:                 c.Int(FlagJobs),
 			MaxJobs:              c.Int(FlagMaxJobs),
+			Presetjobs:           c.Int(FlagPresetJobs),
 			MaxDegradedJobs:      c.Int(FlagMaxDegradedJobs),
 			MaxLocalTotalJobs:    defaultCPULimit(c.Int(FlagMaxLocalTotalJobs)),
 			MaxLocalPreJobs:      c.Int(FlagMaxLocalPreJobs),

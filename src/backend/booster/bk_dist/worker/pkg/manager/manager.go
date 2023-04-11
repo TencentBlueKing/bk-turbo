@@ -507,6 +507,12 @@ func (o *tcpManager) validIP(clientip string) bool {
 
 	fields := strings.Split(clientip, ":")
 	realip := fields[0]
+	if strings.Count(clientip, ":") >= 2 { //ipv6
+		// The port starts after the last colon.
+		i := strings.LastIndex(clientip, ":")
+		realip = clientip[:i]
+	}
+
 	for _, v := range o.whiteips {
 		if v == realip {
 			blog.Infof("found client ip %s in white list", realip)
