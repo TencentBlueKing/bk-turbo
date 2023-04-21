@@ -42,6 +42,9 @@ const (
 func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 	ctx, _ := context.WithCancel(pCtx)
 
+	blog.Infof("remote: new remote mgr with corkSize:%d corkMaxSize:%d largeFileSize:%d",
+		corkSize, corkMaxSize, largeFileSize)
+
 	return &Mgr{
 		ctx:                   ctx,
 		work:                  work,
@@ -629,6 +632,8 @@ func (m *Mgr) ensureFiles(
 	allServerCorkFiles := make(map[string]*[]*corkFile, 0)
 	filesNum := len(fileDetails)
 	for _, fd := range fileDetails {
+		blog.Debugf("remote: debug try to ensure file %+v", *fd)
+
 		// 修改远程目录
 		f := fd.File
 		if f.Targetrelativepath == "" {
@@ -666,6 +671,7 @@ func (m *Mgr) ensureFiles(
 		}
 		r = append(r, f.Targetrelativepath)
 
+		blog.Debugf("remote: debug ensure into fd.Servers")
 		for _, s := range fd.Servers {
 			if s == nil {
 				continue
@@ -1166,7 +1172,8 @@ func (m *Mgr) sendFileCollectionOnce(
 	for _, fc := range filecollections {
 		count++
 		go func(err chan<- error, host *dcProtocol.Host, filecollection *types.FileCollectionInfo) {
-			err <- m.ensureOneFileCollection(handler, host, filecollection, sandbox)
+			err <- m.ensureOneFileCollection(handler, pid, host, filecollection, sandbox)
+			// err <- m.ensureOneFileCollectionByFiles(handler, pid, host, filecollection, sandbox)
 		}(wg, server, fc)
 	}
 
@@ -1184,6 +1191,7 @@ func (m *Mgr) sendFileCollectionOnce(
 // ensureOneFileCollection 保证给到的第一个文件集合被正确分发到目标机器上
 func (m *Mgr) ensureOneFileCollection(
 	handler dcSDK.RemoteWorkerHandler,
+	pid int,
 	host *dcProtocol.Host,
 	fc *types.FileCollectionInfo,
 	sandbox *dcSyscall.Sandbox) (err error) {
@@ -1241,8 +1249,39 @@ func (m *Mgr) ensureOneFileCollection(
 		return err
 	}
 
-	// 同步发送文件
-	result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+	// // 同步发送文件
+	// result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+	// defer func() {
+	// 	status := types.FileSendSucceed
+	// 	if err != nil {
+	// 		status = types.FileSendFailed
+	// 	}
+	// 	m.updateFileCollectionStatus(host.Server, fc, status)
+	// }()
+
+	// if err != nil {
+	// 	blog.Errorf("remote: execute send file collection(%s) for work(%s) to server(%s) failed: %v",
+	// 		fc.UniqID, m.work.ID(), host.Server, err)
+	// 	return err
+	// }
+
+	// if retCode := result.Results[0].RetCode; retCode != 0 {
+	// 	return fmt.Errorf("remote: send files collection(%s) for work(%s) to server(%s) failed, got retCode %d",
+	// 		fc.UniqID, m.work.ID(), host.Server, retCode)
+	// }
+
+	Servers := make([]*dcProtocol.Host, 0, 1)
+	Servers = append(Servers, host)
+
+	fileDetails := make([]*types.FilesDetails, 0, len(fc.Files))
+	for _, f := range fc.Files {
+		f.NoDuplicated = true
+		fileDetails = append(fileDetails, &types.FilesDetails{
+			Servers: Servers,
+			File:    f,
+		})
+	}
+	_, err = m.ensureFiles(handler, pid, sandbox, fileDetails)
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
@@ -1257,13 +1296,8 @@ func (m *Mgr) ensureOneFileCollection(
 		return err
 	}
 
-	if retCode := result.Results[0].RetCode; retCode != 0 {
-		return fmt.Errorf("remote: send files collection(%s) for work(%s) to server(%s) failed, got retCode %d",
-			fc.UniqID, m.work.ID(), host.Server, retCode)
-	}
-
-	blog.Infof("remote: success to execute send file collection(%s) timestamp(%d) filenum(%d) "+
-		"for work(%s) to server(%s)", fc.UniqID, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
+	blog.Infof("remote: success to execute send file collection(%s) files(%+v) timestamp(%d) filenum(%d) "+
+		"for work(%s) to server(%s)", fc.UniqID, fc.Files, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
 	return nil
 }
 

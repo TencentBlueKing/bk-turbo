@@ -11,6 +11,7 @@ package link
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
@@ -18,6 +19,7 @@ import (
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -169,12 +171,21 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		}
 	}
 
+	if responseFile != "" && !filepath.IsAbs(responseFile) {
+		responseFile, _ = filepath.Abs(filepath.Join(l.sandbox.Dir, responseFile))
+	}
+
 	l.responseFile = responseFile
 	l.ensuredArgs = args
 
 	if err = l.scan(args); err != nil {
 		blog.Errorf("link: scan args[%v] failed : %v", args, err)
 		return nil, err
+	}
+
+	// add response file as input
+	if responseFile != "" {
+		l.inputFile = append(l.inputFile, responseFile)
 	}
 
 	inputFiles := make([]dcSDK.FileDesc, 0, 0)
@@ -188,14 +199,55 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 		// generate the input files for pre-process file
 		inputFiles = append(inputFiles, dcSDK.FileDesc{
-			FilePath:       v,
-			Compresstype:   protocol.CompressLZ4,
-			FileSize:       fileSize,
-			Lastmodifytime: modifyTime,
-			Md5:            "",
-			Filemode:       fileMode,
+			FilePath:           v,
+			Compresstype:       protocol.CompressLZ4,
+			FileSize:           fileSize,
+			Lastmodifytime:     modifyTime,
+			Md5:                "",
+			Filemode:           fileMode,
+			Targetrelativepath: filepath.Dir(v),
+			NoDuplicated:       true,
 		})
 	}
+
+	// ++ search additional exe files
+	searchpath := l.sandbox.Env.GetOriginEnv("Path")
+	mtpath, err := dcUtil.LookPath("mt", searchpath, "exe")
+	if err == nil {
+		addDir := filepath.Dir(mtpath)
+
+		tempInputs := make([]string, 0, 4)
+		tempInputs = append(tempInputs, mtpath)
+		tempInputs = append(tempInputs, filepath.Join(addDir, "midlrtmd.dll"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "rc.exe"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "rcdll.dll"))
+		blog.Infof("link: found additional files:%v", tempInputs)
+
+		for _, v := range tempInputs {
+			existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
+			if !existed {
+				err := fmt.Errorf("input pre file %s not existed", v)
+				blog.Errorf("%v", err)
+				// return nil, err
+				continue
+			}
+
+			// generate the input files for pre-process file
+			inputFiles = append(inputFiles, dcSDK.FileDesc{
+				FilePath:           v,
+				Compresstype:       protocol.CompressLZ4,
+				FileSize:           fileSize,
+				Lastmodifytime:     modifyTime,
+				Md5:                "",
+				Filemode:           fileMode,
+				Targetrelativepath: "C:\\Windows\\System32",
+				NoDuplicated:       true,
+			})
+		}
+	} else {
+		blog.Infof("link: not found mt.exe at path:%s", searchpath)
+	}
+	// --
 
 	blog.Infof("link: success done pre execute for: %v", command)
 
@@ -206,30 +258,38 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	}
 	blog.Infof("link: [%d] input files, total size[%d]", len(inputFiles), totalinputsize)
 
-	if totalinputsize > MaxInputFileSize {
-		err := fmt.Errorf("input files total size %d over max size %d", totalinputsize, MaxInputFileSize)
-		blog.Errorf("link: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
-	}
+	// if totalinputsize > MaxInputFileSize {
+	// 	err := fmt.Errorf("input files total size %d over max size %d", totalinputsize, MaxInputFileSize)
+	// 	blog.Errorf("link: pre execute ensure compiler failed %v: %v", args, err)
+	// 	return nil, err
+	// }
 	// --
 
 	// to check whether need to compile with response file
-	exeName := l.scannedArgs[0]
-	params := l.scannedArgs[1:]
+	// exeName := l.scannedArgs[0]
+	// params := l.scannedArgs[1:]
 
-	return &dcSDK.BKDistCommand{
+	exeName := command[0]
+	params := command[1:]
+
+	req := dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
-				WorkDir:     "",
-				ExePath:     "",
-				ExeName:     exeName,
-				Params:      params,
-				Inputfiles:  inputFiles,
-				ResultFiles: l.outputFile,
+				WorkDir:         l.sandbox.Dir,
+				ExePath:         "",
+				ExeName:         exeName,
+				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
+				Params:          params,
+				Inputfiles:      inputFiles,
+				ResultFiles:     l.outputFile,
 			},
 		},
 		CustomSave: true,
-	}, nil
+	}
+
+	blog.Infof("link: after pre,full command[%v]", req)
+
+	return &req, nil
 }
 
 func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
@@ -265,7 +325,7 @@ func (l *TaskLink) scan(args []string) error {
 
 	var err error
 
-	scannedData, err := scanArgs(args)
+	scannedData, err := scanArgs(args, l.sandbox.Dir)
 	if err != nil {
 		blog.Errorf("link: scan args failed %v: %v", args, err)
 		return err
