@@ -362,7 +362,7 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 	defer func() {
 
 		endTime := time.Now().Local().UnixNano()
-		blog.Warnf("lib: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
+		blog.Debugf("lib: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
 			"uncpmpresstime [%d] savetime [%d] millionseconds",
 			fp,
 			rf.FileSize,

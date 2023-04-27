@@ -259,7 +259,12 @@ func getAllLibFiles(dirs []string, suffix []string) ([]string, error) {
 	var err error
 	for _, d := range dirs {
 		err = filepath.Walk(d, func(filename string, fi os.FileInfo, err error) error {
-			if fi.IsDir() {
+			if err != nil {
+				blog.Infof("link: search lib path:%s failed with error:%v", d, err)
+				return err
+			}
+
+			if fi == nil || fi.IsDir() {
 				return nil
 			}
 
@@ -282,10 +287,10 @@ func getAllLibFiles(dirs []string, suffix []string) ([]string, error) {
 }
 
 func scanArgs(args []string, workdir string) (*libArgs, error) {
-	blog.Infof("lib: scanning arguments: %v", args)
+	blog.Debugf("link: scanning arguments: %v", args)
 
 	if len(args) == 0 || strings.HasPrefix(args[0], "/") {
-		blog.Errorf("lib: scan args: unrecognized option: %s", args[0])
+		blog.Errorf("link: scan args: unrecognized option: %s", args[0])
 		return nil, ErrorUnrecognizedOption
 	}
 
@@ -412,7 +417,7 @@ func scanArgs(args []string, workdir string) (*libArgs, error) {
 				fullfile, err := filepath.Abs(filepath.Join(p, f))
 				if err == nil {
 					if dcFile.Stat(fullfile).Exist() {
-						blog.Infof("link: found specifiled lib file:%s", fullfile)
+						blog.Debugf("link: found specifiled lib file:%s", fullfile)
 						r.inputFile = append(r.inputFile, fullfile)
 						found = true
 						break
@@ -473,9 +478,9 @@ func scanArgs(args []string, workdir string) (*libArgs, error) {
 	args[0] = filepath.Base(args[0])
 
 	r.args = args
-	blog.Infof("link: input file number [%d], output file number [%s] for arguments: [%s]",
+	blog.Infof("link: input file number [%d], output file number [%d] for arguments: [%s]",
 		len(r.inputFile), len(r.outputFile), strings.Join(r.args, " "))
-	blog.Infof("link: success to scan arguments: [%s], input file [%s], output file [%s]",
+	blog.Debugf("link: success to scan arguments: [%s], input file [%s], output file [%s]",
 		strings.Join(r.args, " "), strings.Join(r.inputFile, " "), strings.Join(r.outputFile, " "))
 	return r, nil
 }
@@ -503,7 +508,7 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 	defer func() {
 
 		endTime := time.Now().Local().UnixNano()
-		blog.Warnf("link: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
+		blog.Debugf("link: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
 			"uncpmpresstime [%d] savetime [%d] millionseconds",
 			fp,
 			rf.FileSize,
@@ -527,28 +532,6 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 				return err
 			}
 			break
-		// case protocol.CompressLZO:
-		// 	// decompress with lzox1 firstly
-		// 	outdata, err := golzo.Decompress1X(bytes.NewReader(data), int(rf.CompressedSize), 0)
-		// 	if err != nil {
-		// 		blog.Errorf("link: decompress file %s error: [%s]", fp, err.Error())
-		// 		return err
-		// 	}
-		// 	outlen := len(string(outdata))
-		// 	blog.Debugf("link: decompressed file %s with lzo1x, from [%d] to [%d]",
-		// 		fp, rf.CompressedSize, outlen)
-		// 	if outlen != int(rf.FileSize) {
-		// 		err := fmt.Errorf("link: decompressed size %d, expected size %d", outlen, rf.FileSize)
-		// 		blog.Errorf("link: decompress error: [%v]", err)
-		// 		return err
-		// 	}
-
-		// 	_, err = f.Write(outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("link: save file [%s] error: [%v]", fp, err)
-		// 		return err
-		// 	}
-		// 	break
 		case protocol.CompressLZ4:
 			// decompress with lz4 firstly
 			dst := make([]byte, rf.FileSize)

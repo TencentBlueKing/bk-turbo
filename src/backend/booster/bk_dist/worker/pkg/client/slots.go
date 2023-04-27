@@ -165,7 +165,7 @@ func (lr *slot) getSlot(pairChan chanPair) {
 		lr.waitingList.PushBack(pairChan)
 	}
 
-	blog.Infof("send slot: after get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
+	blog.Debugf("send slot: after get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
 }
 
 func (lr *slot) putSlot(pairChan chanPair) {
@@ -190,5 +190,5 @@ func (lr *slot) putSlot(pairChan chanPair) {
 		}
 	}
 
-	blog.Infof("send slot: after put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
+	blog.Debugf("send slot: after put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
 }
