@@ -391,7 +391,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		}
 		if r.slot.Lock(totalsize) {
 			memorylocked = true
-			blog.Infof("remotehandle: succeed to get one memory lock")
+			blog.Debugf("remotehandle: succeed to get one memory lock")
 		}
 	}
 
@@ -403,7 +403,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		if mgr != nil {
 			if mgr.LockSlots(dcSDK.JobUsageLocalExe, 1) {
 				locallocked = true
-				blog.Infof("remotehandle: succeed to get one local lock")
+				blog.Debugf("remotehandle: succeed to get one local lock")
 			}
 		}
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
@@ -412,7 +412,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 		if locallocked {
 			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
-			blog.Infof("remotehandle: succeed to release one local lock")
+			blog.Debugf("remotehandle: succeed to release one local lock")
 		}
 
 		if err != nil {
@@ -420,7 +420,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 			if memorylocked {
 				r.slot.Unlock(totalsize)
-				blog.Infof("remotehandle: succeed to release one memory lock")
+				blog.Debugf("remotehandle: succeed to release one memory lock")
 			}
 
 			return nil, err
@@ -431,7 +431,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 	blog.Debugf("success pack-up to server %s", server)
 
-	blog.Infof("remote: finished encode request for send cork %d files with size:%d to server %s",
+	blog.Debugf("remote: finished encode request for send cork %d files with size:%d to server %s",
 		len(req.Files), totalsize, server.Server)
 
 	// send request
@@ -462,20 +462,20 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 		if memorylocked {
 			r.slot.Unlock(totalsize)
-			blog.Infof("remotehandle: succeed to release one memory lock")
+			blog.Debugf("remotehandle: succeed to release one memory lock")
 		}
 
 		return nil, err
 	}
 
-	blog.Infof("remote: finished send request for send cork %d files with size:%d to server %s",
+	blog.Debugf("remote: finished send request for send cork %d files with size:%d to server %s",
 		len(req.Files), totalsize, server.Server)
 
 	debug.FreeOSMemory() // free memory anyway
 
 	if memorylocked {
 		r.slot.Unlock(totalsize)
-		blog.Infof("remotehandle: succeed to release one memory lock")
+		blog.Debugf("remotehandle: succeed to release one memory lock")
 	}
 
 	blog.Debugf("success sent to server %s", server)
@@ -494,7 +494,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		return nil, err
 	}
 
-	blog.Infof("remote: finished receive request for send cork %d files with size:%d to server %s",
+	blog.Debugf("remote: finished receive request for send cork %d files with size:%d to server %s",
 		len(req.Files), totalsize, server.Server)
 
 	blog.Debugf("send file task done *")

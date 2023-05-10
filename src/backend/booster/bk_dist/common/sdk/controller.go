@@ -132,6 +132,8 @@ type ControllerConfig struct {
 	SendFileMemoryLimit int64
 	NetErrorLimit       int
 	RemoteRetryTimes    int
+	EnableLink          bool
+	EnableLib           bool
 }
 
 // Target return the server ip and port of controller

@@ -125,6 +125,9 @@ type BoosterWorks struct {
 	WriteMemroy bool
 
 	IdleKeepSecs int
+
+	EnableLink bool
+	EnableLib  bool
 }
 
 // BoosterTransport describe the transport data to controller

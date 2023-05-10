@@ -23,6 +23,7 @@ import (
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/google/shlex"
 
 	"github.com/saintfish/chardet"
 	"golang.org/x/text/encoding/unicode"
@@ -160,6 +161,47 @@ func readResponse(f string) (string, error) {
 	return data, nil
 }
 
+// replace which next is not in nextExcludes
+func replaceWithNextExclude(s string, old byte, new string, nextExcludes []byte) string {
+	if s == "" {
+		return ""
+	}
+
+	if len(nextExcludes) == 0 {
+		return strings.Replace(s, string(old), new, -1)
+	}
+
+	targetslice := make([]byte, 0, 0)
+	nextexclude := false
+	totallen := len(s)
+	for i := 0; i < totallen; i++ {
+		c := s[i]
+		if c == old {
+			nextexclude = false
+			if i < totallen-1 {
+				next := s[i+1]
+				for _, e := range nextExcludes {
+					if next == e {
+						nextexclude = true
+						break
+					}
+				}
+			}
+			if nextexclude {
+				targetslice = append(targetslice, c)
+				targetslice = append(targetslice, s[i+1])
+				i++
+			} else {
+				targetslice = append(targetslice, []byte(new)...)
+			}
+		} else {
+			targetslice = append(targetslice, c)
+		}
+	}
+
+	return string(targetslice)
+}
+
 // ensure compiler exist in args.
 func ensureCompiler(args []string) (string, []string, error) {
 	responseFile := ""
@@ -189,7 +231,8 @@ func ensureCompiler(args []string) (string, []string, error) {
 					return responseFile, nil, err
 				}
 			}
-			options, _, err := parseArgument(data)
+			// options, _, err := parseArgument(data)
+			options, err := shlex.Split(replaceWithNextExclude(string(data), '\\', "\\\\", []byte{'"'}))
 			if err != nil {
 				blog.Infof("link: failed to parse response file:%s,err:%v", responseFile, err)
 				return responseFile, nil, err
@@ -211,11 +254,43 @@ type libArgs struct {
 
 // https://docs.microsoft.com/en-us/cpp/build/reference/linker-options?view=msvc-160
 
-func scanArgs(args []string) (*libArgs, error) {
-	blog.Infof("lib: scanning arguments: %v", args)
+func getAllLibFiles(dirs []string, suffix []string) ([]string, error) {
+	files := make([]string, 0, 0)
+	var err error
+	for _, d := range dirs {
+		err = filepath.Walk(d, func(filename string, fi os.FileInfo, err error) error {
+			if err != nil {
+				blog.Infof("link: search lib path:%s failed with error:%v", d, err)
+				return err
+			}
+
+			if fi == nil || fi.IsDir() {
+				return nil
+			}
+
+			for _, s := range suffix {
+				if strings.HasSuffix(filename, s) {
+					f := filename
+					if !filepath.IsAbs(filename) {
+						f, _ = filepath.Abs(filepath.Join(d, filename))
+					}
+
+					files = append(files, f)
+				}
+			}
+
+			return nil
+		})
+	}
+
+	return files, err
+}
+
+func scanArgs(args []string, workdir string) (*libArgs, error) {
+	blog.Debugf("link: scanning arguments: %v", args)
 
 	if len(args) == 0 || strings.HasPrefix(args[0], "/") {
-		blog.Errorf("lib: scan args: unrecognized option: %s", args[0])
+		blog.Errorf("link: scan args: unrecognized option: %s", args[0])
 		return nil, ErrorUnrecognizedOption
 	}
 
@@ -223,6 +298,7 @@ func scanArgs(args []string) (*libArgs, error) {
 	outputfilekeys := []string{"/OUT:", "/PDB:", "/PDBSTRIPPED:", "/MAP:",
 		"/TSAWARE:", "/PROFILE:", "/WINMDFILE:", "/IMPLIB:"}
 	inputfilekeys := []string{"/MANIFESTINPUT:", "/DEF:", "/PGD:", "/SOURCELINK:"}
+	libpathkey := "/LIBPATH:"
 	libpaths := make([]string, 0, 0)
 	libfiles := make([]string, 0, 0)
 	// .lib .pdb .dll .exp are necessary output files for link.exe
@@ -268,21 +344,34 @@ func scanArgs(args []string) (*libArgs, error) {
 					case "/IMPLIB:":
 						libname = f
 					}
-					r.outputFile = append(r.outputFile, f)
+					temp := f
+					if !filepath.IsAbs(f) {
+						temp, _ = filepath.Abs(filepath.Join(workdir, f))
+					}
+					r.outputFile = append(r.outputFile, temp)
 					continue
 				}
 			}
 
 			for _, key := range inputfilekeys {
 				if strings.HasPrefix(arg, key) {
-					r.inputFile = append(r.inputFile, arg[len(key):])
+					temp := arg[len(key):]
+					if !filepath.IsAbs(temp) {
+						temp, _ = filepath.Abs(filepath.Join(workdir, temp))
+					}
+					r.inputFile = append(r.inputFile, temp)
 					continue
 				}
 			}
 
-			key := "/LIBPATH:"
-			if strings.HasPrefix(arg, key) {
-				libpaths = append(libpaths, arg[len(key):])
+			// key := "/LIBPATH:"
+			if strings.HasPrefix(arg, libpathkey) {
+				// TOOD : convert to absolute path?
+				temp := arg[len(libpathkey):]
+				if !filepath.IsAbs(temp) {
+					temp, _ = filepath.Abs(filepath.Join(workdir, temp))
+				}
+				libpaths = append(libpaths, temp)
 				continue
 			}
 
@@ -292,8 +381,9 @@ func scanArgs(args []string) (*libArgs, error) {
 		// send file existed
 		if filepath.IsAbs(arg) {
 			r.inputFile = append(r.inputFile, arg)
-		} else if dcFile.Stat(arg).Exist() {
-			r.inputFile = append(r.inputFile, arg)
+		} else if dcFile.Stat(arg).Exist() { // better jugde by suffix
+			abspath, _ := filepath.Abs(filepath.Join(workdir, arg))
+			r.inputFile = append(r.inputFile, abspath)
 		} else {
 			libfiles = append(libfiles, arg)
 		}
@@ -322,31 +412,65 @@ func scanArgs(args []string) (*libArgs, error) {
 	// if lib file existed in /LIBPATH, set it as input file
 	if len(libpaths) > 0 && len(libfiles) > 0 {
 		for _, f := range libfiles {
+			found := false
 			for _, p := range libpaths {
 				fullfile, err := filepath.Abs(filepath.Join(p, f))
 				if err == nil {
 					if dcFile.Stat(fullfile).Exist() {
 						blog.Debugf("link: found specifiled lib file:%s", fullfile)
 						r.inputFile = append(r.inputFile, fullfile)
+						found = true
 						break
 					}
 				}
 			}
+
+			if !found {
+				blog.Infof("link: not found path of lib file:%s", f)
+			}
+		}
+
+		// add all .lib files
+		files, _ := getAllLibFiles(libpaths, []string{".lib", ".Lib"})
+		if len(files) > 0 {
+			blog.Infof("link: append %d lib file", len(files))
+			r.inputFile = append(r.inputFile, files...)
 		}
 	}
 
+	// TODO : 下面的判断是必需的吗
 	// add necessary output files
 	if pdbname == "" {
-		r.outputFile = append(r.outputFile, strings.Replace(dllname, ".dll", ".pdb", -1))
+		temp := strings.Replace(dllname, ".dll", ".pdb", -1)
+		abspath := temp
+		if !filepath.IsAbs(temp) {
+			abspath, _ = filepath.Abs(filepath.Join(workdir, temp))
+		}
+		r.outputFile = append(r.outputFile, abspath)
 	}
 	if libname == "" {
-		r.outputFile = append(r.outputFile, strings.Replace(dllname, ".dll", ".lib", -1))
+		temp := strings.Replace(dllname, ".dll", ".lib", -1)
+		abspath := temp
+		if !filepath.IsAbs(temp) {
+			abspath, _ = filepath.Abs(filepath.Join(workdir, temp))
+		}
+		r.outputFile = append(r.outputFile, abspath)
 	}
 	if expname == "" {
 		if libname != "" {
-			r.outputFile = append(r.outputFile, strings.Replace(libname, ".lib", ".exp", -1))
+			temp := strings.Replace(libname, ".lib", ".exp", -1)
+			abspath := temp
+			if !filepath.IsAbs(temp) {
+				abspath, _ = filepath.Abs(filepath.Join(workdir, temp))
+			}
+			r.outputFile = append(r.outputFile, abspath)
 		} else {
-			r.outputFile = append(r.outputFile, strings.Replace(dllname, ".dll", ".exp", -1))
+			temp := strings.Replace(dllname, ".dll", ".exp", -1)
+			abspath := temp
+			if !filepath.IsAbs(temp) {
+				abspath, _ = filepath.Abs(filepath.Join(workdir, temp))
+			}
+			r.outputFile = append(r.outputFile, abspath)
 		}
 	}
 
@@ -354,9 +478,9 @@ func scanArgs(args []string) (*libArgs, error) {
 	args[0] = filepath.Base(args[0])
 
 	r.args = args
-	blog.Infof("link: input file number [%d], output file number [%s] for arguments: [%s]",
+	blog.Infof("link: input file number [%d], output file number [%d] for arguments: [%s]",
 		len(r.inputFile), len(r.outputFile), strings.Join(r.args, " "))
-	blog.Infof("link: success to scan arguments: [%s], input file [%s], output file [%s]",
+	blog.Debugf("link: success to scan arguments: [%s], input file [%s], output file [%s]",
 		strings.Join(r.args, " "), strings.Join(r.inputFile, " "), strings.Join(r.outputFile, " "))
 	return r, nil
 }
@@ -384,7 +508,7 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 	defer func() {
 
 		endTime := time.Now().Local().UnixNano()
-		blog.Warnf("link: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
+		blog.Debugf("link: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
 			"uncpmpresstime [%d] savetime [%d] millionseconds",
 			fp,
 			rf.FileSize,
@@ -408,28 +532,6 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 				return err
 			}
 			break
-		// case protocol.CompressLZO:
-		// 	// decompress with lzox1 firstly
-		// 	outdata, err := golzo.Decompress1X(bytes.NewReader(data), int(rf.CompressedSize), 0)
-		// 	if err != nil {
-		// 		blog.Errorf("link: decompress file %s error: [%s]", fp, err.Error())
-		// 		return err
-		// 	}
-		// 	outlen := len(string(outdata))
-		// 	blog.Debugf("link: decompressed file %s with lzo1x, from [%d] to [%d]",
-		// 		fp, rf.CompressedSize, outlen)
-		// 	if outlen != int(rf.FileSize) {
-		// 		err := fmt.Errorf("link: decompressed size %d, expected size %d", outlen, rf.FileSize)
-		// 		blog.Errorf("link: decompress error: [%v]", err)
-		// 		return err
-		// 	}
-
-		// 	_, err = f.Write(outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("link: save file [%s] error: [%v]", fp, err)
-		// 		return err
-		// 	}
-		// 	break
 		case protocol.CompressLZ4:
 			// decompress with lz4 firstly
 			dst := make([]byte, rf.FileSize)

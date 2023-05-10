@@ -343,6 +343,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			SendFileMemoryLimit: c.Int64(FlagSendFileMemoryLimit),
 			NetErrorLimit:       netErrLimit,
 			RemoteRetryTimes:    remoteRetryTimes,
+			EnableLink:          c.Bool(FlagEnableLink),
+			EnableLib:           c.Bool(FlagEnableLib),
 		},
 	}
 

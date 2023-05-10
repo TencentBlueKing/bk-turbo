@@ -46,6 +46,9 @@ type ServerConfig struct {
 
 	NetErrorLimit    int `json:"net_error_limit" value:"3" usage:"define net error limit,make a worker disabled when it's net errors reach this limit"`
 	RemoteRetryTimes int `json:"remote_retry_times" value:"1" usage:"define retry times when remote execute failed"`
+
+	EnableLib  bool `json:"enable_lib" value:"false" usage:"if true, controller will enable remote lib.exe"`
+	EnableLink bool `json:"enable_link" value:"false" usage:"if true, controller will enable remote link.exe"`
 }
 
 // CertConfig  configuration of Cert
