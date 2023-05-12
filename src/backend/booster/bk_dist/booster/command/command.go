@@ -100,6 +100,8 @@ const (
 	FlagSendFileMemoryLimit  = "send_file_memory_limit"
 	FlagNetErrorLimit        = "net_error_limit"
 	FlagRemoteRetryTimes     = "remote_retry_times"
+	FlagEnableLink           = "enable_link"
+	FlagEnableLib            = "enable_lib"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -420,6 +422,14 @@ var (
 		commandCli.IntFlag{
 			Name:  "remote_retry_times",
 			Usage: "retry a remote failed task for serveral times before degrad it to local",
+		},
+		commandCli.BoolFlag{
+			Name:  "enable_link",
+			Usage: "enable remote link.exe",
+		},
+		commandCli.BoolFlag{
+			Name:  "enable_lib",
+			Usage: "enable remote lib.exe",
 		},
 	}
 )

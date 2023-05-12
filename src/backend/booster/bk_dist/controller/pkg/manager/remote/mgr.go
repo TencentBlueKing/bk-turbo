@@ -42,6 +42,9 @@ const (
 func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 	ctx, _ := context.WithCancel(pCtx)
 
+	blog.Infof("remote: new remote mgr with corkSize:%d corkMaxSize:%d largeFileSize:%d",
+		corkSize, corkMaxSize, largeFileSize)
+
 	return &Mgr{
 		ctx:                   ctx,
 		work:                  work,
@@ -629,6 +632,8 @@ func (m *Mgr) ensureFiles(
 	allServerCorkFiles := make(map[string]*[]*corkFile, 0)
 	filesNum := len(fileDetails)
 	for _, fd := range fileDetails {
+		blog.Debugf("remote: debug try to ensure file %+v", *fd)
+
 		// 修改远程目录
 		f := fd.File
 		if f.Targetrelativepath == "" {
@@ -666,6 +671,7 @@ func (m *Mgr) ensureFiles(
 		}
 		r = append(r, f.Targetrelativepath)
 
+		blog.Debugf("remote: debug ensure into fd.Servers")
 		for _, s := range fd.Servers {
 			if s == nil {
 				continue
@@ -777,7 +783,7 @@ func (m *Mgr) ensureFiles(
 
 			// TODO : 检查是否在server端有缓存了，如果有，则无需发送，调用 checkBatchCache
 
-			blog.Infof("total %d cork files, need send %d files", totalFileNum, len(needSendCorkFiles))
+			blog.Debugf("total %d cork files, need send %d files", totalFileNum, len(needSendCorkFiles))
 			// append to cork files queue
 			_ = m.appendCorkFiles(server, needSendCorkFiles)
 
@@ -815,7 +821,7 @@ func (m *Mgr) ensureFiles(
 				}(c, v)
 			}
 
-			blog.Infof("total %d cork files, need send %d files", totalFileNum, len(needSendCorkFiles))
+			blog.Debugf("total %d cork files, need send %d files", totalFileNum, len(needSendCorkFiles))
 			// append to cork files queue
 			_ = m.appendCorkFiles(server, needSendCorkFiles)
 
@@ -826,12 +832,12 @@ func (m *Mgr) ensureFiles(
 
 	for i := 0; i < count; i++ {
 		if err = <-wg; err != nil {
-			blog.Infof("remote: failed to ensure multi %d files for work(%s) from pid(%d) to server with err:%v",
+			blog.Warnf("remote: failed to ensure multi %d files for work(%s) from pid(%d) to server with err:%v",
 				count, m.work.ID(), pid, err)
 			return nil, err
 		}
 	}
-	blog.Infof("remote: success to ensure multi %d files for work(%s) from pid(%d) to server",
+	blog.Debugf("remote: success to ensure multi %d files for work(%s) from pid(%d) to server",
 		count, m.work.ID(), pid)
 	for _, f := range cleaner {
 		go m.fileMessageBank.clean(f)
@@ -1166,7 +1172,8 @@ func (m *Mgr) sendFileCollectionOnce(
 	for _, fc := range filecollections {
 		count++
 		go func(err chan<- error, host *dcProtocol.Host, filecollection *types.FileCollectionInfo) {
-			err <- m.ensureOneFileCollection(handler, host, filecollection, sandbox)
+			err <- m.ensureOneFileCollection(handler, pid, host, filecollection, sandbox)
+			// err <- m.ensureOneFileCollectionByFiles(handler, pid, host, filecollection, sandbox)
 		}(wg, server, fc)
 	}
 
@@ -1184,6 +1191,7 @@ func (m *Mgr) sendFileCollectionOnce(
 // ensureOneFileCollection 保证给到的第一个文件集合被正确分发到目标机器上
 func (m *Mgr) ensureOneFileCollection(
 	handler dcSDK.RemoteWorkerHandler,
+	pid int,
 	host *dcProtocol.Host,
 	fc *types.FileCollectionInfo,
 	sandbox *dcSyscall.Sandbox) (err error) {
@@ -1241,8 +1249,39 @@ func (m *Mgr) ensureOneFileCollection(
 		return err
 	}
 
-	// 同步发送文件
-	result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+	// // 同步发送文件
+	// result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+	// defer func() {
+	// 	status := types.FileSendSucceed
+	// 	if err != nil {
+	// 		status = types.FileSendFailed
+	// 	}
+	// 	m.updateFileCollectionStatus(host.Server, fc, status)
+	// }()
+
+	// if err != nil {
+	// 	blog.Errorf("remote: execute send file collection(%s) for work(%s) to server(%s) failed: %v",
+	// 		fc.UniqID, m.work.ID(), host.Server, err)
+	// 	return err
+	// }
+
+	// if retCode := result.Results[0].RetCode; retCode != 0 {
+	// 	return fmt.Errorf("remote: send files collection(%s) for work(%s) to server(%s) failed, got retCode %d",
+	// 		fc.UniqID, m.work.ID(), host.Server, retCode)
+	// }
+
+	Servers := make([]*dcProtocol.Host, 0, 1)
+	Servers = append(Servers, host)
+
+	fileDetails := make([]*types.FilesDetails, 0, len(fc.Files))
+	for _, f := range fc.Files {
+		f.NoDuplicated = true
+		fileDetails = append(fileDetails, &types.FilesDetails{
+			Servers: Servers,
+			File:    f,
+		})
+	}
+	_, err = m.ensureFiles(handler, pid, sandbox, fileDetails)
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
@@ -1257,13 +1296,8 @@ func (m *Mgr) ensureOneFileCollection(
 		return err
 	}
 
-	if retCode := result.Results[0].RetCode; retCode != 0 {
-		return fmt.Errorf("remote: send files collection(%s) for work(%s) to server(%s) failed, got retCode %d",
-			fc.UniqID, m.work.ID(), host.Server, retCode)
-	}
-
-	blog.Infof("remote: success to execute send file collection(%s) timestamp(%d) filenum(%d) "+
-		"for work(%s) to server(%s)", fc.UniqID, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
+	blog.Debugf("remote: success to execute send file collection(%s) files(%+v) timestamp(%d) filenum(%d) "+
+		"for work(%s) to server(%s)", fc.UniqID, fc.Files, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
 	return nil
 }
 
@@ -1649,7 +1683,7 @@ func (m *Mgr) getCorkFiles(sendanyway bool) []*[]*corkFile {
 			// debug by tming, 如果有大文件，则考虑将大文件放到下一批再发送
 			// 避免大文件影响当批其它文件的发送时间
 			if (*v)[index].file.FileSize > m.corkMaxSize && index > 0 {
-				blog.Infof("remote: send cork files do not send now for file:%s size:%d for work: %s",
+				blog.Debugf("remote: send cork files do not send now for file:%s size:%d for work: %s",
 					(*v)[index].file.FilePath, (*v)[index].file.FileSize, m.work.ID())
 				index -= 1
 				sendanyway = true
@@ -1734,7 +1768,7 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 	sandbox := files[0].sandbox
 	handler := files[0].handler
 
-	blog.Infof("remote: start send cork %d files with size:%d to server %s for work: %s",
+	blog.Debugf("remote: start send cork %d files with size:%d to server %s for work: %s",
 		len(files), totalsize, host.Server, m.work.ID())
 
 	// // in queue to limit total size of sending files, maybe we should deal if failed
@@ -1797,7 +1831,7 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 		// 	v.file.FilePath, host.Server, m.work.ID(), err, retcode)
 	}
 
-	blog.Infof("remote: end send cork %d files with size:%d to server %s for work: %s with err:%v, retcode:%d",
+	blog.Debugf("remote: end send cork %d files with size:%d to server %s for work: %s with err:%v, retcode:%d",
 		len(files), totalsize, host.Server, m.work.ID(), err, retcode)
 }
 
