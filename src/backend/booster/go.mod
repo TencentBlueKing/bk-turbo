@@ -25,6 +25,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-yaml/yaml v2.1.0+incompatible
 	github.com/gobuffalo/packr/v2 v2.8.3
+	github.com/gobwas/ws v1.1.0 // indirect
 	github.com/gofrs/flock v0.8.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -52,7 +53,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/tklauser/go-sysconf v0.3.8 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
-	github.com/ugorji/go/codec v1.2.6
+	github.com/ugorji/go/codec v1.2.11
 	github.com/urfave/cli v1.22.5
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.2 // indirect

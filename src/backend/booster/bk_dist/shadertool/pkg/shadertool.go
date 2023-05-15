@@ -122,6 +122,9 @@ type ShaderTool struct {
 
 	// settings
 	settings *common.ApplyParameters
+
+	// whether use web socket
+	usewebsocket bool
 }
 
 // Run run the tool
@@ -182,6 +185,8 @@ func (h *ShaderTool) initsettings() error {
 
 		if k == "BK_DIST_LOG_LEVEL" {
 			common.SetLogLevel(v)
+		} else if k == "BK_DIST_USE_WEBSOCKET" {
+			h.usewebsocket = true
 		}
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")
@@ -360,6 +365,7 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 		}
 
 		h.executor = NewExecutor()
+		h.executor.usewebsocket = h.usewebsocket
 	}
 
 	if !h.executor.Valid() {
