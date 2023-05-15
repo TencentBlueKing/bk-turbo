@@ -393,6 +393,8 @@ func (s *Session) clientReceive(wg *sync.WaitGroup) {
 		ret := s.decData2MessageResult(msg)
 		if ret.Err != nil {
 			blog.Warnf("[session] received data is invalid with error: %v", ret.Err)
+			s.errorChan <- err
+			return
 		} else {
 			blog.Debugf("[session] received response with ID: %s", ret.UniqID)
 			if s.callback != nil {
@@ -429,6 +431,8 @@ func (s *Session) serverReceive(wg *sync.WaitGroup) {
 		ret := s.decData2MessageResult(msg)
 		if ret.Err != nil {
 			blog.Errorf("[session] received data is invalid with error: %v", ret.Err)
+			s.errorChan <- err
+			return
 		} else {
 			blog.Debugf("[session] received request with ID: %s", ret.UniqID)
 			if s.callback != nil {

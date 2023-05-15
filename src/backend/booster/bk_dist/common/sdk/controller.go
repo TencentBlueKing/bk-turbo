@@ -116,24 +116,27 @@ type ControllerConfig struct {
 	Port    int
 
 	// controller参数
-	Timeout            time.Duration
-	LogVerbosity       int
-	LogDir             string
-	TotalSlots         int
-	PreSlots           int
-	ExeSlots           int
-	PostSlots          int
-	RemainTime         int
-	Sudo               bool
-	NoWait             bool
-	UseLocalCPUPercent int
-	DisableFileLock    bool
-	AutoResourceMgr    bool
-	ResIdleSecsForFree int
-	SendCork           bool
-	NetErrorLimit      int
-	RemoteRetryTimes   int
-	LongTCP            bool
+	Timeout             time.Duration
+	LogVerbosity        int
+	LogDir              string
+	TotalSlots          int
+	PreSlots            int
+	ExeSlots            int
+	PostSlots           int
+	RemainTime          int
+	Sudo                bool
+	NoWait              bool
+	UseLocalCPUPercent  int
+	DisableFileLock     bool
+	AutoResourceMgr     bool
+	ResIdleSecsForFree  int
+	SendCork            bool
+	SendFileMemoryLimit int64
+	NetErrorLimit       int
+	RemoteRetryTimes    int
+	EnableLink          bool
+	EnableLib           bool
+  LongTCP            bool
 }
 
 // Target return the server ip and port of controller

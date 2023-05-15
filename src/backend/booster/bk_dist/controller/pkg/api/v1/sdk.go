@@ -238,19 +238,31 @@ func (s *sdk) launchServer() error {
 		remoteRetryTimes = s.config.RemoteRetryTimes
 	}
 
-	longTCP := ""
-	if s.config.LongTCP {
-		longTCP = "--long_tcp"
+	enablelib := ""
+	if s.config.EnableLib {
+		enablelib = "--enable_lib"
 	}
 
+	enablelink := ""
+	if s.config.EnableLink {
+		enablelink = "--enable_link"
+	}
+
+  longTCP := ""
+	if s.config.LongTCP {
+		longTCP = "--long_tcp"
+  }
+  
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
 		"%s --res_idle_secs_for_free=%d"+
 		" %s"+
+		" --send_file_memory_limit=%d"+
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
-		" %s",
+		" %s %s" +,
+    " %s",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -268,9 +280,12 @@ func (s *sdk) launchServer() error {
 		autoResourceMgr,
 		s.config.ResIdleSecsForFree,
 		sendcork,
+		s.config.SendFileMemoryLimit,
 		netErrorLimit,
 		remoteRetryTimes,
-		longTCP,
+		enablelib,
+		enablelink,
+    longTCP,
 	))
 }
 

@@ -7,8 +7,8 @@
  *
  */
 
-package link
+package linkfilter
 
 const (
-	defaultCompiler = "link.exe"
+	defaultCompiler = "link-filter.exe"
 )
