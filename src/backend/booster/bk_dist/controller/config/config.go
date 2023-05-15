@@ -41,10 +41,14 @@ type ServerConfig struct {
 	AutoResourceMgr    bool `json:"auto_resource_mgr" value:"false" usage:"if true, controller will auto free and apply resource while work running"`
 	ResIdleSecsForFree int  `json:"res_idle_secs_for_free" value:"120" usage:"controller free resource while detect resource has been idle over this"`
 
-	SendCork bool `json:"send_cork" value:"false" usage:"if true, controller will send files like tcp cork"`
+	SendCork            bool  `json:"send_cork" value:"false" usage:"if true, controller will send files like tcp cork"`
+	SendFileMemoryLimit int64 `json:"send_file_memory_limit" value:"0" usage:"set send file memory limit"`
 
 	NetErrorLimit    int `json:"net_error_limit" value:"3" usage:"define net error limit,make a worker disabled when it's net errors reach this limit"`
 	RemoteRetryTimes int `json:"remote_retry_times" value:"1" usage:"define retry times when remote execute failed"`
+
+	EnableLib  bool `json:"enable_lib" value:"false" usage:"if true, controller will enable remote lib.exe"`
+	EnableLink bool `json:"enable_link" value:"false" usage:"if true, controller will enable remote link.exe"`
 }
 
 // CertConfig  configuration of Cert
