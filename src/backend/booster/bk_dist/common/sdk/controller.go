@@ -131,8 +131,11 @@ type ControllerConfig struct {
 	AutoResourceMgr    bool
 	ResIdleSecsForFree int
 	SendCork           bool
+	SendFileMemoryLimit int64
 	NetErrorLimit      int
 	RemoteRetryTimes   int
+	EnableLink          bool
+	EnableLib           bool
 	LongTCP            bool
 }
 

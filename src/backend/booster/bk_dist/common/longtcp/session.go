@@ -436,6 +436,8 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 		}
 		if ret.Err != nil {
 			blog.Errorf("[longtcp] received data is invalid with error: %v", ret.Err)
+			s.errorChan <- err
+			return
 		} else {
 			blog.Debugf("[longtcp] received request with ID: %s", ret.TCPHead.UniqID)
 			if s.callback != nil {

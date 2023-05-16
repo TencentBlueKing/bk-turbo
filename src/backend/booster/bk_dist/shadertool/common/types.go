@@ -67,8 +67,13 @@ type ApplyParameters struct {
 	ControllerIdleRunSeconds int               `json:"controller_idle_run_seconds" value:"120" usage:"controller remain time after there is no active work (seconds)"`
 	ControllerNoBatchWait    bool              `json:"controller_no_batch_wait" value:"false" usage:"if true, controller will unregister immediately when no more running task"`
 	ControllerSendCork       bool              `json:"controller_send_cork" value:"false" usage:"if true, controller will send file with cork"`
+	ControllerSendFileMemoryLimit int64             `json:"controller_send_file_memory" value:"4294967296" usage:"memory limit when send file with cork"`
+	ControllerNetErrorLimit       int               `json:"controller_net_error_limit" value:"5" usage:"judge net error if failed times over this"`
+	ControllerRemoteRetryTimes    int               `json:"controller_remote_retry_times" value:"0" usage:"default remote retry times"`
+	ControllerEnableLink          bool              `json:"controller_enable_link" value:"false" usage:"if true, controller will enable dist link"`
+	ControllerEnableLib           bool              `json:"controller_enable_lib" value:"false" usage:"if true, controller will enable dist lib"`
 	ControllerLongTCP        bool              `json:"controller_long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
-	LimitPerWorker           int               `json:"limit_per_worker"`
+	LimitPerWorker                int               `json:"limit_per_worker"`
 	MaxLocalTotalJobs        int               `json:"max_Local_total_jobs"`
 	MaxLocalPreJobs          int               `json:"max_Local_pre_jobs"`
 	MaxLocalExeJobs          int               `json:"max_Local_exe_jobs"`

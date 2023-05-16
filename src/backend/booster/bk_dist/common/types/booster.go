@@ -60,6 +60,7 @@ type BoosterWorks struct {
 	LimitPerWorker    int
 	Jobs              int
 	MaxJobs           int
+	Presetjobs        int
 	MaxDegradedJobs   int
 	MaxLocalTotalJobs int
 	MaxLocalPreJobs   int
@@ -124,6 +125,9 @@ type BoosterWorks struct {
 	WriteMemroy bool
 
 	IdleKeepSecs int
+
+	EnableLink bool
+	EnableLib  bool
 }
 
 // BoosterTransport describe the transport data to controller

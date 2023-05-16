@@ -16,6 +16,7 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -187,7 +188,8 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	server *dcProtocol.Host,
 	req *dcSDK.BKDistFileSender,
-	sandbox *syscall.Sandbox) (*dcSDK.BKSendFileResult, error) {
+	sandbox *syscall.Sandbox,
+	mgr sdk.LockMgr) (*dcSDK.BKSendFileResult, error) {
 	// record the exit status.
 	defer func() {
 		r.updateJobStatsFunc()
@@ -206,21 +208,47 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		}, nil
 	}
 
-	session, err := r.getTCPSession(server.Server)
-	if err != nil && session == nil {
-		blog.Warnf("get tcp session failed with error: %v", err)
-		return nil, err
+	// 加内存锁
+	var totalsize int64
+	memorylocked := false
+	if r.slot != nil {
+		for _, v := range req.Files {
+			totalsize += v.FileSize
+		}
+		if r.slot.Lock(totalsize) {
+			memorylocked = true
+			blog.Debugf("remotehandle: succeed to get one memory lock")
+		}
 	}
 
-	blog.Debugf("success connect to server %s", server)
-	// var err error
+	var err error
 	messages := req.Messages
 	if messages == nil {
+		// 加本地资源锁
+		locallocked := false
+		if mgr != nil {
+			if mgr.LockSlots(dcSDK.JobUsageLocalExe, 1) {
+				locallocked = true
+				blog.Debugf("remotehandle: succeed to get one local lock")
+			}
+		}
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
 		messages, err = encodeSendFileReq(req, sandbox)
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
+
+		if locallocked {
+			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
+			blog.Debugf("remotehandle: succeed to release one local lock")
+		}
+
 		if err != nil {
 			blog.Warnf("error: %v", err)
+
+			if memorylocked {
+				r.slot.Unlock(totalsize)
+				blog.Debugf("remotehandle: succeed to release one memory lock")
+			}
+
 			return nil, err
 		}
 	}
@@ -228,10 +256,20 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	debug.FreeOSMemory() // free memory anyway
 
 	blog.Debugf("success pack-up to server %s", server)
+
 	// send request
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonStartTime)
 	// record the send starting status, sending should be waiting for a while.
 	r.updateJobStatsFunc()
+
+	session, err := r.getTCPSession(server.Server)
+	if err != nil && session == nil {
+		blog.Warnf("get tcp session failed with error: %v", err)
+		return nil, err
+	}
+
+	blog.Debugf("success connect to server %s", server)
+
 	reqdata := [][]byte{}
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)

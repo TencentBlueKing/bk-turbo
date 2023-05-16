@@ -140,6 +140,11 @@ func (w *Work) Local() LocalMgr {
 	return w.local
 }
 
+// LockMgr return local manager as dcSDK.LockMgr
+func (w *Work) LockMgr() dcSDK.LockMgr {
+	return w.local
+}
+
 // Remote return remote manager
 func (w *Work) Remote() RemoteMgr {
 	return w.remote

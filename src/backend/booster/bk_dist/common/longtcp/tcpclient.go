@@ -102,12 +102,16 @@ func (c *TCPClient) Closed() bool {
 		return true
 	}
 
-	one := make([]byte, 1)
-	_ = c.conn.SetReadDeadline(time.Now())
-	if _, err := c.conn.Read(one); err == io.EOF {
+	var buf [1]byte
+	c.conn.SetReadDeadline(time.Now().Add(time.Millisecond))
+	_, err := c.conn.Read(buf[:])
+	if err != nil {
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			return false
+		}
+		blog.Infof("tcp connection %s closed with error:%v", c.RemoteAddr(), err)
 		return true
 	}
-
 	return false
 }
 
@@ -183,10 +187,11 @@ func (c *TCPClient) SendFile(infile string, compress protocol.CompressType) erro
 
 // ReadData read data
 func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
-	if err := c.setIOTimeout(c.timeout); err != nil {
-		blog.Errorf("set io timeout error: [%s]", err.Error())
-		return nil, 0, err
-	}
+	// do not set timeout when read
+	// if err := c.setIOTimeout(c.timeout); err != nil {
+	// 	blog.Errorf("set io timeout error: [%s]", err.Error())
+	// 	return nil, 0, err
+	// }
 
 	data := make([]byte, expectlen)
 	var readlen int
@@ -214,10 +219,11 @@ func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
 
 // TryReadData try read data, return immediately after received any data
 func (c *TCPClient) TryReadData(expectlen int) ([]byte, int, error) {
-	if err := c.setIOTimeout(c.timeout); err != nil {
-		blog.Errorf("set io timeout error: [%s]", err.Error())
-		return nil, 0, err
-	}
+	// do not set timeout when read
+	// if err := c.setIOTimeout(c.timeout); err != nil {
+	// 	blog.Errorf("set io timeout error: [%s]", err.Error())
+	// 	return nil, 0, err
+	// }
 
 	data := make([]byte, expectlen)
 	var readlen int
@@ -247,10 +253,11 @@ func (c *TCPClient) TryReadData(expectlen int) ([]byte, int, error) {
 
 // ReadUntilEOF read data until EOF
 func (c *TCPClient) ReadUntilEOF() ([]byte, int, error) {
-	if err := c.setIOTimeout(DEFAULTREADALLTIMEOUTSECS); err != nil {
-		blog.Errorf("set io timeout error: [%s]", err.Error())
-		return nil, 0, err
-	}
+	// do not set timeout when read
+	// if err := c.setIOTimeout(DEFAULTREADALLTIMEOUTSECS); err != nil {
+	// 	blog.Errorf("set io timeout error: [%s]", err.Error())
+	// 	return nil, 0, err
+	// }
 
 	data := make([]byte, 1024)
 	var readlen int

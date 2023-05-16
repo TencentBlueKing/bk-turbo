@@ -37,6 +37,8 @@ const (
 	KeyExecutorSkipLocalRetry          = "SKIP_LOCAL_RETRY"
 	KeyExecutorIOTimeout               = "IO_TIMEOUT"
 	KeyExecutorToolchainPathMap        = "TOOLCHAIN_PATH_MAP"
+	KeyExecutorEnableLib               = "ENABLE_LIB"
+	KeyExecutorEnableLink              = "ENABLE_LINK"
 	KeyExecutorSupportLink             = "SUPPORT_LINK"
 	KeyExecutorSupportDirectives       = "SUPPORT_DIRECTIVES"
 	KeyExecutorPump                    = "PUMP"
