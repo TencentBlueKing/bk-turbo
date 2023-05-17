@@ -202,8 +202,8 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 	tb.Status.Ready()
 	tb.Status.Start()
 
-	blog.Info("tracker: task(%s) launch deployment at %s, launch success at %s, time consume %d(s), request pod num %d, real pod num %d",
-		taskID, tb.Status.LaunchTime.String(), tb.Status.StartTime.String(),
+	blog.Info("tracker: task(%s) engine(%s) queue(%s) launch deployment at %s, launch success at %s, time consume %d(s), request pod num %d, real pod num %d",
+		taskID, tb.Client.EngineName, tb.Client.QueueName, tb.Status.LaunchTime.String(), tb.Status.StartTime.String(),
 		tb.Status.StartTime.Unix()-tb.Status.LaunchTime.Unix(), task.GetRequestInstance(), task.GetWorkerCount())
 
 	tb.Status.Message = messageTaskRunning

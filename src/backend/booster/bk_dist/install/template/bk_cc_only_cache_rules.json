@@ -6,11 +6,15 @@
 		{"src_command":"*/clang","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"*/cc","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"*/c++","target_command":"$CCACHEPATH $SRC_CMD"},
+		{"src_command":"*/ld","target_command":"$CCACHEPATH $SRC_CMD"},
+		{"src_command":"*/lld","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"g++","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"gcc","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"clang++","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"clang","target_command":"$CCACHEPATH $SRC_CMD"},
 		{"src_command":"cc","target_command":"$CCACHEPATH $SRC_CMD"},
-		{"src_command":"c++","target_command":"$CCACHEPATH $SRC_CMD"}
+		{"src_command":"c++","target_command":"$CCACHEPATH $SRC_CMD"},
+		{"src_command":"ld","target_command":"$CCACHEPATH $SRC_CMD"},
+		{"src_command":"lld","target_command":"$CCACHEPATH $SRC_CMD"}
 	]
 }
