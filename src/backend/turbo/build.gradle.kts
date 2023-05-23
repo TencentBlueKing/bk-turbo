@@ -1,3 +1,4 @@
+import com.tencent.devops.utils.findPropertyOrEmpty
 plugins {
 	id("com.tencent.devops.boot") version "0.0.6"
 	id("org.owasp.dependencycheck") version "7.1.0.1"
@@ -11,12 +12,26 @@ allprojects {
 
     apply(plugin = "com.tencent.devops.boot")
 
+    val property = project.findPropertyOrEmpty("devops.assemblyMode").trim()
 
-    configurations.all {
-        exclude(group = "org.slf4j", module = "log4j-over-slf4j")
-        exclude(group = "org.slf4j", module = "slf4j-log4j12")
-        exclude(group = "org.slf4j", module = "slf4j-nop")
-        resolutionStrategy.cacheChangingModulesFor(0, TimeUnit.MINUTES)
+    configurations.forEach {
+        it.exclude(group = "org.slf4j", module = "log4j-over-slf4j")
+        it.exclude(group = "org.slf4j", module = "slf4j-log4j12")
+        it.exclude(group = "org.slf4j", module = "slf4j-nop")
+        if (project.name.startsWith("boot-")) {
+            when (com.tencent.devops.enums.AssemblyMode.ofValueOrDefault(property)) {
+                com.tencent.devops.enums.AssemblyMode.CONSUL -> {
+                    it.exclude("org.springframework.cloud", "spring-cloud-starter-kubernetes-client")
+                    it.exclude("org.springframework.cloud", "spring-cloud-starter-kubernetes-client-config")
+                }
+                com.tencent.devops.enums.AssemblyMode.K8S, com.tencent.devops.enums.AssemblyMode.KUBERNETES -> {
+                    it.exclude("org.springframework.cloud", "spring-cloud-starter-config")
+                    it.exclude("org.springframework.cloud", "spring-cloud-starter-consul-config")
+                    it.exclude("org.springframework.cloud", "spring-cloud-starter-consul-discovery")
+                }
+            }
+        }
+        it.resolutionStrategy.cacheChangingModulesFor(0, TimeUnit.MINUTES)
     }
 
 	dependencyManagement {
@@ -35,6 +50,7 @@ allprojects {
             dependencySet("io.micrometer:${Versions.micrometerVersion}") {
                 entry("micrometer-registry-prometheus")
             }
+            dependency("com.squareup.okhttp3:okhttp:${Versions.okHttpVersion}")
 		}
 	}
 }
