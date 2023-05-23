@@ -50,6 +50,7 @@ class TurboEngineConfigService @Autowired constructor(
         private const val triggerGroup = "turboTriggerGroup"
         private const val jobGroup = "turboJobGroup"
         private const val cronExpressionSubfix = " * * * * ?"
+        private const val latestVersion = "latest"
     }
 
     private val spelExpressionCache = Caffeine.newBuilder()
@@ -771,5 +772,16 @@ class TurboEngineConfigService @Autowired constructor(
                     visualRange = it.visualRange
                 )
             }
+    }
+
+    /**
+     * 获取编译加速工具的版本清单
+     */
+    fun getDistTaskVersion(): List<String> {
+        val versionList = TBSSdkApi.queryVersionOptions("disttask", mapOf())
+        if (versionList.isNotEmpty()) {
+            versionList.add(0, latestVersion)
+        }
+        return versionList
     }
 }
