@@ -122,6 +122,9 @@ type ShaderTool struct {
 
 	// settings
 	settings *common.ApplyParameters
+
+	// whether use web socket
+	usewebsocket bool
 }
 
 // Run run the tool
@@ -182,6 +185,8 @@ func (h *ShaderTool) initsettings() error {
 
 		if k == "BK_DIST_LOG_LEVEL" {
 			common.SetLogLevel(v)
+		} else if k == "BK_DIST_USE_WEBSOCKET" {
+			h.usewebsocket = true
 		}
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")
@@ -193,6 +198,12 @@ func (h *ShaderTool) launchController() error {
 	if h.controller == nil {
 		h.controllerconfig.RemainTime = h.settings.ControllerIdleRunSeconds
 		h.controllerconfig.NoWait = h.settings.ControllerNoBatchWait
+		h.controllerconfig.SendCork = h.settings.ControllerSendCork
+		h.controllerconfig.SendFileMemoryLimit = h.settings.ControllerSendFileMemoryLimit
+		h.controllerconfig.NetErrorLimit = h.settings.ControllerNetErrorLimit
+		h.controllerconfig.RemoteRetryTimes = h.settings.ControllerRemoteRetryTimes
+		h.controllerconfig.EnableLink = h.settings.ControllerEnableLink
+		h.controllerconfig.EnableLib = h.settings.ControllerEnableLib
 		h.controller = v1.NewSDK(h.controllerconfig)
 	}
 
@@ -354,6 +365,7 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 		}
 
 		h.executor = NewExecutor()
+		h.executor.usewebsocket = h.usewebsocket
 	}
 
 	if !h.executor.Valid() {

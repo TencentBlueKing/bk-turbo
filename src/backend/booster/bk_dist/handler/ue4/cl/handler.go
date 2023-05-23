@@ -227,7 +227,8 @@ func (cl *TaskCL) PreExecuteNeedLock(command []string) bool {
 func (cl *TaskCL) PostExecuteNeedLock(result *dcSDK.BKDistResult) bool {
 	// to avoid memory overflow when pump
 	if dcPump.SupportPump(cl.sandbox.Env) {
-		return false
+		// return false
+		return true
 	} else {
 		return true
 	}

@@ -453,3 +453,43 @@ func AddPath2Env(p string) {
 	newpath := fmt.Sprintf("%s;%s", p, path)
 	os.Setenv("path", newpath)
 }
+
+func SetStdHandle(stdhandle int32, handle syscall.Handle) error {
+	kernel32, err := syscall.LoadLibrary("kernel32.dll")
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer syscall.FreeLibrary(kernel32)
+
+	api, err := syscall.GetProcAddress(kernel32, "SetStdHandle")
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	r0, _, e1 := syscall.Syscall(uintptr(api), 2, uintptr(stdhandle), uintptr(handle), 0)
+	if r0 == 0 {
+		if e1 != 0 {
+			return error(e1)
+		}
+		return syscall.EINVAL
+	}
+	return nil
+}
+
+func RedirectStderror(f string) error {
+	var err error
+	file, err := os.OpenFile(f, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	err = SetStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(file.Fd()))
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	return nil
+}

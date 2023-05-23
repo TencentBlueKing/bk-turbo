@@ -54,13 +54,13 @@ func (s *Server) listen() error {
 	}
 
 	confserver := fmt.Sprintf("%s:%d", s.conf.Address, port)
-	laddr, err := net.ResolveTCPAddr("tcp4", confserver)
+	laddr, err := net.ResolveTCPAddr("tcp", confserver)
 	if err != nil {
 		blog.Errorf("failed to resolve tcp addr %s", confserver)
 		return err
 	}
 
-	s.tcplistener, err = net.ListenTCP("tcp4", laddr)
+	s.tcplistener, err = net.ListenTCP("tcp", laddr)
 	if err != nil {
 		blog.Errorf("listen tcp failed: %v\n", err)
 		return err

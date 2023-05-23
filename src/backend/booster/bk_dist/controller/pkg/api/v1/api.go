@@ -90,6 +90,10 @@ func InitStorage() (err error) {
 		Verb: "POST", Path: "/dist/work/{work_id}/local/execute", Params: nil,
 		Handler: api.FuncWrapper(executeLocalTask),
 	})
+	api.RegisterV1Action(api.Action{
+		Verb: "GET", Path: "/dist/work/{work_id}/local/execute_websocket", Params: nil,
+		Handler: api.FuncWrapper(executeLocalTaskWithWebSocket),
+	})
 
 	return nil
 }

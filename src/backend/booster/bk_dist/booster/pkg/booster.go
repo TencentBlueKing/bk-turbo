@@ -494,6 +494,10 @@ func (b *Booster) runWithApply(pCtx context.Context) (int, error) {
 				// TODO (tomtian) : do not degrade when failed to apply resource
 				// return b.runDegradeWorks(ctx)
 				blog.Infof("booster: failed to apply resource for work(%s) with error:%v", b.workID, err)
+				if b.config.Works.NoLocal {
+					blog.Infof("booster: no local is set, ready to quit")
+					return -1, err
+				}
 				return b.runWorks(ctx, nil, nil)
 			}
 			return b.runWorks(ctx, nil, nil)
@@ -946,6 +950,10 @@ func (b *Booster) getProperJobs() int {
 			jobs += host.Jobs
 		}
 		jobs = int(float64(jobs) * 1.5)
+
+		if jobs <= 0 && b.config.Works.Presetjobs > 0 {
+			jobs = b.config.Works.Presetjobs
+		}
 
 		// set jobs of ue4 by client cpus
 		if b.config.Type == dcType.BoosterUE4 {

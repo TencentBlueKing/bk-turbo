@@ -171,8 +171,10 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 	sandbox := cc.sandbox.Fork()
 	var buf bytes.Buffer
 	sandbox.Stdout = &buf
-	if _, err := sandbox.ExecScripts("ccache -z"); err != nil {
-		blog.Warnf("booster: run ccache -z error: %v", err)
+	if cc.ccacheEnable {
+		if _, err := sandbox.ExecScripts("ccache -z"); err != nil {
+			blog.Warnf("booster: run ccache -z error: %v", err)
+		}
 	}
 
 	if cc.ccacheEnable {
@@ -232,13 +234,14 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 
 // PostWork 处理整个编译的后置工作, 收集ccache数据
 func (cc *TaskCC) PostWork(config *dcType.BoosterConfig) error {
-	ccacheStats, err := cc.statisticsCCache()
-	if err != nil {
-		blog.Warnf("booster: get ccache statics failed: %v", err)
-		return nil
+	if cc.ccacheEnable {
+		ccacheStats, err := cc.statisticsCCache()
+		if err != nil {
+			blog.Warnf("booster: get ccache statics failed: %v", err)
+			return nil
+		}
+		cc.ccacheStats = *ccacheStats
 	}
-	cc.ccacheStats = *ccacheStats
-
 	return nil
 }
 
