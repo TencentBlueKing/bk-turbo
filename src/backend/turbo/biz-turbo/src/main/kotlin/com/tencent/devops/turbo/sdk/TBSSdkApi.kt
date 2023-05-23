@@ -191,4 +191,21 @@ object TBSSdkApi {
         }
         return response.data ?: listOf()
     }
+
+    /**
+     * 获取编译加速工具的版本清单
+     */
+    fun queryVersionOptions(engineCode: String, queryParam: Map<String, Any>): MutableList<String>{
+        val responseStr = tbsCommonRequest(
+            engineCode = engineCode,
+            resourceName = "version",
+            queryParam = queryParam
+        )
+        return if (responseStr.isBlank()) {
+            logger.warn("getDistTaskVersion response string is blank!")
+            mutableListOf()
+        } else {
+            JsonUtil.to(responseStr, object : TypeReference<DistccResponse<MutableList<String>>>() {}).data
+        }
+    }
 }
