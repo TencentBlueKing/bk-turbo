@@ -77,12 +77,16 @@ func (c *TCPClient) Closed() bool {
 		return true
 	}
 
-	one := make([]byte, 1)
-	_ = c.conn.SetReadDeadline(time.Now())
-	if _, err := c.conn.Read(one); err == io.EOF {
+	var buf [1]byte
+	c.conn.SetReadDeadline(time.Now().Add(time.Millisecond))
+	_, err := c.conn.Read(buf[:])
+	if err != nil {
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			return false
+		}
+		blog.Infof("tcp connection %s closed with error:%v", c.RemoteAddr(), err)
 		return true
 	}
-
 	return false
 }
 

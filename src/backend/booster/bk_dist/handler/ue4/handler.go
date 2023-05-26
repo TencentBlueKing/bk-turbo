@@ -26,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/clfilter"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/lib"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/link"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/linkfilter"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/shader"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -42,6 +43,7 @@ const (
 	defaultLibCompiler                = "lib.exe"
 	defaultLinkCompiler               = "link.exe"
 	defaultCLFilterCompiler           = "cl-filter.exe"
+	defaultLinkFilterCompiler         = "link-filter.exe"
 	defaultAstcsse2Compiler           = "astcenc-sse2.exe"
 	defaultAstcCompiler               = "astcenc.exe"
 
@@ -217,16 +219,18 @@ func (u *UE4) initInnerHandle(command []string) {
 			strings.HasSuffix(command[0], defaultAstcCompiler) {
 			u.innerhandler = astc.NewTextureCompressor()
 			blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
-		} else {
-			if env.GetEnv(env.KeyExecutorSupportLink) == "true" {
-				if strings.HasSuffix(command[0], defaultLibCompiler) {
-					u.innerhandler = lib.NewTaskLib()
-					blog.Debugf("ue4: innerhandle with lib for command[%s]", command[0])
-				} else if strings.HasSuffix(command[0], defaultLinkCompiler) {
-					u.innerhandler = link.NewTaskLink()
-					blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
-				}
-			}
+		} else if strings.HasSuffix(command[0], defaultLinkFilterCompiler) &&
+			env.GetEnv(env.KeyExecutorEnableLink) == "true" {
+			u.innerhandler = linkfilter.NewTaskLinkFilter()
+			blog.Debugf("ue4: innerhandle with linkfilter for command[%s]", command[0])
+		} else if strings.HasSuffix(command[0], defaultLibCompiler) &&
+			env.GetEnv(env.KeyExecutorEnableLib) == "true" {
+			u.innerhandler = lib.NewTaskLib()
+			blog.Debugf("ue4: innerhandle with lib for command[%s]", command[0])
+		} else if strings.HasSuffix(command[0], defaultLinkCompiler) &&
+			env.GetEnv(env.KeyExecutorEnableLink) == "true" {
+			u.innerhandler = link.NewTaskLink()
+			blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
 		}
 	}
 }

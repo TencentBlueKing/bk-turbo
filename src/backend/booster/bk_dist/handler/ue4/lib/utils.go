@@ -23,6 +23,7 @@ import (
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/google/shlex"
 
 	"github.com/saintfish/chardet"
 	"golang.org/x/text/encoding/unicode"
@@ -160,6 +161,47 @@ func readResponse(f string) (string, error) {
 	return data, nil
 }
 
+// replace which next is not in nextExcludes
+func replaceWithNextExclude(s string, old byte, new string, nextExcludes []byte) string {
+	if s == "" {
+		return ""
+	}
+
+	if len(nextExcludes) == 0 {
+		return strings.Replace(s, string(old), new, -1)
+	}
+
+	targetslice := make([]byte, 0, 0)
+	nextexclude := false
+	totallen := len(s)
+	for i := 0; i < totallen; i++ {
+		c := s[i]
+		if c == old {
+			nextexclude = false
+			if i < totallen-1 {
+				next := s[i+1]
+				for _, e := range nextExcludes {
+					if next == e {
+						nextexclude = true
+						break
+					}
+				}
+			}
+			if nextexclude {
+				targetslice = append(targetslice, c)
+				targetslice = append(targetslice, s[i+1])
+				i++
+			} else {
+				targetslice = append(targetslice, []byte(new)...)
+			}
+		} else {
+			targetslice = append(targetslice, c)
+		}
+	}
+
+	return string(targetslice)
+}
+
 // ensure compiler exist in args.
 func ensureCompiler(args []string) (string, []string, error) {
 	responseFile := ""
@@ -189,7 +231,8 @@ func ensureCompiler(args []string) (string, []string, error) {
 					return responseFile, nil, err
 				}
 			}
-			options, _, err := parseArgument(data)
+			// options, _, err := parseArgument(data)
+			options, err := shlex.Split(replaceWithNextExclude(string(data), '\\', "\\\\", []byte{'"'}))
 			if err != nil {
 				blog.Infof("lib: failed to parse response file:%s,err:%v", responseFile, err)
 				return responseFile, nil, err
@@ -210,7 +253,7 @@ type libArgs struct {
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
-func scanArgs(args []string) (*libArgs, error) {
+func scanArgs(args []string, workdir string) (*libArgs, error) {
 	blog.Infof("lib: scanning arguments: %v", args)
 
 	if len(args) == 0 || strings.HasPrefix(args[0], "/") {
@@ -244,13 +287,21 @@ func scanArgs(args []string) (*libArgs, error) {
 			}
 
 			if strings.HasPrefix(arg, "/OUT:") {
-				r.outputFile = append(r.outputFile, arg[5:])
+				temp := arg[5:]
+				if !filepath.IsAbs(temp) {
+					temp, _ = filepath.Abs(filepath.Join(workdir, temp))
+				}
+				r.outputFile = append(r.outputFile, temp)
 			}
 
 			continue
 		}
 
-		r.inputFile = append(r.inputFile, arg)
+		temp := arg
+		if !filepath.IsAbs(temp) {
+			temp, _ = filepath.Abs(filepath.Join(workdir, temp))
+		}
+		r.inputFile = append(r.inputFile, temp)
 	}
 
 	if len(r.inputFile) == 0 {
@@ -265,9 +316,17 @@ func scanArgs(args []string) (*libArgs, error) {
 
 	if needExport {
 		if strings.HasSuffix(r.outputFile[0], ".lib") {
-			r.outputFile = append(r.outputFile, strings.Replace(r.outputFile[0], ".lib", ".exp", -1))
+			temp := strings.Replace(r.outputFile[0], ".lib", ".exp", -1)
+			if !filepath.IsAbs(temp) {
+				temp, _ = filepath.Abs(filepath.Join(workdir, temp))
+			}
+			r.outputFile = append(r.outputFile, temp)
 		} else {
-			r.outputFile = append(r.outputFile, filepath.Join(r.outputFile[0], ".exp"))
+			temp := filepath.Join(r.outputFile[0], ".exp")
+			if !filepath.IsAbs(temp) {
+				temp, _ = filepath.Abs(filepath.Join(workdir, temp))
+			}
+			r.outputFile = append(r.outputFile, temp)
 		}
 	}
 
@@ -303,7 +362,7 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 	defer func() {
 
 		endTime := time.Now().Local().UnixNano()
-		blog.Warnf("lib: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
+		blog.Debugf("lib: [iotest] file [%s] srcsize [%d] compresssize [%d] createTime [%d] allocTime [%d] "+
 			"uncpmpresstime [%d] savetime [%d] millionseconds",
 			fp,
 			rf.FileSize,

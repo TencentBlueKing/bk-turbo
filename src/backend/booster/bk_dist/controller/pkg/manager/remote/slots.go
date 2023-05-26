@@ -12,13 +12,11 @@ package remote
 import (
 	"container/list"
 	"context"
-	"runtime"
 	"sync"
 
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
-	"github.com/shirou/gopsutil/mem"
 )
 
 type lockWorkerMessage struct {
@@ -684,21 +682,30 @@ func (wr *worker) copy() *worker {
 
 // by tming to limit local memory usage
 func newMemorySlot(maxSlots int64) *memorySlot {
-	minmemroy := int64(2 * 1024 * 1024 * 1024) // 2GB
+	minmemroy := int64(100 * 1024 * 1024)          // 100MB
+	defaultmemroy := int64(1 * 1024 * 1024 * 1024) // 1GB
+	maxmemroy := int64(8 * 1024 * 1024 * 1024)     // 8GB
 
+	blog.Infof("memory slot: maxSlots:%d", maxSlots)
 	if maxSlots <= 0 {
-		v, err := mem.VirtualMemory()
-		if err != nil {
-			blog.Infof("memory slot: failed to get virtaul memory with err:%v", err)
-			maxSlots = int64((runtime.NumCPU() - 2)) * 1024 * 1024 * 1024
-		} else {
-			// maxSlots = int64(v.Total) - minmemroy
-			maxSlots = int64(v.Total) / 2
-		}
+		// v, err := mem.VirtualMemory()
+		// if err != nil {
+		// 	blog.Infof("memory slot: failed to get virtaul memory with err:%v", err)
+		// 	maxSlots = int64((runtime.NumCPU() - 2)) * 1024 * 1024 * 1024
+		// } else {
+		// 	// maxSlots = int64(v.Total) - minmemroy
+		// 	maxSlots = int64(v.Total) / 8
+		// }
+		maxSlots = defaultmemroy
+		blog.Infof("memory slot: maxSlots:%d", maxSlots)
 	}
 
 	if maxSlots < minmemroy {
 		maxSlots = minmemroy
+	}
+
+	if maxSlots > maxmemroy {
+		maxSlots = maxmemroy
 	}
 
 	blog.Infof("memory slot: set max local memory:%d", maxSlots)

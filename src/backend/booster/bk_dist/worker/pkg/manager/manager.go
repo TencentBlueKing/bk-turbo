@@ -48,7 +48,8 @@ const (
 	cmdCheckIntervalTime     = 100 // time.Millisecond
 	maxWaitConnectionSeconds = 600
 
-	maxCpuUsed      = 90.00
+	// change from 90 to 75
+	maxCpuUsed      = 75.00
 	maxCpuSampleNum = 20
 )
 
@@ -264,7 +265,7 @@ func (o *tcpManager) cleanCreatedFiles(f string) error {
 
 	data, err := ioutil.ReadFile(f)
 	if err != nil {
-		blog.Warnf("failed to read file[%s] with error:%v", err)
+		blog.Infof("failed to read file[%s] with error:%v", f, err)
 		return err
 	}
 
@@ -506,6 +507,12 @@ func (o *tcpManager) validIP(clientip string) bool {
 
 	fields := strings.Split(clientip, ":")
 	realip := fields[0]
+	if strings.Count(clientip, ":") >= 2 { //ipv6
+		// The port starts after the last colon.
+		i := strings.LastIndex(clientip, ":")
+		realip = clientip[:i]
+	}
+
 	for _, v := range o.whiteips {
 		if v == realip {
 			blog.Infof("found client ip %s in white list", realip)
@@ -609,7 +616,7 @@ func (o *tcpManager) obtainChance() bool {
 
 	if o.curjobs < o.maxjobs {
 		// we will launch docker with 8 jobs on linux
-		if o.curjobs < int(math.Min(float64(o.maxjobs/3), 4)) {
+		if o.curjobs < int(math.Min(float64(o.maxjobs/3), 4)) || o.curjobs <= 0 {
 			// blog.Infof("got chance directly for current running jobs less than min jobs")
 			o.curjobs++
 			blog.Infof("current running jobs %d after direct got chance", o.curjobs)
@@ -625,7 +632,7 @@ func (o *tcpManager) obtainChance() bool {
 				total = v.Total
 				maybetotalused := uint64(o.curjobs) * o.memperjob
 				if maybetotalused >= v.Total {
-					blog.Infof("ignore for current total used mem:%d greater than total mem:%d", maybetotalused, v.Total)
+					blog.Infof("ignore for current estimated total used mem:%d greater than real total mem:%d", maybetotalused, v.Total)
 					return false
 				}
 

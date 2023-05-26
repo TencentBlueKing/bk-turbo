@@ -16,6 +16,7 @@ import (
 
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/websocket"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -503,6 +504,65 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 	r.Write2Resp(&api.RestResponse{Resp: resp})
 }
 
+func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data []byte, s *websocket.Session) error {
+	workID := req.PathParameter(pathParamWorkID)
+	r := &LocalTaskExecuteResp{}
+
+	if workID == "" {
+		blog.Errorf("api: executeLocalTask get work_id from path empty")
+		msg, _ := r.EncResp(&api.RestResponse{ErrCode: api.ServerErrInvalidParam, Message: "work_id empty"})
+		ret := s.SendWithID(id, msg, false)
+		// ret won't be nil
+		return ret.Err
+	}
+	blog.Infof("api: executeLocalTask try to execute local task: %s", workID)
+
+	config, err := getLocalTaskExecuteRequestFromWebSocket(data)
+	if err != nil {
+		blog.Errorf("api: executeLocalTask get execute local task config failed, work: %s, err: %v", workID, err)
+		msg, _ := r.EncResp(&api.RestResponse{ErrCode: api.ServerErrInvalidParam, Message: err.Error()})
+		ret := s.SendWithID(id, msg, false)
+		// ret won't be nil
+		return ret.Err
+	}
+
+	result, err := defaultManager.ExecuteLocalTask(workID, config)
+	if err != nil {
+		// blog.Errorf("api: executeLocalTask execute local task failed, work: %s, err: %v", workID, err)
+		errcode := api.ServerErrExecuteLocalTaskFailed
+		message := err.Error()
+		if err == types.ErrWorkNoFound {
+			errcode = api.ServerErrWorkNotFound
+			newworkid, _ := defaultManager.GetFirstWorkID()
+			workerchanged := WorkerChanged{
+				OldWorkID: workID,
+				NewWorkID: newworkid,
+			}
+			var data []byte
+			_ = codec.EncJSON(&workerchanged, &data)
+			message = string(data)
+		}
+		blog.Errorf("api: executeLocalTask execute local task failed, work: %s, err: %v, return code:%d message: %s",
+			workID, err, errcode, message)
+
+		msg, _ := r.EncResp(&api.RestResponse{ErrCode: errcode, Message: message})
+		ret := s.SendWithID(id, msg, false)
+		// ret won't be nil
+		return ret.Err
+	}
+
+	blog.Infof("api: executeLocalTask success to execute local task: %s", workID)
+	r.Result = result.Result
+	msg, _ := r.EncResp(&api.RestResponse{})
+	ret := s.SendWithID(id, msg, false)
+	// ret won't be nil
+	return ret.Err
+}
+
+func executeLocalTaskWithWebSocket(req *restful.Request, resp *restful.Response) {
+	websocket.NewServerSession(resp, req, callbackOfLocalExecute)
+}
+
 func getWorkRegisterConfig(req *restful.Request) (*types.WorkRegisterConfig, error) {
 	body, err := ioutil.ReadAll(req.Request.Body)
 	if err != nil {
@@ -835,6 +895,31 @@ func getLocalTaskExecuteRequest(req *restful.Request) (*types.LocalTaskExecuteRe
 	}
 
 	blog.Debugf("api: get local task exec config: %+v", config)
+	return config, nil
+}
+
+func getLocalTaskExecuteRequestFromWebSocket(data []byte) (*types.LocalTaskExecuteRequest, error) {
+	blog.Debugf("api: websocket get local task exec param : %s", string(data))
+	var param LocalTaskExecuteParam
+	if err := codec.DecJSON(data, &param); err != nil {
+		blog.Errorf("api: websocket get local task exec param decode failed: %v", err)
+		return nil, err
+	}
+
+	config := &types.LocalTaskExecuteRequest{
+		Pid:          param.Pid,
+		Dir:          param.Dir,
+		User:         param.User,
+		Commands:     param.Commands,
+		Environments: param.Environments,
+		Stats:        param.Stats,
+	}
+
+	if config.Stats == nil {
+		config.Stats = &dcSDK.ControllerJobStats{}
+	}
+
+	blog.Debugf("api: websocket get local task exec config: %+v", config)
 	return config, nil
 }
 

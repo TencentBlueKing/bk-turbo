@@ -12,10 +12,11 @@ import com.tencent.devops.turbo.dto.ParamEnumDto
 import com.tencent.devops.turbo.dto.TBSTurboStatDto
 import com.tencent.devops.turbo.dto.WhiteListDto
 import com.tencent.devops.web.util.SpringContextHolder
-import okhttp3.Headers
-import okhttp3.MediaType
+import okhttp3.Headers.Companion.toHeaders
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpMethod
 
@@ -25,19 +26,19 @@ object TBSSdkApi {
     private val logger = LoggerFactory.getLogger(TBSSdkApi::class.java)
 
     private fun buildGet(path: String, headers: Map<String, String>): Request {
-        return Request.Builder().url(path).headers(Headers.of(headers)).get().build()
+        return Request.Builder().url(path).headers(headers.toHeaders()).get().build()
     }
 
     private fun buildPost(path: String, requestBody: RequestBody, headers: Map<String, String>): Request {
-        return Request.Builder().url(path).headers(Headers.of(headers)).post(requestBody).build()
+        return Request.Builder().url(path).headers(headers.toHeaders()).post(requestBody).build()
     }
 
     private fun buildPut(path: String, requestBody: RequestBody, headers: Map<String, String>): Request {
-        return Request.Builder().url(path).headers(Headers.of(headers)).put(requestBody).build()
+        return Request.Builder().url(path).headers(headers.toHeaders()).put(requestBody).build()
     }
 
     private fun buildDelete(path: String, headers: Map<String, String>): Request {
-        return Request.Builder().url(path).headers(Headers.of(headers)).delete().build()
+        return Request.Builder().url(path).headers(headers.toHeaders()).delete().build()
     }
 
     /**
@@ -123,19 +124,17 @@ object TBSSdkApi {
         headers: MutableMap<String, String> = mutableMapOf(),
         method: String = "GET"
     ): String {
-        val requestBody = RequestBody.create(
-            MediaType.parse("application/json; charset=utf-8"), jsonBody
-        )
+        val requestBody = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         val properties = SpringContextHolder.getBean<TBSProperties>()
         val customPath =
             properties.urlTemplate!!.replace("{engine}", engineCode).replace("{resource_type}", resourceName)
         var url = "${properties.rootPath}/$customPath"
-        if (!pathParam.isNullOrEmpty()) {
+        if (pathParam.isNotEmpty()) {
             pathParam.forEach {
                 url = url.plus("/$it")
             }
         }
-        if (!queryParam.isNullOrEmpty()) {
+        if (queryParam.isNotEmpty()) {
             url = url.plus(
                 queryParam.entries.fold("?") { acc, entry ->
                     acc.plus("${entry.key}=${entry.value}&")
@@ -162,10 +161,10 @@ object TBSSdkApi {
         }
 
         OkhttpUtils.doHttp(request).use { response ->
-            val responseBody = response.body()!!.string()
+            val responseBody = response.body!!.string()
             if (!response.isSuccessful) {
                 logger.info(
-                    "Fail to execute ($url) task($jsonBody) because of ${response.message()} with" +
+                    "Fail to execute ($url) task($jsonBody) because of ${response.message} with" +
                         " response: $responseBody"
                 )
                 throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "fail to invoke request")
@@ -190,5 +189,22 @@ object TBSSdkApi {
             throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "fail to invoke request")
         }
         return response.data ?: listOf()
+    }
+
+    /**
+     * 获取编译加速工具的版本清单
+     */
+    fun queryVersionOptions(engineCode: String, queryParam: Map<String, Any>): MutableList<String>{
+        val responseStr = tbsCommonRequest(
+            engineCode = engineCode,
+            resourceName = "version",
+            queryParam = queryParam
+        )
+        return if (responseStr.isBlank()) {
+            logger.warn("getDistTaskVersion response string is blank!")
+            mutableListOf()
+        } else {
+            JsonUtil.to(responseStr, object : TypeReference<DistccResponse<MutableList<String>>>() {}).data
+        }
     }
 }
