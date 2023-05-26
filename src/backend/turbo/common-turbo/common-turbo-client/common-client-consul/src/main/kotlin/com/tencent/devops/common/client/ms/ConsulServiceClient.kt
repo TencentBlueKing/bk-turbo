@@ -24,7 +24,7 @@ class ConsulServiceClient constructor(
     JsonUtil.getObjectMapper()
 ) {
 
-    @Value("\${codecc.quartz.tag:\${spring.cloud.consul.discovery.tags}}")
+    @Value("\${spring.cloud.consul.discovery.tags:turbo}}")
     private val tag: String? = null
 
     /**

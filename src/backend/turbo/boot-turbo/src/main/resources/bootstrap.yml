@@ -7,6 +7,8 @@ spring:
     version: 4.0.0
     packageName: com.tencent.devops.turbo
   cloud:
+    config:
+      fail-fast: true
     kubernetes:
       config:
         enabled: true
