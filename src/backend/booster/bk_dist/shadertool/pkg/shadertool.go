@@ -463,18 +463,21 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 	retmsg := ""
 	waitsecs := 5
 	var err error
-	for try := 0; try < 6; try++ {
+	for try := 0; try < 3; try++ {
 		retcode, retmsg, err = h.executor.Run(fullargs, "")
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("ShaderTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
 			if retcode == int(api.ServerErrWorkNotFound) {
 				h.dealWorkNotFound(retcode, retmsg)
+				continue
+			} else {
+				break
 			}
 
-			time.Sleep(time.Duration(waitsecs) * time.Second)
-			waitsecs = waitsecs * 2
-			continue
+			// time.Sleep(time.Duration(waitsecs) * time.Second)
+			// waitsecs = waitsecs * 2
+			// continue
 		}
 
 		if err != nil {
