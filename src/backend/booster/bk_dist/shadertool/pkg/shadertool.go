@@ -621,6 +621,11 @@ func (h *ShaderTool) ReleaseResource() {
 	h.resourcestatus = common.ResourceInit
 	h.booster = nil
 	h.executor = nil
+
+	// close long tcp connection if need
+	if h.usewebsocket {
+		closeConnections()
+	}
 }
 
 func (h *ShaderTool) getProjectSettingFile() (string, error) {

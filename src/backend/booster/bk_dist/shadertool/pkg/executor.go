@@ -21,6 +21,7 @@ import (
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/websocket"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -161,4 +162,9 @@ func (d *Executor) getStats(fullargs []string) *dcSDK.ControllerJobStats {
 	}
 
 	return &stats
+}
+
+func closeConnections() {
+	blog.Infof("shaderexecutor: ready close tcp connections")
+	websocket.DestroyGlobalSessionPool()
 }
