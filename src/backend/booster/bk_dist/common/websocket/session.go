@@ -568,7 +568,7 @@ func (s *Session) check(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			blog.Debugf("[session] session check canceled by context")
+			blog.Infof("[session] session check canceled by context")
 			s.clean(ErrorContextCanceled)
 			return
 		case err := <-s.errorChan:
@@ -582,9 +582,9 @@ func (s *Session) check(wg *sync.WaitGroup) {
 // 清理资源，包括关闭连接，停止协程等
 // 在Run中被调用，不对外
 func (s *Session) clean(err error) {
-	blog.Debugf("[session] session clean now")
-	s.conn.Close()
+	blog.Infof("[session] session clean now")
 	s.cancel()
+	s.conn.Close()
 
 	// 通知发送队列中的任务
 	s.sendMutex.Lock()
