@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.db.PageUtils
+import com.tencent.devops.common.util.I18NUtil
 import com.tencent.devops.common.util.enums.ConfigParamType
 import com.tencent.devops.turbo.dao.mongotemplate.TurboEngineConfigDao
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
@@ -540,14 +541,14 @@ class TurboEngineConfigService @Autowired constructor(
         return turboEngineConfigList.map {
             TurboEngineConfigVO(
                 engineCode = it.engineCode,
-                engineName = it.engineName,
+                engineName = I18NUtil.getMessage("${it.engineCode}.engineName"),
                 priorityNum = it.priorityNum,
                 userManual = it.userManual,
                 desc = it.desc,
                 paramConfig = it.paramConfig?.filter { param -> param.displayed }?.map { param ->
                     ParamConfigModel(
                         paramKey = param.paramKey,
-                        paramName = param.paramName,
+                        paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.paramName"),
                         paramType = param.paramType,
                         paramProps = param.paramProps,
                         paramEnum = param.paramEnum?.filter { paramEnumEntity ->
@@ -556,7 +557,8 @@ class TurboEngineConfigService @Autowired constructor(
                         }?.map { paramEnumEntity ->
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
-                                paramName = paramEnumEntity.paramName,
+                                paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey
+                                }.paramEnum.${paramEnumEntity.paramValue}"),
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
