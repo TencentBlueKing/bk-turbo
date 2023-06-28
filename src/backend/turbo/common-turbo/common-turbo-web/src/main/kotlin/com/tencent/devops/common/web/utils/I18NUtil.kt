@@ -1,31 +1,22 @@
-package com.tencent.devops.common.util
+package com.tencent.devops.common.web.utils
 
-import org.springframework.beans.factory.annotation.Autowired
+import com.tencent.devops.common.service.utils.SpringContextUtil
 import org.springframework.context.MessageSource
 import org.springframework.context.i18n.LocaleContextHolder
-import org.springframework.stereotype.Component
 import java.util.Locale
 
-@Component
 object I18NUtil {
 
-    @JvmStatic
-    lateinit var messageSource: MessageSource
-    @Autowired set
-
-
-    @JvmStatic
     fun getMessage(code: String): String {
         return getMessage(code, null)
     }
 
-    @JvmStatic
     fun getMessage(code: String, args: Array<Any>?): String {
         return getMessage(code, args, LocaleContextHolder.getLocale())
     }
 
-    @JvmStatic
     fun getMessage(code: String, args: Array<Any>?, locale: Locale): String {
+        val  messageSource = SpringContextUtil.getBean(MessageSource::class.java)
         return messageSource.getMessage(code, args, locale)
     }
 }

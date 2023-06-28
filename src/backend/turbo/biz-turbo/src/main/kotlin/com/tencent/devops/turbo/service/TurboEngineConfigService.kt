@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.db.PageUtils
-import com.tencent.devops.common.util.I18NUtil
+import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.common.util.enums.ConfigParamType
 import com.tencent.devops.turbo.dao.mongotemplate.TurboEngineConfigDao
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
