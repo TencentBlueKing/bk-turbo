@@ -6,6 +6,7 @@ import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.util.constants.NO_ADMIN_MEMBER_MESSAGE
+import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.turbo.api.IUserTurboRecordController
 import com.tencent.devops.turbo.enums.EnumDistccTaskStatus
 import com.tencent.devops.turbo.pojo.TurboRecordModel
@@ -56,7 +57,8 @@ class UserTurboRecordController @Autowired constructor(
                 planInfo = turboPlanService.getByProjectId(projectId).associate { it.id!! to it.planName },
                 pipelineInfo = turboPlanInstanceList.filter { !it.pipelineId.isNullOrBlank() }.associate { it.pipelineId!! to it.pipelineName },
                 clientIpInfo = turboPlanInstanceList.filter { !it.clientIp.isNullOrBlank() }.distinctBy { it.clientIp }.map { it.clientIp!! },
-                statusInfo = EnumDistccTaskStatus.values().associate { it.getTBSStatus() to it.getStatusName() }
+                statusInfo = EnumDistccTaskStatus.values().associate { it.getTBSStatus() to (I18NUtil
+                    .getMessage("taskStatus.${it.getTBSStatus()}") ?: it.getStatusName()) }
             )
         )
     }
