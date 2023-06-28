@@ -544,7 +544,7 @@ class TurboEngineConfigService @Autowired constructor(
                 engineName = I18NUtil.getMessage("${it.engineCode}.engineName") ?: it.engineName,
                 priorityNum = it.priorityNum,
                 userManual = it.userManual,
-                desc = it.desc,
+                desc = I18NUtil.getMessage("${it.engineCode}.desc") ?: it.desc,
                 paramConfig = it.paramConfig?.filter { param -> param.displayed }?.map { param ->
                     ParamConfigModel(
                         paramKey = param.paramKey,
