@@ -14,6 +14,7 @@ import com.tencent.devops.common.util.constants.EXCHANGE_TURBO_PLUGIN
 import com.tencent.devops.common.util.constants.ROUTE_TURBO_PLUGIN_DATA
 import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.common.web.mq.CORE_RABBIT_TEMPLATE_NAME
+import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.turbo.dao.mongotemplate.TurboRecordDao
 import com.tencent.devops.turbo.dao.repository.TurboRecordRepository
 import com.tencent.devops.turbo.dto.TurboRecordPluginUpdateDto
@@ -312,11 +313,11 @@ class TurboRecordService @Autowired constructor(
     fun getTurboRecordDisplayInfo(turboRecordEntity: TTurboRecordEntity, turboPlanEntity: TTurboPlanEntity): TurboRecordDisplayVO {
         val displayFields = mutableListOf(
             TurboDisplayFieldVO(
-                fieldName = "任务ID",
+                fieldName = I18NUtil.getMessage("displayFields.taskId")!!,
                 fieldValue = turboRecordEntity.id!!
             ),
             TurboDisplayFieldVO(
-                fieldName = "方案",
+                fieldName = I18NUtil.getMessage("displayFields.plan")!!,
                 fieldValue = turboPlanEntity.planName,
                 link = true,
                 linkAddress = "$devopRootPath/console/turbo/${turboPlanEntity.projectId}/task/detail/${turboRecordEntity.turboPlanId!!}"
@@ -350,7 +351,7 @@ class TurboRecordService @Autowired constructor(
                 val displayFieldValue = (paramConfigMap[it.fieldKey]?.get(displayRange[it.fieldKey].toString())) ?: displayRange[it.fieldKey]
                 displayFields.add(
                     TurboDisplayFieldVO(
-                        fieldName = it.fieldName,
+                        fieldName = I18NUtil.getMessage("displayFields.${it.fieldKey}.fieldName") ?: it.fieldName,
                         fieldValue = displayFieldValue,
                         link = it.link,
                         linkAddress = if (it.link == true && !it.linkTemplate.isNullOrBlank()) {
@@ -371,7 +372,7 @@ class TurboRecordService @Autowired constructor(
         if (!turboRecordEntity.pipelineName.isNullOrBlank()) {
             displayFields.add(
                 TurboDisplayFieldVO(
-                    fieldName = "关联的流水线",
+                    fieldName = I18NUtil.getMessage("displayFields.pipeline")!!,
                     fieldValue = turboRecordEntity.pipelineName,
                     link = true,
                     linkAddress = "$devopRootPath/console/pipeline/${turboPlanEntity.projectId}/${turboRecordEntity.pipelineId}/detail/${turboRecordEntity.devopsBuildId}"
