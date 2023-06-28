@@ -541,14 +541,15 @@ class TurboEngineConfigService @Autowired constructor(
         return turboEngineConfigList.map {
             TurboEngineConfigVO(
                 engineCode = it.engineCode,
-                engineName = I18NUtil.getMessage("${it.engineCode}.engineName"),
+                engineName = I18NUtil.getMessage("${it.engineCode}.engineName") ?: it.engineName,
                 priorityNum = it.priorityNum,
                 userManual = it.userManual,
                 desc = it.desc,
                 paramConfig = it.paramConfig?.filter { param -> param.displayed }?.map { param ->
                     ParamConfigModel(
                         paramKey = param.paramKey,
-                        paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.paramName"),
+                        paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.paramName")
+                            ?: param.paramName,
                         paramType = param.paramType,
                         paramProps = param.paramProps,
                         paramEnum = param.paramEnum?.filter { paramEnumEntity ->
@@ -558,7 +559,7 @@ class TurboEngineConfigService @Autowired constructor(
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
                                 paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey
-                                }.paramEnum.${paramEnumEntity.paramValue}"),
+                                }.paramEnum.${paramEnumEntity.paramValue}") ?: paramEnumEntity.paramName,
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
