@@ -240,7 +240,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
-		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env)), nil
+		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 	} else {
 		includes := []*dcFile.Info{}
 		for _, l := range uniqlines {
@@ -266,7 +266,9 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 				}
 				includes = append(includes, fstat)
 			} else {
-				blog.Infof("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
+				blog.Warnf("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
+				// return fail if not existed
+				return nil, fmt.Errorf("%s not existed", dependf)
 			}
 		}
 
