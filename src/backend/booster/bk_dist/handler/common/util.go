@@ -75,7 +75,7 @@ func ResetFileInfoCache() {
 }
 
 // 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
-func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) []*dcFile.Info {
+func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) ([]*dcFile.Info, error) {
 	// read
 	fileInfoCacheLock.RLock()
 	notfound := []string{}
@@ -88,7 +88,10 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 		}
 
 		if mustexisted && !i.Exist() {
-			continue
+			// continue
+			// TODO : return fail if not existed
+			blog.Warnf("common util: depend file:%s not existed ", f)
+			return nil, fmt.Errorf("%s not existed", f)
 		}
 		if notdir && i.Basic().IsDir() {
 			continue
@@ -99,7 +102,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 
 	blog.Infof("common util: got %d file stat and %d not found", len(is), len(notfound))
 	if len(notfound) == 0 {
-		return is
+		return is, nil
 	}
 
 	// query
@@ -114,7 +117,10 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 		tempis[f] = i
 
 		if mustexisted && !i.Exist() {
-			continue
+			// TODO : return fail if not existed
+			// continue
+			blog.Warnf("common util: depend file:%s not existed ", f)
+			return nil, fmt.Errorf("%s not existed", f)
 		}
 
 		if i.Basic().Mode()&os.ModeSymlink != 0 {
@@ -154,5 +160,5 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 		fileInfoCacheLock.Unlock()
 	}(&tempis)
 
-	return is
+	return is, nil
 }
