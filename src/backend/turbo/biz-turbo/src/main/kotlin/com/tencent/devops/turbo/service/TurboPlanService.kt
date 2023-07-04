@@ -317,7 +317,8 @@ class TurboPlanService @Autowired constructor(
         val turboPlanEntity = findTurboPlanById(planId)
         val turboPlanDetailVO = TurboPlanDetailVO()
         if (turboPlanEntity != null) {
-            BeanUtils.copyProperties(turboPlanEntity, turboPlanDetailVO)
+            BeanUtils.copyProperties(turboPlanEntity, turboPlanDetailVO, "engineName")
+            turboPlanDetailVO.engineName = I18NUtil.getMessage("${turboPlanDetailVO.engineCode}.engineName")
             turboPlanDetailVO.planId = planId
         }
         return turboPlanDetailVO
