@@ -348,7 +348,17 @@ class TurboRecordService @Autowired constructor(
             // 根据配置的变量值拼接url
             turboEngineConfigEntity.displayFields!!.forEach {
                 // 显示的值要看配置的枚举中是否包含，如果包含的话需要从枚举中取名字，显示名字
-                val displayFieldValue = (paramConfigMap[it.fieldKey]?.get(displayRange[it.fieldKey].toString())) ?: displayRange[it.fieldKey]
+//                val displayFieldValue = (paramConfigMap[it.fieldKey]?.get(displayRange[it.fieldKey].toString())) ?: displayRange[it.fieldKey]
+                val paramEnumMap = paramConfigMap[it.fieldKey]
+                val displayFieldValue = if (null != paramEnumMap) {
+                    logger.info("paramEnumMap: ${JsonUtil.toJson(paramEnumMap)} \n i18n key: ${turboEngineConfigEntity
+                        .engineCode}.paramConfig.${it.fieldKey}.paramEnum.${displayRange[it.fieldKey].toString()}")
+                    I18NUtil.getMessage("${turboEngineConfigEntity.engineCode}.paramConfig.${it.fieldKey
+                    }.paramEnum.${displayRange[it.fieldKey].toString()}") ?: displayRange[it.fieldKey]
+                } else {
+                    displayRange[it.fieldKey]
+                }
+
                 displayFields.add(
                     TurboDisplayFieldVO(
                         fieldName = I18NUtil.getMessage("displayFields.${it.fieldKey}.fieldName") ?: it.fieldName,
