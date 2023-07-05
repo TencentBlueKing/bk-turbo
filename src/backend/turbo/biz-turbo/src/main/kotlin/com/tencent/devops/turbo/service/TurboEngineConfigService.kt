@@ -8,6 +8,7 @@ import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.common.util.enums.ConfigParamType
 import com.tencent.devops.turbo.dao.mongotemplate.TurboEngineConfigDao
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
+import com.tencent.devops.turbo.enums.EnumEngineType
 import com.tencent.devops.turbo.job.TBSCreateDataJob
 import com.tencent.devops.turbo.job.TBSUpdateDataJob
 import com.tencent.devops.turbo.model.TTurboEngineConfigEntity
@@ -533,6 +534,37 @@ class TurboEngineConfigService @Autowired constructor(
     }
 
     /**
+     * 手动翻译Html文本
+     */
+    private fun translateEngineUserManual(engineCode: String, userManual: String): String {
+        return when(engineCode) {
+            EnumEngineType.DISTTASK_CC.getEngineCode() ->
+                userManual.replaceFirst(Regex("<h4>(.*?)</h4>"), "<h4>${I18NUtil.getMessage("$engineCode.userManual.0")}</h4>")
+                    .replaceFirst(Regex("<h5>方式一：</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.1")}</h5>")
+                    .replaceFirst(Regex("tip-word\">(.*?)<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.2")}<a")
+                    .replace(Regex("target=\"__blank\">(.*?)</a>"), "target=\"__blank\">${I18NUtil.getMessage("$engineCode.userManual.3")}</a>")
+                    .replaceFirst(Regex("<h5>方式二：</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.4")}</h5>")
+                    .replaceFirst(Regex("tip-word\">在私人构建机上.*<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.5")}<a")
+
+            EnumEngineType.DISTTASK_UE4.getEngineCode() ->
+                userManual.replaceFirst(Regex("<h4>(.*?)\n<span"), "<h4>${I18NUtil.getMessage("$engineCode.userManual.0")}\n<span")
+                    .replaceFirst(Regex("target=\"__blank\">(.*?)</a>"), "target=\"__blank\">${I18NUtil.getMessage("$engineCode.userManual.1")}<a")
+
+            EnumEngineType.DISTTCC.getEngineCode() ->
+                userManual.replaceFirst(Regex("<h4>(.*?)</h4>"), "<h4>${I18NUtil.getMessage("$engineCode.userManual.0")}</h4>")
+                    .replaceFirst(Regex("<h5>方式一</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.1")}</h5>")
+                    .replaceFirst(Regex("tip-word\">如果你的项目.*<code"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.2")}<code")
+                    .replaceFirst(Regex("</code>(.*?)</span>"), "</code>${I18NUtil.getMessage("$engineCode.userManual.3")}</span>")
+                    .replaceFirst(Regex("<h5>方式二</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.4")}</h5>")
+                    .replaceFirst(Regex("tip-word\">在流水线中.*<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.5")}<a")
+                    .replace(Regex("target=\"__blank\">(.*?)</a>"), "target=\"__blank\">${I18NUtil.getMessage("$engineCode.userManual.6")}</a>")
+                    .replaceFirst(Regex("<h5>方式三</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.7")}</h5>")
+                    .replaceFirst(Regex("tip-word\">在私人构建机上.*<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.8")}<a")
+            else -> userManual
+        }
+    }
+
+    /**
      * 获取编译加速模式清单
      */
     fun getEngineConfigList(projectId: String): List<TurboEngineConfigVO> {
@@ -543,7 +575,7 @@ class TurboEngineConfigService @Autowired constructor(
                 engineCode = it.engineCode,
                 engineName = I18NUtil.getMessage("${it.engineCode}.engineName") ?: it.engineName,
                 priorityNum = it.priorityNum,
-                userManual = it.userManual,
+                userManual = translateEngineUserManual(it.engineCode, it.userManual ?: ""),
                 desc = I18NUtil.getMessage("${it.engineCode}.desc") ?: it.desc,
                 paramConfig = it.paramConfig?.filter { param -> param.displayed }?.map { param ->
                     ParamConfigModel(
@@ -572,7 +604,7 @@ class TurboEngineConfigService @Autowired constructor(
                     )
                 },
                 recommend = it.recommend,
-                recommendReason = it.recommendReason,
+                recommendReason = I18NUtil.getMessage("${it.engineCode}.recommendReason") ?: it.recommendReason,
                 pluginTips = it.pluginTips,
                 updatedBy = it.updatedBy,
                 updatedDate = it.updatedDate
