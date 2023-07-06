@@ -10,6 +10,7 @@
 package client
 
 import (
+	"context"
 	"net"
 	"runtime/debug"
 	"strings"
@@ -22,6 +23,13 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
+// NewCommonRemoteWorkerWithSlot get a new remote worker SDK with specifiled size of slot
+func NewCommonRemoteWorkerWithSlot(ctx context.Context, size int64) dcSDK.RemoteWorker {
+	return &RemoteWorker{
+		slot: newSlot(ctx, size),
+	}
+}
+
 // NewCommonRemoteWorker get a new remote worker SDK
 func NewCommonRemoteWorker() dcSDK.RemoteWorker {
 	return &RemoteWorker{}
@@ -31,6 +39,7 @@ func NewCommonRemoteWorker() dcSDK.RemoteWorker {
 // 但最终的连接池都是用的同一个
 // TODO: 统一管理连接池
 type RemoteWorker struct {
+	slot *slot
 }
 
 // Handler get a remote handler
@@ -57,6 +66,7 @@ func (rw *RemoteWorker) Handler(
 		recordStats:        stats,
 		updateJobStatsFunc: updateJobStatsFunc,
 		ioTimeout:          ioTimeout,
+		slot:               rw.slot,
 	}
 }
 
@@ -67,6 +77,7 @@ type CommonRemoteHandler struct {
 	recordStats        *dcSDK.ControllerJobStats
 	updateJobStatsFunc func()
 	ioTimeout          int
+	slot               *slot
 }
 
 func getRealServer(server string) string {
@@ -350,7 +361,9 @@ func EncodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 func (r *CommonRemoteHandler) ExecuteSendFile(
 	server *dcProtocol.Host,
 	req *dcSDK.BKDistFileSender,
-	sandbox *syscall.Sandbox) (*dcSDK.BKSendFileResult, error) {
+	sandbox *syscall.Sandbox,
+	mgr dcSDK.LockMgr) (*dcSDK.BKSendFileResult, error) {
+
 	// record the exit status.
 	defer func() {
 		r.updateJobStatsFunc()
@@ -369,6 +382,64 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		}, nil
 	}
 
+	// 加内存锁
+	var totalsize int64
+	memorylocked := false
+	if r.slot != nil {
+		for _, v := range req.Files {
+			totalsize += v.FileSize
+		}
+		if r.slot.Lock(totalsize) {
+			memorylocked = true
+			blog.Debugf("remotehandle: succeed to get one memory lock")
+		}
+	}
+
+	var err error
+	messages := req.Messages
+	if messages == nil {
+		// 加本地资源锁
+		locallocked := false
+		if mgr != nil {
+			if mgr.LockSlots(dcSDK.JobUsageLocalExe, 1) {
+				locallocked = true
+				blog.Debugf("remotehandle: succeed to get one local lock")
+			}
+		}
+		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
+		messages, err = encodeSendFileReq(req, sandbox)
+		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
+
+		if locallocked {
+			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
+			blog.Debugf("remotehandle: succeed to release one local lock")
+		}
+
+		if err != nil {
+			blog.Warnf("error: %v", err)
+
+			if memorylocked {
+				r.slot.Unlock(totalsize)
+				blog.Debugf("remotehandle: succeed to release one memory lock")
+			}
+
+			return nil, err
+		}
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	blog.Debugf("success pack-up to server %s", server)
+
+	blog.Debugf("remote: finished encode request for send cork %d files with size:%d to server %s",
+		len(req.Files), totalsize, server.Server)
+
+	// send request
+	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonStartTime)
+	// record the send starting status, sending should be waiting for a while.
+	r.updateJobStatsFunc()
+
+	// ready to send now
 	t := time.Now().Local()
 	client := NewTCPClient(r.ioTimeout)
 	if err := client.Connect(getRealServer(server.Server)); err != nil {
@@ -384,32 +455,28 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	}()
 
 	blog.Debugf("success connect to server %s", server)
-	var err error
-	messages := req.Messages
-	if messages == nil {
-		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
-		messages, err = encodeSendFileReq(req, sandbox)
-		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
-		if err != nil {
-			blog.Warnf("error: %v", err)
-			return nil, err
-		}
-	}
 
-	debug.FreeOSMemory() // free memory anyway
-
-	blog.Debugf("success pack-up to server %s", server)
-	// send request
-	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonStartTime)
-	// record the send starting status, sending should be waiting for a while.
-	r.updateJobStatsFunc()
 	err = sendMessages(client, messages)
 	if err != nil {
 		blog.Warnf("error: %v", err)
+
+		if memorylocked {
+			r.slot.Unlock(totalsize)
+			blog.Debugf("remotehandle: succeed to release one memory lock")
+		}
+
 		return nil, err
 	}
 
+	blog.Debugf("remote: finished send request for send cork %d files with size:%d to server %s",
+		len(req.Files), totalsize, server.Server)
+
 	debug.FreeOSMemory() // free memory anyway
+
+	if memorylocked {
+		r.slot.Unlock(totalsize)
+		blog.Debugf("remotehandle: succeed to release one memory lock")
+	}
 
 	blog.Debugf("success sent to server %s", server)
 	// receive result
@@ -426,6 +493,9 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		blog.Warnf("error: %v", err)
 		return nil, err
 	}
+
+	blog.Debugf("remote: finished receive request for send cork %d files with size:%d to server %s",
+		len(req.Files), totalsize, server.Server)
 
 	blog.Debugf("send file task done *")
 

@@ -97,8 +97,11 @@ const (
 	FlagAutoResourceMgr      = "auto_resource_mgr"
 	FlagResIdleSecsForFree   = "res_idle_secs_for_free"
 	FlagSendCork             = "send_cork"
+	FlagSendFileMemoryLimit  = "send_file_memory_limit"
 	FlagNetErrorLimit        = "net_error_limit"
 	FlagRemoteRetryTimes     = "remote_retry_times"
+	FlagEnableLink           = "enable_link"
+	FlagEnableLib            = "enable_lib"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -408,6 +411,10 @@ var (
 			Name:  "send_cork",
 			Usage: "send files like tcp cork",
 		},
+		commandCli.Int64Flag{
+			Name:  "send_file_memory_limit",
+			Usage: "set send file memory limit",
+		},
 		commandCli.IntFlag{
 			Name:  "net_error_limit",
 			Usage: "disable a remote worker which's continuous net errors reach this limit",
@@ -415,6 +422,14 @@ var (
 		commandCli.IntFlag{
 			Name:  "remote_retry_times",
 			Usage: "retry a remote failed task for serveral times before degrad it to local",
+		},
+		commandCli.BoolFlag{
+			Name:  "enable_link",
+			Usage: "enable remote link.exe",
+		},
+		commandCli.BoolFlag{
+			Name:  "enable_lib",
+			Usage: "enable remote lib.exe",
 		},
 	}
 )

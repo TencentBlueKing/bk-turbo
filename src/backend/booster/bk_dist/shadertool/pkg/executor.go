@@ -21,6 +21,7 @@ import (
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/websocket"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -37,6 +38,9 @@ type Executor struct {
 	errormsg  []byte
 
 	counter count32
+
+	// whether use web socket
+	usewebsocket bool
 }
 
 // NewExecutor return new Executor
@@ -75,8 +79,18 @@ func (d *Executor) Run(fullargs []string, workdir string) (int, string, error) {
 func (d *Executor) runWork(fullargs []string, workdir string) (int, string, error) {
 	// d.initStats()
 
+	// TODO : add controller parameter to decide whether use websocket
 	// ignore argv[0], it's itself
-	retcode, retmsg, r, err := d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir)
+	var retcode int
+	var retmsg string
+	var r *dcSDK.LocalTaskResult
+	var err error
+	if d.usewebsocket {
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir)
+	} else {
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir)
+	}
+
 	if err != nil || retcode != 0 {
 		if r != nil {
 			blog.Errorf("shaderexecutor: execute failed, error: %v, ret code: %d,retmsg:%s,outmsg:%s,errmsg:%s,cmd:%v",
@@ -148,4 +162,9 @@ func (d *Executor) getStats(fullargs []string) *dcSDK.ControllerJobStats {
 	}
 
 	return &stats
+}
+
+func closeConnections() {
+	blog.Infof("shaderexecutor: ready close tcp connections")
+	websocket.DestroyGlobalSessionPool()
 }

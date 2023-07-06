@@ -11,12 +11,4 @@ package link
 
 const (
 	defaultCompiler = "link.exe"
-
-	// envNoRewriteCross = "NO_REWRITE_CROSS"
-	// envSaveTempFile   = "SAVE_TEMPS"
-
-	// // TODO: consider to make this settable or auto set on different platform
-	// gnuHost = "x86_64-pc-linux-gnu"
-
-	// pchPreProcessOption = "-fpch-preprocess"
 )

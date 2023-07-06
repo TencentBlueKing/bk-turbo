@@ -11,6 +11,7 @@ package lib
 
 import (
 	"fmt"
+	"path/filepath"
 
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -150,12 +151,21 @@ func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		return nil, err
 	}
 
+	if responseFile != "" && !filepath.IsAbs(responseFile) {
+		responseFile, _ = filepath.Abs(filepath.Join(l.sandbox.Dir, responseFile))
+	}
+
 	l.responseFile = responseFile
 	l.ensuredArgs = args
 
 	if err = l.scan(args); err != nil {
 		blog.Errorf("lib: scan args[%v] failed : %v", args, err)
 		return nil, err
+	}
+
+	// add response file as input
+	if responseFile != "" {
+		l.inputFile = append(l.inputFile, responseFile)
 	}
 
 	inputFiles := make([]dcSDK.FileDesc, 0, 0)
@@ -169,30 +179,36 @@ func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 		// generate the input files for pre-process file
 		inputFiles = append(inputFiles, dcSDK.FileDesc{
-			FilePath:       v,
-			Compresstype:   protocol.CompressLZ4,
-			FileSize:       fileSize,
-			Lastmodifytime: modifyTime,
-			Md5:            "",
-			Filemode:       fileMode,
+			FilePath:           v,
+			Compresstype:       protocol.CompressLZ4,
+			FileSize:           fileSize,
+			Lastmodifytime:     modifyTime,
+			Md5:                "",
+			Filemode:           fileMode,
+			Targetrelativepath: filepath.Dir(v),
+			NoDuplicated:       true,
 		})
 	}
 
 	blog.Infof("lib: success done pre execute for: %v", command)
 
 	// to check whether need to compile with response file
-	exeName := l.scannedArgs[0]
-	params := l.scannedArgs[1:]
+	// exeName := l.scannedArgs[0]
+	// params := l.scannedArgs[1:]
+
+	exeName := command[0]
+	params := command[1:]
 
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
-				WorkDir:     "",
-				ExePath:     "",
-				ExeName:     exeName,
-				Params:      params,
-				Inputfiles:  inputFiles,
-				ResultFiles: l.outputFile,
+				WorkDir:         l.sandbox.Dir,
+				ExePath:         "",
+				ExeName:         exeName,
+				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
+				Params:          params,
+				Inputfiles:      inputFiles,
+				ResultFiles:     l.outputFile,
 			},
 		},
 		CustomSave: true,
@@ -232,7 +248,7 @@ func (l *TaskLib) scan(args []string) error {
 
 	var err error
 
-	scannedData, err := scanArgs(args)
+	scannedData, err := scanArgs(args, l.sandbox.Dir)
 	if err != nil {
 		blog.Errorf("lib: scan args failed %v: %v", args, err)
 		return err

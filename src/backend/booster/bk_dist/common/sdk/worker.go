@@ -17,12 +17,21 @@ type RemoteWorker interface {
 		sandbox *syscall.Sandbox) RemoteWorkerHandler
 }
 
+// LockMgr to support lock
+type LockMgr interface {
+	// lock local slot
+	LockSlots(usage JobUsage, weight int32) bool
+
+	// unlock local slot
+	UnlockSlots(usage JobUsage, weight int32)
+}
+
 // RemoteWorkerHandler describe the remote worker handler SDK
 type RemoteWorkerHandler interface {
 	ExecuteSyncTime(server string) (int64, error)
 	ExecuteTask(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
 	ExecuteTaskWithoutSaveFile(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
-	ExecuteSendFile(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) (*BKSendFileResult, error)
+	ExecuteSendFile(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox, mgr LockMgr) (*BKSendFileResult, error)
 	ExecuteCheckCache(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) ([]bool, error)
 }
 

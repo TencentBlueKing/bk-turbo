@@ -11,19 +11,25 @@ package link
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
 	// do not distribute if over this
 	MaxInputFileSize = 1024 * 1024 * 50
+
+	appendEnvKey = "LIB="
 )
 
 var (
@@ -169,67 +175,174 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		}
 	}
 
+	if responseFile != "" && !filepath.IsAbs(responseFile) {
+		responseFile, _ = filepath.Abs(filepath.Join(l.sandbox.Dir, responseFile))
+	}
+
 	l.responseFile = responseFile
 	l.ensuredArgs = args
 
 	if err = l.scan(args); err != nil {
-		blog.Errorf("link: scan args[%v] failed : %v", args, err)
+		blog.Warnf("link: scan command[%v] with error : %v", command, err)
 		return nil, err
+	}
+
+	// add response file as input
+	if responseFile != "" {
+		l.inputFile = append(l.inputFile, responseFile)
 	}
 
 	inputFiles := make([]dcSDK.FileDesc, 0, 0)
 	for _, v := range l.inputFile {
 		existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
 		if !existed {
-			err := fmt.Errorf("input pre file %s not existed", v)
+			err := fmt.Errorf("input file %s not existed", v)
 			blog.Errorf("%v", err)
 			return nil, err
 		}
 
 		// generate the input files for pre-process file
 		inputFiles = append(inputFiles, dcSDK.FileDesc{
-			FilePath:       v,
-			Compresstype:   protocol.CompressLZ4,
-			FileSize:       fileSize,
-			Lastmodifytime: modifyTime,
-			Md5:            "",
-			Filemode:       fileMode,
+			FilePath:           v,
+			Compresstype:       protocol.CompressLZ4,
+			FileSize:           fileSize,
+			Lastmodifytime:     modifyTime,
+			Md5:                "",
+			Filemode:           fileMode,
+			Targetrelativepath: filepath.Dir(v),
+			NoDuplicated:       true,
 		})
 	}
 
-	blog.Infof("link: success done pre execute for: %v", command)
+	// ++ search additional exe files
+	searchpath := l.sandbox.Env.GetOriginEnv("Path")
+	mtpath, err := dcUtil.LookPath("mt", searchpath, "exe")
+	if err == nil {
+		addDir := filepath.Dir(mtpath)
 
-	// ++ for debug
-	var totalinputsize int64
-	for _, v := range inputFiles {
-		totalinputsize += v.FileSize
-	}
-	blog.Infof("link: [%d] input files, total size[%d]", len(inputFiles), totalinputsize)
+		tempInputs := make([]string, 0, 4)
+		tempInputs = append(tempInputs, mtpath)
+		tempInputs = append(tempInputs, filepath.Join(addDir, "midlrtmd.dll"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "rc.exe"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "rcdll.dll"))
+		blog.Debugf("link: found additional files:%v", tempInputs)
 
-	if totalinputsize > MaxInputFileSize {
-		err := fmt.Errorf("input files total size %d over max size %d", totalinputsize, MaxInputFileSize)
-		blog.Errorf("link: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		for _, v := range tempInputs {
+			existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
+			if !existed {
+				err := fmt.Errorf("input tool file %s not existed", v)
+				blog.Errorf("%v", err)
+				// return nil, err
+				continue
+			}
+
+			// generate the input files for pre-process file
+			inputFiles = append(inputFiles, dcSDK.FileDesc{
+				FilePath:           v,
+				Compresstype:       protocol.CompressLZ4,
+				FileSize:           fileSize,
+				Lastmodifytime:     modifyTime,
+				Md5:                "",
+				Filemode:           fileMode,
+				Targetrelativepath: "C:\\Windows\\System32",
+				NoDuplicated:       true,
+			})
+		}
+	} else {
+		blog.Infof("link: not found mt.exe at path:%s", searchpath)
 	}
 	// --
 
-	// to check whether need to compile with response file
-	exeName := l.scannedArgs[0]
-	params := l.scannedArgs[1:]
+	blog.Debugf("link: success done pre execute for: %v", command)
 
-	return &dcSDK.BKDistCommand{
+	// // ++ for debug
+	// var totalinputsize int64
+	// for _, v := range inputFiles {
+	// 	totalinputsize += v.FileSize
+	// }
+	// blog.Infof("link: [%d] input files, total size[%d]", len(inputFiles), totalinputsize)
+
+	// set env which need append to remote
+	envs := []string{}
+	envlibpath := ""
+	for _, v := range l.sandbox.Env.Source() {
+		if strings.HasPrefix(v, appendEnvKey) {
+			envlibpath = v
+			envs = append(envs, v)
+			// set flag we hope append env, not overwrite
+			flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(env.KeyRemoteEnvAppend))
+			envs = append(envs, flag)
+			break
+		}
+	}
+	blog.Debugf("link: env which ready sent to remote:[%v]", envs)
+
+	if envlibpath != "" {
+		fields1 := strings.Split(envlibpath, "=")
+		if len(fields1) > 1 {
+			fields2 := strings.Split(fields1[1], ";")
+			if len(fields2) > 0 {
+				files, _ := getAllLibFiles(fields2, []string{".lib", ".Lib"})
+				if len(files) > 0 {
+					blog.Debugf("link: ready add addittional lib files:%v", files)
+					for _, v := range files {
+						existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
+						if !existed {
+							err := fmt.Errorf("input lib file %s not existed", v)
+							blog.Errorf("%v", err)
+							continue
+						}
+
+						// generate the input files for pre-process file
+						inputFiles = append(inputFiles, dcSDK.FileDesc{
+							FilePath:           v,
+							Compresstype:       protocol.CompressLZ4,
+							FileSize:           fileSize,
+							Lastmodifytime:     modifyTime,
+							Md5:                "",
+							Filemode:           fileMode,
+							Targetrelativepath: filepath.Dir(v),
+							NoDuplicated:       true,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// if totalinputsize > MaxInputFileSize {
+	// 	err := fmt.Errorf("input files total size %d over max size %d", totalinputsize, MaxInputFileSize)
+	// 	blog.Errorf("link: pre execute ensure compiler failed %v: %v", args, err)
+	// 	return nil, err
+	// }
+	// --
+
+	// to check whether need to compile with response file
+	// exeName := l.scannedArgs[0]
+	// params := l.scannedArgs[1:]
+
+	exeName := command[0]
+	params := command[1:]
+
+	req := dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
-				WorkDir:     "",
-				ExePath:     "",
-				ExeName:     exeName,
-				Params:      params,
-				Inputfiles:  inputFiles,
-				ResultFiles: l.outputFile,
+				WorkDir:         l.sandbox.Dir,
+				ExePath:         "",
+				ExeName:         exeName,
+				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
+				Params:          params,
+				Inputfiles:      inputFiles,
+				ResultFiles:     l.outputFile,
+				Env:             envs,
 			},
 		},
 		CustomSave: true,
-	}, nil
+	}
+
+	blog.Debugf("link: after pre,full command[%v]", req)
+
+	return &req, nil
 }
 
 func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
@@ -261,13 +374,13 @@ func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
 }
 
 func (l *TaskLink) scan(args []string) error {
-	blog.Infof("link: scan begin got args: %v", args)
+	blog.Debugf("link: scan begin got args: %v", args)
 
 	var err error
 
-	scannedData, err := scanArgs(args)
+	scannedData, err := scanArgs(args, l.sandbox.Dir)
 	if err != nil {
-		blog.Errorf("link: scan args failed %v: %v", args, err)
+		// blog.Warnf("link: scan args failed %v: %v", args, err)
 		return err
 	}
 
@@ -275,6 +388,6 @@ func (l *TaskLink) scan(args []string) error {
 	l.inputFile = scannedData.inputFile
 	l.outputFile = scannedData.outputFile
 
-	blog.Infof("link: scan success for enter args: %v", args)
+	blog.Debugf("link: scan success for enter args: %v", args)
 	return nil
 }

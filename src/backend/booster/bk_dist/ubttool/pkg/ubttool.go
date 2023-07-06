@@ -98,6 +98,9 @@ type UBTTool struct {
 	// settings
 	projectSettingFile string
 	settings           *shaderToolComm.ApplyParameters
+
+	// whether use web socket
+	usewebsocket bool
 }
 
 // Run run the tool
@@ -124,6 +127,7 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 		blog.Errorf("UBTTool: ensure controller failed: %v", ErrorInvalidWorkID)
 		return 1, ErrorInvalidWorkID
 	}
+	h.executor.usewebsocket = h.usewebsocket
 
 	// run actions now
 	err = h.runActions()
@@ -419,18 +423,21 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 	retmsg := ""
 	waitsecs := 5
 	var err error
-	for try := 0; try < 6; try++ {
+	for try := 0; try < 3; try++ {
 		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("UBTTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
 			if retcode == int(api.ServerErrWorkNotFound) {
 				h.dealWorkNotFound(retcode, retmsg)
+				continue
+			} else {
+				break
 			}
 
-			time.Sleep(time.Duration(waitsecs) * time.Second)
-			waitsecs = waitsecs * 2
-			continue
+			// time.Sleep(time.Duration(waitsecs) * time.Second)
+			// waitsecs = waitsecs * 2
+			// continue
 		}
 
 		if err != nil {
@@ -575,6 +582,8 @@ func (h *UBTTool) initsettings() error {
 
 		if k == "BK_DIST_LOG_LEVEL" {
 			common.SetLogLevel(v)
+		} else if k == "BK_DIST_USE_WEBSOCKET" {
+			h.usewebsocket = true
 		}
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")

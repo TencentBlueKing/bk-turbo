@@ -37,7 +37,8 @@ const (
 	KeyExecutorSkipLocalRetry          = "SKIP_LOCAL_RETRY"
 	KeyExecutorIOTimeout               = "IO_TIMEOUT"
 	KeyExecutorToolchainPathMap        = "TOOLCHAIN_PATH_MAP"
-	KeyExecutorSupportLink             = "SUPPORT_LINK"
+	KeyExecutorEnableLib               = "ENABLE_LIB"
+	KeyExecutorEnableLink              = "ENABLE_LINK"
 	KeyExecutorSupportDirectives       = "SUPPORT_DIRECTIVES"
 	KeyExecutorPump                    = "PUMP"
 	KeyExecutorPumpDisableMacro        = "PUMP_DISABLE_MACRO"
@@ -59,6 +60,7 @@ const (
 	KeyExecutorWriteMemory             = "WRITE_MEMORY"
 	KeyExecutorIdleKeepSecs            = "IDLE_KEEP_SECS"
 	KeyExecutorTotalActionNum          = "TOTAL_ACTION_NUM"
+	KeyExecutorUseWebSocket            = "USE_WEBSOCKET"
 
 	KeyUserDefinedLogLevel         = "USER_DEFINED_LOG_LEVEL"
 	KeyUserDefinedExecutorLogLevel = "USER_DEFINED_EXECUTOR_LOG_LEVEL"

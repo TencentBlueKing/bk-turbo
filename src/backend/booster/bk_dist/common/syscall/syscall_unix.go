@@ -192,8 +192,8 @@ func (s *Sandbox) ExecCommand(name string, arg ...string) (int, error) {
 		//return -1, err
 	}
 
-	blog.Infof("syscall: cmd of [%+v] start", *cmd)
-	defer blog.Infof("syscall: cmd of [%+v] finished", *cmd)
+	blog.Debugf("syscall: cmd of [%+v] start", *cmd)
+	defer blog.Debugf("syscall: cmd of [%+v] finished", *cmd)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -308,4 +308,19 @@ func AddPath2Env(p string) {
 	path := os.Getenv("PATH")
 	newpath := fmt.Sprintf("%s:%s", p, path)
 	os.Setenv("PATH", newpath)
+}
+
+func RedirectStderror(f string) error {
+	file, err := os.OpenFile(f, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	if err = syscall.Dup2(int(file.Fd()), int(os.Stderr.Fd())); err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	return nil
 }

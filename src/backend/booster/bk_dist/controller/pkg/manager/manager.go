@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/analyser"
@@ -30,6 +31,17 @@ import (
 
 // NewMgr get a new Work Manager
 func NewMgr(conf *config.ServerConfig) types.Mgr {
+
+	// ++ 不方便传参数，先通过环境变量控制分布式链接
+	if conf.EnableLink {
+		env.SetEnv(env.KeyExecutorEnableLink, "true")
+	}
+
+	if conf.EnableLib {
+		env.SetEnv(env.KeyExecutorEnableLib, "true")
+	}
+	// --
+
 	return &mgr{
 		conf:              conf,
 		worksPool:         newWorksPool(conf),
