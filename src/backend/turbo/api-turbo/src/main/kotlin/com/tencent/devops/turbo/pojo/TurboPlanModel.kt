@@ -30,7 +30,7 @@ data class TurboPlanModel(
     val planName: String?,
     @ApiModelProperty("蓝盾模板代码")
     @get:NotBlank(
-        message = "请先选择加速模式！",
+        message = "{bizError.engineCodeNotBlank}",
         groups = [
             TurboPlanGroup.Create::class,
             TurboPlanGroup.UpdateWhiteList::class,
