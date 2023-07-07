@@ -3,7 +3,6 @@ package com.tencent.devops.turbo.controller
 import com.tencent.devops.api.pojo.Response
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
-import com.tencent.devops.common.util.constants.NO_ADMIN_MEMBER_MESSAGE
 import com.tencent.devops.turbo.api.IUserTurboDaySummaryController
 import com.tencent.devops.turbo.service.TurboAuthService
 import com.tencent.devops.turbo.service.TurboSummaryService
@@ -23,7 +22,7 @@ class UserTurboDaySummaryController @Autowired constructor(
     override fun getOverviewStatRowData(projectId: String, user: String): Response<TurboOverviewStatRowVO> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = "")
         }
         return Response.success(turboSummaryService.getOverviewStatRowData(projectId))
     }
@@ -38,7 +37,7 @@ class UserTurboDaySummaryController @Autowired constructor(
     ): Response<List<TurboOverviewTrendVO>> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = "")
         }
         return Response.success(turboSummaryService.getTimeConsumingTrendData(dateType, projectId))
     }
@@ -53,7 +52,7 @@ class UserTurboDaySummaryController @Autowired constructor(
     ): Response<List<TurboOverviewTrendVO>> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = "")
         }
         return Response.success(turboSummaryService.getCompileNumberTrendData(dateType, projectId))
     }
