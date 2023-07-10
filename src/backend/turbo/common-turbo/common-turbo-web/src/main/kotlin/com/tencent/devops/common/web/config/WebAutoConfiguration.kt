@@ -13,6 +13,8 @@ import org.springframework.context.annotation.Primary
 import org.springframework.context.support.ResourceBundleMessageSource
 import org.springframework.http.converter.HttpMessageConverter
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter
+import org.springframework.validation.Validator
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 import java.nio.charset.StandardCharsets
@@ -52,5 +54,17 @@ class WebAutoConfiguration : WebMvcConfigurer {
 
     override fun addInterceptors(registry: InterceptorRegistry) {
         registry.addInterceptor(LocaleInterceptor())
+    }
+
+    /**
+     * 配置Spring Boot Validation框架和Spring Boot自身使用同样的国际化配置
+     */
+    @Bean
+    override fun getValidator(): Validator {
+        val bean = LocalValidatorFactoryBean()
+        // 仅兼容Spring Boot spring.messages和原hibernate-validator的国际化文件
+        // 不支持resource/ValidationMessages.properties系列
+        bean.setValidationMessageSource(this.messageSource())
+        return bean
     }
 }

@@ -305,16 +305,16 @@ class TurboEngineConfigService @Autowired constructor(
             with(turboEnginConfigEntity) {
                 TurboEngineConfigVO(
                     engineCode = engineCode,
-                    engineName = engineName,
+                    engineName = I18NUtil.getMessage("$engineCode.engineName") ?: engineName,
                     priorityNum = priorityNum,
-                    desc = desc,
+                    desc = I18NUtil.getMessage("$engineCode.desc") ?: desc,
                     spelExpression = spelExpression,
                     spelParamMap = spelParamMap,
                     enabled = enabled,
-                    userManual = userManual,
+                    userManual = translateEngineUserManual(engineCode, userManual ?: ""),
                     docUrl = docUrl,
                     recommend = recommend,
-                    recommendReason = recommendReason,
+                    recommendReason = I18NUtil.getMessage("$engineCode.recommendReason") ?: recommendReason,
                     pluginTips = pluginTips,
                     paramConfig = paramConfig?.map {
                         ParamConfigModel(
