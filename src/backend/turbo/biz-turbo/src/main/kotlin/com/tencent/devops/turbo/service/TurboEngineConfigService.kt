@@ -305,16 +305,16 @@ class TurboEngineConfigService @Autowired constructor(
             with(turboEnginConfigEntity) {
                 TurboEngineConfigVO(
                     engineCode = engineCode,
-                    engineName = I18NUtil.getMessage("$engineCode.engineName") ?: engineName,
+                    engineName = I18NUtil.getMessage("$engineCode.engineName"),
                     priorityNum = priorityNum,
-                    desc = I18NUtil.getMessage("$engineCode.desc") ?: desc,
+                    desc = I18NUtil.getMessage("$engineCode.desc"),
                     spelExpression = spelExpression,
                     spelParamMap = spelParamMap,
                     enabled = enabled,
                     userManual = translateEngineUserManual(engineCode, userManual ?: ""),
                     docUrl = docUrl,
                     recommend = recommend,
-                    recommendReason = I18NUtil.getMessage("$engineCode.recommendReason") ?: recommendReason,
+                    recommendReason = I18NUtil.getMessage("$engineCode.recommendReason"),
                     pluginTips = pluginTips,
                     paramConfig = paramConfig?.map {
                         ParamConfigModel(
@@ -573,15 +573,14 @@ class TurboEngineConfigService @Autowired constructor(
         return turboEngineConfigList.map {
             TurboEngineConfigVO(
                 engineCode = it.engineCode,
-                engineName = I18NUtil.getMessage("${it.engineCode}.engineName") ?: it.engineName,
+                engineName = I18NUtil.getMessage("${it.engineCode}.engineName"),
                 priorityNum = it.priorityNum,
                 userManual = translateEngineUserManual(it.engineCode, it.userManual ?: ""),
-                desc = I18NUtil.getMessage("${it.engineCode}.desc") ?: it.desc,
+                desc = I18NUtil.getMessage("${it.engineCode}.desc"),
                 paramConfig = it.paramConfig?.filter { param -> param.displayed }?.map { param ->
                     ParamConfigModel(
                         paramKey = param.paramKey,
-                        paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.paramName")
-                            ?: param.paramName,
+                        paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.paramName"),
                         paramType = param.paramType,
                         paramProps = param.paramProps,
                         paramEnum = param.paramEnum?.filter { paramEnumEntity ->
@@ -591,11 +590,11 @@ class TurboEngineConfigService @Autowired constructor(
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
                                 paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey
-                                }.paramEnum.${paramEnumEntity.paramValue}") ?: paramEnumEntity.paramName,
+                                }.paramEnum.${paramEnumEntity.paramValue}"),
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
-                        tips = param.tips,
+                        tips = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.tips"),
                         displayed = param.displayed,
                         defaultValue = param.defaultValue,
                         required = param.required,
@@ -604,7 +603,7 @@ class TurboEngineConfigService @Autowired constructor(
                     )
                 },
                 recommend = it.recommend,
-                recommendReason = I18NUtil.getMessage("${it.engineCode}.recommendReason") ?: it.recommendReason,
+                recommendReason = I18NUtil.getMessage("${it.engineCode}.recommendReason"),
                 pluginTips = it.pluginTips,
                 updatedBy = it.updatedBy,
                 updatedDate = it.updatedDate

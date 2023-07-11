@@ -24,26 +24,26 @@ class ExceptionControllerAdvice {
     @ResponseBody
     @ExceptionHandler(ClientException::class)
     fun clientExceptionHandler(clientException: ClientException): Response<Void> {
-        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_THIRDPARTY_SYSTEM_FAIL)!!)
+        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_THIRDPARTY_SYSTEM_FAIL))
     }
 
     @ResponseBody
     @ExceptionHandler(OperationException::class)
     fun operationExceptionHandler(operationException: OperationException): Response<Void> {
-        return Response.fail(TURBO_GENERAL_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_GENERAL_SYSTEM_FAIL)!!)
+        return Response.fail(TURBO_GENERAL_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_GENERAL_SYSTEM_FAIL))
     }
 
     @ResponseBody
     @ExceptionHandler(RemoteServiceException::class)
     fun remoteServiceExceptionHandler(remoteServiceException: RemoteServiceException): Response<Void> {
-        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_THIRDPARTY_SYSTEM_FAIL)!!)
+        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_THIRDPARTY_SYSTEM_FAIL))
     }
 
     @ResponseBody
     @ExceptionHandler(TurboException::class)
     fun turboExceptionHandler(turboException: TurboException): Response<Void> {
-        return Response.fail(turboException.errorCode.toInt(), I18NUtil.getMessage(turboException.errorCode) ?:
-            turboException.message.orEmpty())
+        return Response.fail(turboException.errorCode.toInt(), turboException.message
+            ?: I18NUtil.getMessage(turboException.errorCode))
     }
 
     @ResponseStatus(value = HttpStatus.BAD_REQUEST)
@@ -74,7 +74,7 @@ class ExceptionControllerAdvice {
     fun jsonMappingExceptionHandler(jsonMappingException: JsonMappingException): Response<Void> {
         return Response.fail(
             TURBO_PARAM_INVALID.toInt(),
-            I18NUtil.getMessage(TURBO_PARAM_INVALID)!!
+            I18NUtil.getMessage(TURBO_PARAM_INVALID)
         )
     }
 }

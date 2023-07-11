@@ -305,7 +305,10 @@ class TurboPlanService @Autowired constructor(
         } catch (e: Exception) {
             e.printStackTrace()
             logger.info("submit tbs data fail! error message: ${e.message}")
-            throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "同步数据至加速后端失败")
+            throw TurboException(
+                errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL,
+                errorMessage = I18NUtil.getMessage("syncDataFail")
+            )
         }
     }
 
@@ -363,7 +366,10 @@ class TurboPlanService @Autowired constructor(
                     jsonBody = JsonUtil.toJson(DistccRequestBody(user, tbsJsonMap))
                 )
             } catch (e: Exception) {
-                throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "同步数据至加速后端失败")
+                throw TurboException(
+                    errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL,
+                    errorMessage = I18NUtil.getMessage("syncDataFail")
+                )
             }
             return true
         }
@@ -403,7 +409,10 @@ class TurboPlanService @Autowired constructor(
                     jsonBody = JsonUtil.toJson(DistccRequestBody(user, tbsJsonMap))
                 )
             } catch (e: Exception) {
-                throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "同步数据至加速后端失败")
+                throw TurboException(
+                    errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL,
+                    errorMessage = I18NUtil.getMessage("syncDataFail")
+                )
             }
 
             return true
@@ -430,7 +439,10 @@ class TurboPlanService @Autowired constructor(
                     )
                 )
             } catch (e: Exception) {
-                throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "同步数据至加速后端失败")
+                throw TurboException(
+                    errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL,
+                    errorMessage = I18NUtil.getMessage("syncDataFail")
+                )
             }
             true
         }

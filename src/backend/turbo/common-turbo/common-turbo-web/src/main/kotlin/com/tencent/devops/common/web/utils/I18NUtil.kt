@@ -8,20 +8,20 @@ import java.util.Locale
 
 object I18NUtil {
 
-    fun getMessage(code: String): String? {
+    fun getMessage(code: String): String {
         return getMessage(code, null)
     }
 
-    fun getMessage(code: String, args: Array<Any>?): String? {
+    fun getMessage(code: String, args: Array<Any>?): String {
         return getMessage(code, args, LocaleContextHolder.getLocale())
     }
 
-    fun getMessage(code: String, args: Array<Any>?, locale: Locale): String? {
+    fun getMessage(code: String, args: Array<Any>?, locale: Locale): String {
         val  messageSource = SpringContextUtil.getBean(MessageSource::class.java)
         return try {
             messageSource.getMessage(code, args, locale)
         } catch (_: NoSuchMessageException) {
-            null
+            "i18n error"
         }
     }
 }
