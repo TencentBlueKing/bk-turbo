@@ -594,7 +594,8 @@ class TurboEngineConfigService @Autowired constructor(
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
-                        tips = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.tips"),
+                        tips = if (!param.tips.isNullOrBlank()) I18NUtil.getMessage("${it
+                            .engineCode}.paramConfig.${param.paramKey}.tips") else param.tips,
                         displayed = param.displayed,
                         defaultValue = param.defaultValue,
                         required = param.required,
