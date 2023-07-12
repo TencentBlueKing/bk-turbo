@@ -319,17 +319,20 @@ class TurboEngineConfigService @Autowired constructor(
                     paramConfig = paramConfig?.map {
                         ParamConfigModel(
                             paramKey = it.paramKey,
-                            paramName = it.paramName,
+                            paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey}.paramName"),
                             paramType = it.paramType,
                             paramProps = it.paramProps,
                             paramEnum = it.paramEnum?.map { paramEnumEntity ->
+                                val paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey
+                                }.paramEnum.${paramEnumEntity.paramValue}")
                                 ParamEnumModel(
                                     paramValue = paramEnumEntity.paramValue,
                                     paramName = paramEnumEntity.paramName,
                                     visualRange = paramEnumEntity.visualRange
                                 )
                             },
-                            tips = it.tips,
+                            tips = if (!it.tips.isNullOrBlank()) I18NUtil.getMessage("$engineCode.paramConfig.${it
+                                .paramKey}.tips") else it.tips,
                             displayed = it.displayed,
                             defaultValue = it.defaultValue,
                             required = it.required
@@ -587,10 +590,12 @@ class TurboEngineConfigService @Autowired constructor(
                             paramEnumEntity.visualRange.isNullOrEmpty() ||
                                 paramEnumEntity.visualRange.contains(projectId)
                         }?.map { paramEnumEntity ->
+                            // 兼容部分无需国际化的值
+                            val paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey
+                            }.paramEnum.${paramEnumEntity.paramValue}")
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
-                                paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey
-                                }.paramEnum.${paramEnumEntity.paramValue}"),
+                                paramName = if (I18NUtil.ERROR == paramName) paramEnumEntity.paramName else paramName,
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
