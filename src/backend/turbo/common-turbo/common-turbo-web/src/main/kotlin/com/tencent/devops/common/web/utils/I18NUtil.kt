@@ -8,6 +8,8 @@ import java.util.Locale
 
 object I18NUtil {
 
+    const val ERROR: String = "i18n error"
+
     fun getMessage(code: String): String {
         return getMessage(code, null)
     }
@@ -21,7 +23,7 @@ object I18NUtil {
         return try {
             messageSource.getMessage(code, args, locale)
         } catch (_: NoSuchMessageException) {
-            "i18n error"
+            ERROR
         }
     }
 }

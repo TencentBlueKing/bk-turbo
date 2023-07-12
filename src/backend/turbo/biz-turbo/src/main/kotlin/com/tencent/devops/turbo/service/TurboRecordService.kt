@@ -313,11 +313,11 @@ class TurboRecordService @Autowired constructor(
     fun getTurboRecordDisplayInfo(turboRecordEntity: TTurboRecordEntity, turboPlanEntity: TTurboPlanEntity): TurboRecordDisplayVO {
         val displayFields = mutableListOf(
             TurboDisplayFieldVO(
-                fieldName = I18NUtil.getMessage("displayFields.taskId")!!,
+                fieldName = I18NUtil.getMessage("displayFields.taskId"),
                 fieldValue = turboRecordEntity.id!!
             ),
             TurboDisplayFieldVO(
-                fieldName = I18NUtil.getMessage("displayFields.plan")!!,
+                fieldName = I18NUtil.getMessage("displayFields.plan"),
                 fieldValue = turboPlanEntity.planName,
                 link = true,
                 linkAddress = "$devopRootPath/console/turbo/${turboPlanEntity.projectId}/task/detail/${turboRecordEntity.turboPlanId!!}"
@@ -351,17 +351,17 @@ class TurboRecordService @Autowired constructor(
 //                val displayFieldValue = (paramConfigMap[it.fieldKey]?.get(displayRange[it.fieldKey].toString())) ?: displayRange[it.fieldKey]
                 val paramEnumMap = paramConfigMap[it.fieldKey]
                 val displayFieldValue = if (null != paramEnumMap) {
-                    logger.info("paramEnumMap: ${JsonUtil.toJson(paramEnumMap)} \n i18n key: ${turboEngineConfigEntity
-                        .engineCode}.paramConfig.${it.fieldKey}.paramEnum.${displayRange[it.fieldKey].toString()}")
-                    I18NUtil.getMessage("${turboEngineConfigEntity.engineCode}.paramConfig.${it.fieldKey
-                    }.paramEnum.${displayRange[it.fieldKey].toString()}") ?: displayRange[it.fieldKey]
+                    val i18nCode = "${turboEngineConfigEntity.engineCode}.paramConfig.${it.fieldKey
+                    }.paramEnum.${displayRange[it.fieldKey].toString()}"
+                    val fieldValue = I18NUtil.getMessage(i18nCode)
+                    if (I18NUtil.ERROR != fieldValue) fieldValue else  displayRange[it.fieldKey]
                 } else {
                     displayRange[it.fieldKey]
                 }
 
                 displayFields.add(
                     TurboDisplayFieldVO(
-                        fieldName = I18NUtil.getMessage("displayFields.${it.fieldKey}.fieldName") ?: it.fieldName,
+                        fieldName = I18NUtil.getMessage("displayFields.${it.fieldKey}.fieldName"),
                         fieldValue = displayFieldValue,
                         link = it.link,
                         linkAddress = if (it.link == true && !it.linkTemplate.isNullOrBlank()) {
@@ -382,7 +382,7 @@ class TurboRecordService @Autowired constructor(
         if (!turboRecordEntity.pipelineName.isNullOrBlank()) {
             displayFields.add(
                 TurboDisplayFieldVO(
-                    fieldName = I18NUtil.getMessage("displayFields.pipeline")!!,
+                    fieldName = I18NUtil.getMessage("displayFields.pipeline"),
                     fieldValue = turboRecordEntity.pipelineName,
                     link = true,
                     linkAddress = "$devopRootPath/console/pipeline/${turboPlanEntity.projectId}/${turboRecordEntity.pipelineId}/detail/${turboRecordEntity.devopsBuildId}"
