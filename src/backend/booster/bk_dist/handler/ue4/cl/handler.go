@@ -523,7 +523,7 @@ func (cl *TaskCL) Includes(responseFile string, args []string, workdir string, f
 
 	// TOOD : maybe we should pass responseFile to calc md5, to ensure unique
 	var err error
-	cl.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args)
+	cl.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
 		blog.Errorf("cl: do includes get output file failed: %v", err)
 		return nil, err
@@ -958,7 +958,7 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) error {
 		goto ERROREND
 	}
 
-	blog.Debugf("cl: output [%s] errormessage [%s]", r.Results[0].OutputMessage, r.Results[0].ErrorMessage)
+	blog.Infof("cl: output [%s] errormessage [%s]", r.Results[0].OutputMessage, r.Results[0].ErrorMessage)
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cl: success done post execute for: %v", cl.originArgs)
