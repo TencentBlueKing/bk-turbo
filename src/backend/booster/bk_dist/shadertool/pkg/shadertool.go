@@ -262,8 +262,10 @@ func (h *ShaderTool) executeShaders(ctx context.Context) error {
 			// blog.Debugf("ShaderTool: main loop tick")
 			err := h.tryExecuteActions(ctx)
 			if err != nil && err != ErrorNoActionsToRun {
-				blog.Errorf("ShaderTool: failed to execute shader actions with error:%v", err)
-				return err
+				blog.Errorf("ShaderTool: failed to execute shader actions with error:%v,exit now", err)
+				h.ReleaseResource()
+				h.commitSuicide()
+				// return err
 			}
 		}
 	}

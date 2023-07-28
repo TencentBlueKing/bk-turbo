@@ -407,7 +407,7 @@ func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, f
 
 	// TOOD : maybe we should pass responseFile to calc md5, to ensure unique
 	var err error
-	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args)
+	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
 		blog.Errorf("cc: do includes get output file failed: %v", err)
 		return nil, err
