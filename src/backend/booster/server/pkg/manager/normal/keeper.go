@@ -187,7 +187,7 @@ func (k *keeper) checkTaskBasic(taskID string, wg *sync.WaitGroup) {
 			}
 
 			// 拉起资源超时，此时若有足够的资源，则先启动任务
-			blog.Errorf("keeper: check and find task(%s) starting timeout(%s) since(%s), check if it can be running",
+			blog.Infof("keeper: check and find task(%s) starting timeout(%s) since(%s), check if it can be running",
 				tb.ID, k.conf.KeepStartingTimeout.String(), tb.Status.LaunchTime.String())
 			if task.EnoughAvailableResource() {
 				tb.Status.Ready()
