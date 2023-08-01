@@ -568,7 +568,7 @@ func (s *Session) check(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			blog.Debugf("[session] session check canceled by context")
+			blog.Infof("[session] session check canceled by context")
 			s.clean(ErrorContextCanceled)
 			return
 		case err := <-s.errorChan:
@@ -582,9 +582,9 @@ func (s *Session) check(wg *sync.WaitGroup) {
 // 清理资源，包括关闭连接，停止协程等
 // 在Run中被调用，不对外
 func (s *Session) clean(err error) {
-	blog.Debugf("[session] session clean now")
-	s.conn.Close()
+	blog.Infof("[session] session clean now")
 	s.cancel()
+	s.conn.Close()
 
 	// 通知发送队列中的任务
 	s.sendMutex.Lock()
@@ -691,6 +691,18 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32, callbac
 	return globalSessionPool
 }
 
+func DestroyGlobalSessionPool() error {
+	globalmutex.Lock()
+	defer globalmutex.Unlock()
+
+	if globalSessionPool != nil {
+		globalSessionPool.Destroy(nil)
+		globalSessionPool = nil
+	}
+
+	return nil
+}
+
 // 获取可用session
 func (sp *ClientSessionPool) GetSession() (*Session, error) {
 	blog.Debugf("[session] ready get session now")
@@ -725,7 +737,8 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 	return nil, ErrorAllConnectionInvalid
 }
 
-func (sp *ClientSessionPool) Clean(err error) error {
+func (sp *ClientSessionPool) Destroy(err error) error {
+	blog.Infof("[session] session pool destroy now")
 	sp.cancel()
 
 	sp.mutex.Lock()
@@ -745,7 +758,7 @@ func (sp *ClientSessionPool) check(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-sp.ctx.Done():
-			blog.Debugf("[session] session pool check routine canceled by context")
+			blog.Infof("[session] session pool check routine canceled by context")
 			return
 		case <-sp.checkNotifyChan:
 			blog.Debugf("[session] session check triggled")

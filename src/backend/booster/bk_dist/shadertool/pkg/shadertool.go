@@ -263,8 +263,10 @@ func (h *ShaderTool) executeShaders(ctx context.Context) error {
 			// blog.Debugf("ShaderTool: main loop tick")
 			err := h.tryExecuteActions(ctx)
 			if err != nil && err != ErrorNoActionsToRun {
-				blog.Errorf("ShaderTool: failed to execute shader actions with error:%v", err)
-				return err
+				blog.Errorf("ShaderTool: failed to execute shader actions with error:%v,exit now", err)
+				h.ReleaseResource()
+				h.commitSuicide()
+				// return err
 			}
 		}
 	}
@@ -464,18 +466,21 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 	retmsg := ""
 	waitsecs := 5
 	var err error
-	for try := 0; try < 6; try++ {
+	for try := 0; try < 3; try++ {
 		retcode, retmsg, err = h.executor.Run(fullargs, "")
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("ShaderTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
 			if retcode == int(api.ServerErrWorkNotFound) {
 				h.dealWorkNotFound(retcode, retmsg)
+				continue
+			} else {
+				break
 			}
 
-			time.Sleep(time.Duration(waitsecs) * time.Second)
-			waitsecs = waitsecs * 2
-			continue
+			// time.Sleep(time.Duration(waitsecs) * time.Second)
+			// waitsecs = waitsecs * 2
+			// continue
 		}
 
 		if err != nil {
@@ -619,6 +624,11 @@ func (h *ShaderTool) ReleaseResource() {
 	h.resourcestatus = common.ResourceInit
 	h.booster = nil
 	h.executor = nil
+
+	// close long tcp connection if need
+	if h.usewebsocket {
+		closeConnections()
+	}
 }
 
 func (h *ShaderTool) getProjectSettingFile() (string, error) {

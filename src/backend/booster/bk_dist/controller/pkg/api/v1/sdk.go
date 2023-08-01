@@ -185,12 +185,12 @@ func (s *sdk) checkServer(launchedtime int64) (int, error) {
 func (s *sdk) launchServer() error {
 	blog.Infof("sdk: ready launchServer...")
 
-	ctrlPath, err := dcUtil.CheckExecutable(dcSDK.ControllerBinary)
+	target := controllerTarget(dcSDK.ControllerBinary)
+	ctrlPath, err := dcUtil.CheckFileWithCallerPath(target)
 	if err != nil {
 		blog.Infof("sdk: not found exe file with default path, info: %v", err)
 
-		target := controllerTarget(dcSDK.ControllerBinary)
-		ctrlPath, err = dcUtil.CheckFileWithCallerPath(target)
+		ctrlPath, err = dcUtil.CheckExecutable(dcSDK.ControllerBinary)
 		if err != nil {
 			blog.Errorf("sdk: not found exe file with error: %v", err)
 			return err

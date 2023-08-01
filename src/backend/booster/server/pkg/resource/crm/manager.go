@@ -140,6 +140,32 @@ type ResourceParam struct {
 	BrokerName string `json:"broker_name"`
 }
 
+func (rp *ResourceParam) copy() ResourceParam {
+	newrp := ResourceParam{
+		City:       rp.City,
+		Platform:   rp.Platform,
+		Image:      rp.Image,
+		BrokerName: rp.BrokerName,
+		Env:        make(map[string]string),
+		Ports:      make(map[string]string),
+		Volumes:    make(map[string]op.BcsVolume),
+	}
+
+	for k, v := range rp.Env {
+		newrp.Env[k] = v
+	}
+
+	for k, v := range rp.Ports {
+		newrp.Ports[k] = v
+	}
+
+	for k, v := range rp.Volumes {
+		newrp.Volumes[k] = v
+	}
+
+	return newrp
+}
+
 const (
 	ServiceStatusStaging = op.ServiceStatusStaging
 	ServiceStatusRunning = op.ServiceStatusRunning
@@ -660,7 +686,8 @@ func (rm *resourceManager) getResources(resourceID string) (*resource, error) {
 		return nil, ErrorResourceNoExist
 	}
 
-	return copyResource(r), nil
+	// return copyResource(r), nil
+	return r.copy(), nil
 }
 
 func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceInfo, error) {
@@ -1042,9 +1069,14 @@ func (rm *resourceManager) checkBroker(broker *Broker) {
 		for i := 0; i < delta; i++ {
 			if err := broker.Launch(); err != nil {
 				switch err {
-				case ErrorBrokerNotEnoughResources, ErrorBrokeringUnderCoolingTime:
+				case ErrorBrokerNotEnoughResources:
 					blog.Errorf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
 						broker.name, broker.user, err)
+					return
+				case ErrorBrokeringUnderCoolingTime:
+					blog.Warnf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
+						broker.name, broker.user, err)
+
 					return
 				}
 				blog.Errorf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
@@ -1259,8 +1291,26 @@ func resource2Table(r *resource) *TableResource {
 	}
 }
 
-func copyResource(res *resource) *resource {
-	r := new(resource)
-	*r = *res
-	return r
+// func copyResource(res *resource) *resource {
+// 	r := new(resource)
+// 	*r = *res
+// 	return r
+// }
+
+func (r *resource) copy() *resource {
+	newr := resource{
+		resourceID:       r.resourceID,
+		user:             r.user,
+		param:            r.param.copy(),
+		resourceBlockKey: r.resourceBlockKey,
+		noReadyInstance:  r.noReadyInstance,
+		requestInstance:  r.requestInstance,
+		status:           r.status,
+		brokerResourceID: r.brokerResourceID,
+		brokerName:       r.brokerName,
+		brokerSold:       r.brokerSold,
+		initTime:         r.initTime,
+	}
+
+	return &newr
 }
