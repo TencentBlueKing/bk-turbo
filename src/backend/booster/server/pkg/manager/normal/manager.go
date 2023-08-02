@@ -464,7 +464,7 @@ func (m *manager) releaseTask(param *mgr.TaskReleaseParam) error {
 
 	tb, err := m.layer.GetTaskBasic(param.TaskID)
 	if err != nil {
-		blog.Errorf("manager: try releasing task, get task basic(%s) failed: %v",
+		blog.Warnf("manager: try releasing task, get task basic(%s) failed: %v",
 			param.TaskID, err)
 		return err
 	}
