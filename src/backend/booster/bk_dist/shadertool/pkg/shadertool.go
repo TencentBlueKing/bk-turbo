@@ -204,6 +204,7 @@ func (h *ShaderTool) launchController() error {
 		h.controllerconfig.RemoteRetryTimes = h.settings.ControllerRemoteRetryTimes
 		h.controllerconfig.EnableLink = h.settings.ControllerEnableLink
 		h.controllerconfig.EnableLib = h.settings.ControllerEnableLib
+		h.controllerconfig.LongTCP = h.settings.ControllerLongTCP
 		h.controller = v1.NewSDK(h.controllerconfig)
 	}
 

@@ -345,6 +345,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			RemoteRetryTimes:    remoteRetryTimes,
 			EnableLink:          c.Bool(FlagEnableLink),
 			EnableLib:           c.Bool(FlagEnableLib),
+			LongTCP:             c.Bool(FlagLongTCP),
 		},
 	}
 
