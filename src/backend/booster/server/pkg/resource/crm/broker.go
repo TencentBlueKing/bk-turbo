@@ -359,7 +359,7 @@ func (b *Broker) launch() error {
 		if availableInstance >= b.param.Instance {
 			return b.param.Instance, nil
 		}
-		blog.Errorf("crm broker: failed to launch resource(%s) for broker(%s) with user(%s), need (%d) instances"+
+		blog.Warnf("crm broker: failed to launch resource(%s) for broker(%s) with user(%s), need (%d) instances"+
 			", only (%d) available", brokerID, b.name, b.user, b.param.Instance, availableInstance)
 		return 0, ErrorBrokerNotEnoughResources
 	}, false)
