@@ -145,8 +145,8 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
 	if ret.Err != nil {
 		r.recordStats.RemoteWorkFatal = true
-		blog.Warnf("execute remote task with long tcp failed with error: %v", err)
-		return nil, err
+		blog.Warnf("execute remote task with long tcp failed with error: %v", ret.Err)
+		return nil, ret.Err
 	}
 	blog.Infof("execute remote task to server %s with long tcp got id:%s data length:%d",
 		server, ret.TCPHead.UniqID, ret.TCPHead.DataLen)
@@ -276,8 +276,8 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	}
 	ret := session.Send(reqdata, true)
 	if ret.Err != nil {
-		blog.Warnf("send file failed with error: %v", err)
-		return nil, err
+		blog.Warnf("send file failed with error: %v", ret.Err)
+		return nil, ret.Err
 	}
 
 	debug.FreeOSMemory() // free memory anyway
@@ -328,8 +328,8 @@ func (r *CommonRemoteHandler) ExecuteCheckCacheLongTCP(
 	}
 	ret := session.Send(reqdata, true)
 	if ret.Err != nil {
-		blog.Warnf("error: %v", err)
-		return nil, err
+		blog.Warnf("error: %v", ret.Err)
+		return nil, ret.Err
 	}
 
 	blog.Debugf("check cache success sent to server %s", server)
@@ -377,8 +377,8 @@ func (r *CommonRemoteHandler) ExecuteSyncTimeLongTCP(server string) (int64, erro
 	}
 	ret := session.Send(reqdata, true)
 	if ret.Err != nil {
-		blog.Warnf("error: %v", err)
-		return 0, err
+		blog.Warnf("error: %v", ret.Err)
+		return 0, ret.Err
 	}
 
 	// receive result

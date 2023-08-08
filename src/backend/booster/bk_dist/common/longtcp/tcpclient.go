@@ -51,7 +51,7 @@ func NewTCPClientWithConn(conn *net.TCPConn) *TCPClient {
 	// not sure whether it can imporve performance
 	err := conn.SetNoDelay(false)
 	if err != nil {
-		blog.Errorf("set no delay to false error: [%s]", err.Error())
+		blog.Errorf("[longtcp] set no delay to false error: [%s]", err.Error())
 	}
 
 	return &TCPClient{
@@ -65,7 +65,7 @@ func (c *TCPClient) Connect(server string) error {
 	// resolve server
 	resolvedserver, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
-		blog.Errorf("server [%s] resolve error: [%s]", server, err.Error())
+		blog.Errorf("[longtcp] server [%s] resolve error: [%s]", server, err.Error())
 		return err
 	}
 
@@ -73,24 +73,24 @@ func (c *TCPClient) Connect(server string) error {
 	c.conn, err = net.DialTCP("tcp", nil, resolvedserver)
 	d := time.Now().Sub(t)
 	if d > 50*time.Millisecond {
-		blog.Debugf("TCP Dail to long gt50 to server(%s): %s", resolvedserver, d.String())
+		blog.Debugf("[longtcp] TCP Dail to long gt50 to server(%s): %s", resolvedserver, d.String())
 	}
 	if d > 200*time.Millisecond {
-		blog.Debugf("TCP Dail to long gt200 to server(%s): %s", resolvedserver, d.String())
+		blog.Debugf("[longtcp] TCP Dail to long gt200 to server(%s): %s", resolvedserver, d.String())
 	}
 
 	if err != nil {
-		blog.Errorf("connect to server error: [%s]", err.Error())
+		blog.Errorf("[longtcp] connect to server error: [%s]", err.Error())
 		return err
 	}
 
-	blog.Debugf("succeed to connect to server [%s] ", server)
+	blog.Debugf("[longtcp] succeed to connect to server [%s] ", server)
 	// blog.Infof("succeed to establish connection [%s] ", c.ConnDesc())
 
 	// not sure whether it can imporve performance
 	err = c.conn.SetNoDelay(false)
 	if err != nil {
-		blog.Errorf("set no delay to false error: [%s]", err.Error())
+		blog.Errorf("[longtcp] set no delay to false error: [%s]", err.Error())
 	}
 
 	return nil
@@ -109,7 +109,7 @@ func (c *TCPClient) Closed() bool {
 		if err, ok := err.(net.Error); ok && err.Timeout() {
 			return false
 		}
-		blog.Infof("tcp connection %s closed with error:%v", c.RemoteAddr(), err)
+		blog.Infof("[longtcp] tcp connection %s closed with error:%v", c.RemoteAddr(), err)
 		return true
 	}
 	return false
@@ -131,7 +131,7 @@ func (c *TCPClient) WriteData(data []byte) error {
 	}
 
 	if err := c.setIOTimeout(c.timeout); err != nil {
-		blog.Errorf("set io timeout error: [%s]", err.Error())
+		blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", c.ConnDesc(), err.Error())
 		return err
 	}
 
@@ -140,27 +140,27 @@ func (c *TCPClient) WriteData(data []byte) error {
 	for writelen < expectlen {
 		ret, err := c.conn.Write((data)[writelen:])
 		if err != nil {
-			blog.Errorf("write token int error: [%s]", err.Error())
+			blog.Errorf("[longtcp] [%s]write token int error: [%s]", c.ConnDesc(), err.Error())
 			return err
 		}
 		writelen += ret
 	}
 
 	if expectlen < 32 {
-		blog.Debugf("send string '%s' ", string(data))
+		blog.Debugf("[longtcp] [%s] send string '%s' ", c.ConnDesc(), string(data))
 	} else {
-		blog.Debugf("send string length [%d] ", expectlen)
+		blog.Debugf("[longtcp] [%s] send string length [%d] ", c.ConnDesc(), expectlen)
 	}
 	return nil
 }
 
 // SendFile send file
 func (c *TCPClient) SendFile(infile string, compress protocol.CompressType) error {
-	blog.Debugf("ready write file [%s] with [%s]", infile, compress.String())
+	blog.Debugf("[longtcp] ready write file [%s] with [%s]", infile, compress.String())
 
 	data, err := ioutil.ReadFile(infile)
 	if err != nil {
-		blog.Debugf("failed to read file[%s]", infile)
+		blog.Debugf("[longtcp] failed to read file[%s]", infile)
 		return err
 	}
 
@@ -174,7 +174,7 @@ func (c *TCPClient) SendFile(infile string, compress protocol.CompressType) erro
 		// compress with lz4 firstly
 		outdata, _ := dcUtil.Lz4Compress(data)
 		outlen := len(outdata)
-		blog.Debugf("compressed with lz4, from [%d] to [%d]", len(data), outlen)
+		blog.Debugf("[longtcp] compressed with lz4, from [%d] to [%d]", len(data), outlen)
 
 		if err := c.WriteData(outdata); err != nil {
 			return err
@@ -189,7 +189,7 @@ func (c *TCPClient) SendFile(infile string, compress protocol.CompressType) erro
 func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
 	// do not set timeout when read
 	// if err := c.setIOTimeout(c.timeout); err != nil {
-	// 	blog.Errorf("set io timeout error: [%s]", err.Error())
+	// 	blog.Errorf("[longtcp] set io timeout error: [%s]", err.Error())
 	// 	return nil, 0, err
 	// }
 
@@ -199,20 +199,23 @@ func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
 		ret, err := c.conn.Read(data[readlen:])
 		if err != nil {
 			if err != io.EOF {
-				blog.Warnf("read [%d] data with error: [%s]", readlen, err.Error())
+				blog.Warnf("[longtcp] [%s] read [%d] data with error: [%s]", c.ConnDesc(), readlen, err.Error())
 				return nil, 0, err
 			}
 
 			readlen += ret
-			blog.Debugf("EOF when read [%d] data", readlen)
+			blog.Debugf("[longtcp] [%s] EOF when read [%d] data", c.ConnDesc(), readlen)
 			break
 		}
 
 		readlen += ret
-		// blog.Debugf("received [%d] data ", readlen)
+		// blog.Debugf("[longtcp] received [%d] data ", readlen)
 	}
 
-	blog.Debugf("finishend receive total [%d] data ", readlen)
+	blog.Debugf("[longtcp] [%s] finished receive total [%d] data ", c.ConnDesc(), readlen)
+	if readlen > 0 && readlen <= TotalLongTCPHeadLength {
+		blog.Debugf("[longtcp] [%s] received data [%s] ", c.ConnDesc(), string(data))
+	}
 
 	return data, readlen, nil
 }
@@ -221,7 +224,7 @@ func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
 func (c *TCPClient) TryReadData(expectlen int) ([]byte, int, error) {
 	// do not set timeout when read
 	// if err := c.setIOTimeout(c.timeout); err != nil {
-	// 	blog.Errorf("set io timeout error: [%s]", err.Error())
+	// 	blog.Errorf("[longtcp] set io timeout error: [%s]", err.Error())
 	// 	return nil, 0, err
 	// }
 
@@ -231,12 +234,12 @@ func (c *TCPClient) TryReadData(expectlen int) ([]byte, int, error) {
 		ret, err := c.conn.Read(data[readlen:])
 		if err != nil {
 			if err != io.EOF {
-				blog.Errorf("read error: [%s]", err.Error())
+				blog.Errorf("[longtcp] read error: [%s]", err.Error())
 				return nil, 0, err
 			}
 
 			readlen += ret
-			blog.Debugf("EOF when read [%d] data", readlen)
+			blog.Debugf("[longtcp] EOF when read [%d] data", readlen)
 			break
 		}
 
@@ -244,9 +247,9 @@ func (c *TCPClient) TryReadData(expectlen int) ([]byte, int, error) {
 	}
 
 	if readlen < 32 {
-		blog.Debugf("got string '%s'", string(data))
+		blog.Debugf("[longtcp] got string '%s'", string(data))
 	} else {
-		blog.Debugf("got string length [%d] ", readlen)
+		blog.Debugf("[longtcp] got string length [%d] ", readlen)
 	}
 	return data[0:readlen], readlen, nil
 }
@@ -255,7 +258,7 @@ func (c *TCPClient) TryReadData(expectlen int) ([]byte, int, error) {
 func (c *TCPClient) ReadUntilEOF() ([]byte, int, error) {
 	// do not set timeout when read
 	// if err := c.setIOTimeout(DEFAULTREADALLTIMEOUTSECS); err != nil {
-	// 	blog.Errorf("set io timeout error: [%s]", err.Error())
+	// 	blog.Errorf("[longtcp] set io timeout error: [%s]", err.Error())
 	// 	return nil, 0, err
 	// }
 
@@ -265,12 +268,12 @@ func (c *TCPClient) ReadUntilEOF() ([]byte, int, error) {
 		ret, err := c.conn.Read(data[readlen:])
 		if err != nil {
 			if err != io.EOF {
-				blog.Errorf("read error: [%s]", err.Error())
+				blog.Errorf("[longtcp] read error: [%s]", err.Error())
 				return nil, 0, err
 			}
 
 			readlen += ret
-			blog.Debugf("EOF when read [%d] data", readlen)
+			blog.Debugf("[longtcp] EOF when read [%d] data", readlen)
 			break
 		}
 
@@ -283,15 +286,15 @@ func (c *TCPClient) ReadUntilEOF() ([]byte, int, error) {
 	}
 
 	if readlen < 32 {
-		blog.Debugf("got string '%s'", string(data))
+		blog.Debugf("[longtcp] got string '%s'", string(data))
 	} else {
-		blog.Debugf("got string length [%d] ", readlen)
+		blog.Debugf("[longtcp] got string length [%d] ", readlen)
 	}
 	return data, readlen, nil
 }
 
 func (c *TCPClient) SendMessages(messages []protocol.Message) error {
-	blog.Debugf("send requests")
+	blog.Debugf("[longtcp] send requests")
 
 	if len(messages) == 0 {
 		return fmt.Errorf("data to send is empty")
@@ -299,7 +302,7 @@ func (c *TCPClient) SendMessages(messages []protocol.Message) error {
 
 	for _, v := range messages {
 		if v.Data == nil {
-			blog.Warnf("found nil data when ready send bk-common dist request")
+			blog.Warnf("[longtcp] found nil data when ready send bk-common dist request")
 			continue
 		}
 
@@ -322,7 +325,7 @@ func (c *TCPClient) SendMessages(messages []protocol.Message) error {
 
 // Close close conn
 func (c *TCPClient) Close() error {
-	blog.Debugf("ready close connection [%v] ", c.ConnDesc())
+	blog.Debugf("[longtcp] ready close connection [%v] ", c.ConnDesc())
 	return c.conn.Close()
 }
 

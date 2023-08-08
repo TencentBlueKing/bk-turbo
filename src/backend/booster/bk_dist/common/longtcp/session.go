@@ -12,6 +12,7 @@ package longtcp
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -111,6 +112,14 @@ type Message struct {
 	RetChan      chan *MessageResult
 }
 
+func (m *Message) Desc() string {
+	if m.TCPHead != nil {
+		return string(m.TCPHead.UniqID)
+	}
+
+	return ""
+}
+
 type autoInc struct {
 	sync.Mutex
 	id uint64
@@ -196,7 +205,7 @@ func NewSession(ip string, port int32, timeout int, handshakedata []byte, callba
 	server := fmt.Sprintf("%s:%d", ip, port)
 	client := NewTCPClient(timeout)
 	if err := client.Connect(server); err != nil {
-		blog.Warnf("error: %v", err)
+		blog.Warnf("[longtcp] error: %v", err)
 		cancel()
 		return nil
 	}
@@ -235,6 +244,14 @@ func NewSession(ip string, port int32, timeout int, handshakedata []byte, callba
 	return s
 }
 
+func (s *Session) Desc() string {
+	if s.client != nil {
+		return s.client.ConnDesc()
+	}
+
+	return ""
+}
+
 func (s *Session) sendRoutine(wg *sync.WaitGroup) {
 	wg.Done()
 	blog.Debugf("[longtcp] start server internal send...")
@@ -255,7 +272,7 @@ func (s *Session) copyMessages() []*Message {
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
-	if len(s.sendQueue) > 0 {
+	if s.sendQueue != nil && len(s.sendQueue) > 0 {
 		ret := make([]*Message, len(s.sendQueue), len(s.sendQueue))
 		copy(ret, s.sendQueue)
 		blog.Debugf("[longtcp] copied %d messages", len(ret))
@@ -271,7 +288,9 @@ func (s *Session) putWait(msg *Message) error {
 	s.waitMutex.Lock()
 	defer s.waitMutex.Unlock()
 
-	s.waitMap[msg.TCPHead.UniqID] = msg
+	if s.waitMap != nil {
+		s.waitMap[msg.TCPHead.UniqID] = msg
+	}
 
 	return nil
 }
@@ -281,7 +300,9 @@ func (s *Session) removeWait(msg *Message) error {
 	s.waitMutex.Lock()
 	defer s.waitMutex.Unlock()
 
-	delete(s.waitMap, msg.TCPHead.UniqID)
+	if s.waitMap != nil {
+		delete(s.waitMap, msg.TCPHead.UniqID)
+	}
 
 	return nil
 }
@@ -291,10 +312,12 @@ func (s *Session) returnWait(ret *MessageResult) error {
 	s.waitMutex.Lock()
 	defer s.waitMutex.Unlock()
 
-	if m, ok := s.waitMap[ret.TCPHead.UniqID]; ok {
-		m.RetChan <- ret
-		delete(s.waitMap, ret.TCPHead.UniqID)
-		return nil
+	if s.waitMap != nil {
+		if m, ok := s.waitMap[ret.TCPHead.UniqID]; ok {
+			m.RetChan <- ret
+			delete(s.waitMap, ret.TCPHead.UniqID)
+			return nil
+		}
 	}
 
 	return fmt.Errorf("not found wait message with key %s", ret.TCPHead.UniqID)
@@ -361,6 +384,7 @@ func (s *Session) onMessageError(m *Message, err error) {
 
 // 取任务并依次发送
 func (s *Session) sendReal() {
+	blog.Infof("[longtcp] session[%s] real send in...", s.Desc())
 	msgs := s.copyMessages()
 
 	for _, m := range msgs {
@@ -371,6 +395,7 @@ func (s *Session) sendReal() {
 		// encode long tcp head
 		handshakedata, err := longTCPHead2Byte(m.TCPHead)
 		if err != nil {
+			blog.Warnf("[longtcp] session[%s] head to byte failed with error:%v", s.Desc(), err)
 			s.onMessageError(m, err)
 			continue
 		}
@@ -378,18 +403,34 @@ func (s *Session) sendReal() {
 		// send long tcp head
 		err = s.client.WriteData(handshakedata)
 		if err != nil {
+			blog.Warnf("[longtcp] session[%s] send header failed with error:%v", s.Desc(), err)
 			s.onMessageError(m, err)
 			continue
 		}
 
+		blog.Infof("[longtcp] session[%s] real sent header with ID [%s] ", s.Desc(), m.Desc())
+
 		// send real data
+		sendfailed := false
 		for _, d := range m.Data {
-			err = s.client.WriteData(d)
-			if err != nil {
-				s.onMessageError(m, err)
-				continue
+			if d != nil {
+				err = s.client.WriteData(d)
+				if err != nil {
+					blog.Warnf("[longtcp] session[%s] send body failed with error:%v", s.Desc(), err)
+					s.onMessageError(m, err)
+					// continue
+					sendfailed = true
+					break
+				}
 			}
 		}
+
+		// skip to next message if failed, we should send all messages which has been copied here
+		if sendfailed {
+			continue
+		}
+
+		blog.Infof("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
 
 		if !m.WaitResponse {
 			m.RetChan <- &MessageResult{
@@ -403,31 +444,47 @@ func (s *Session) sendReal() {
 func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 	wg.Done()
 	for {
+		blog.Debugf("[longtcp] session[%s] start receive header", s.Desc())
 		// TODO : implement receive data here
 		// receive long tcp head firstly
-		data, _, err := s.client.ReadData(TotalLongTCPHeadLength)
+		data, recvlen, err := s.client.ReadData(TotalLongTCPHeadLength)
 		if err != nil {
-			blog.Warnf("[longtcp] receive data failed with error: %v", err)
+			blog.Warnf("[longtcp] session[%s] receive header failed with error: %v", s.Desc(), err)
 			s.errorChan <- err
 			return
 		}
+
+		if recvlen == 0 {
+			blog.Warnf("[longtcp] session[%s] receive header failed with error: %v", s.Desc(), io.EOF)
+			s.errorChan <- io.EOF
+			return
+		}
+
+		blog.Infof("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
 
 		head, err := byte2LongTCPHead(data)
 		if err != nil {
-			blog.Errorf("[longtcp] decode long tcp head failed with error: %v", err)
+			blog.Errorf("[longtcp] session[%s] decode long tcp head failed with error: %v", s.Desc(), err)
 			s.errorChan <- err
 			return
 		}
 
+		blog.Debugf("[longtcp] session[%s] start receive body", s.Desc())
 		// receive real data now
-		data, _, err = s.client.ReadData(int(head.DataLen))
+		data, recvlen, err = s.client.ReadData(int(head.DataLen))
 		if err != nil {
-			blog.Errorf("[longtcp] receive data failed with error: %v", err)
+			blog.Errorf("[longtcp] session[%s] receive body failed with error: %v", s.Desc(), err)
 			s.errorChan <- err
 			return
 		}
 
-		blog.Debugf("[longtcp] received %d data", len(data))
+		if recvlen == 0 {
+			blog.Warnf("[longtcp] session[%s] receive body failed with error: %v", s.Desc(), io.EOF)
+			s.errorChan <- io.EOF
+			return
+		}
+
+		blog.Debugf("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
 		// TODO : decode msg, and call funtions to deal, and return response
 		ret := &MessageResult{
 			Err:     nil,
@@ -435,24 +492,25 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 			Data:    data,
 		}
 		if ret.Err != nil {
-			blog.Errorf("[longtcp] received data is invalid with error: %v", ret.Err)
+			blog.Errorf("[longtcp] session[%s] received data is invalid with error: %v", s.Desc(), ret.Err)
 			s.errorChan <- err
 			return
 		} else {
-			blog.Debugf("[longtcp] received request with ID: %s", ret.TCPHead.UniqID)
+			blog.Debugf("[longtcp] session[%s] received request with ID: %s", s.Desc(), ret.TCPHead.UniqID)
 			if s.callback != nil {
 				go s.callback(ret.TCPHead.UniqID, ret.Data, s)
 			} else {
 				err = s.returnWait(ret)
 				if err != nil {
-					blog.Warnf("[longtcp] notify wait message failed with error: %v", err)
+					blog.Warnf("[longtcp] session[%s] notify wait message failed with error: %v", s.Desc(), err)
 				}
 			}
+			blog.Debugf("[longtcp] session[%s] finishend notify result", s.Desc())
 		}
 
 		select {
 		case <-s.ctx.Done():
-			blog.Debugf("[longtcp] internal recieve canceled by context")
+			blog.Debugf("[longtcp] session[%s] internal recieve canceled by context", s.Desc())
 			return
 		default:
 		}
@@ -497,7 +555,9 @@ func (s *Session) Send(data [][]byte, waitresponse bool) *MessageResult {
 	// data 转到 message
 	msg := s.encData2Message(data, waitresponse)
 
-	return s.notifyAndWait(msg)
+	ret := s.notifyAndWait(msg)
+
+	return ret
 }
 
 // session 内部将data封装为Message发送，并通过chan接收发送结果，这儿指定了id，无需自动生成
@@ -586,8 +646,10 @@ func (s *Session) check(wg *sync.WaitGroup) {
 
 // 清理资源，包括关闭连接，停止协程等
 func (s *Session) Clean(err error) {
-	blog.Debugf("[longtcp] session clean now")
-	s.client.Close()
+	blog.Debugf("[longtcp] session clean %s now", s.Desc())
+	if s.client != nil {
+		s.client.Close()
+	}
 	s.cancel()
 
 	// 通知发送队列中的任务
@@ -599,6 +661,7 @@ func (s *Session) Clean(err error) {
 			Data: nil,
 		}
 	}
+	s.sendQueue = nil
 	s.sendMutex.Unlock()
 
 	// 通知等待结果的队列中的任务
@@ -609,6 +672,7 @@ func (s *Session) Clean(err error) {
 			Data: nil,
 		}
 	}
+	s.waitMap = nil
 	s.waitMutex.Unlock()
 }
 
@@ -645,22 +709,33 @@ const (
 )
 
 var globalmutex sync.RWMutex
-var globalSessionPool *ClientSessionPool
+var globalSessionPools []*ClientSessionPool
 
 type HandshadeData func() []byte
 
 // 用于初始化并返回全局客户端的session pool
 func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake HandshadeData, size int32, callback OnReceivedFunc) *ClientSessionPool {
 	// 初始化全局pool，并返回一个可用的
-	if globalSessionPool != nil {
-		return globalSessionPool
+	if globalSessionPools != nil {
+		globalmutex.RLock()
+		for _, v := range globalSessionPools {
+			if v.ip == ip && v.port == port {
+				globalmutex.RUnlock()
+				return v
+			}
+		}
+		globalmutex.RUnlock()
 	}
 
 	globalmutex.Lock()
 	defer globalmutex.Unlock()
 
-	if globalSessionPool != nil {
-		return globalSessionPool
+	if globalSessionPools != nil {
+		for _, v := range globalSessionPools {
+			if v.ip == ip && v.port == port {
+				return v
+			}
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -697,8 +772,14 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 	go tempSessionPool.check(&wg)
 	wg.Wait()
 
-	globalSessionPool = tempSessionPool
-	return globalSessionPool
+	if globalSessionPools == nil {
+		globalSessionPools = make([]*ClientSessionPool, 0, 10)
+		globalSessionPools = append(globalSessionPools, tempSessionPool)
+	} else {
+		globalSessionPools = append(globalSessionPools, tempSessionPool)
+	}
+
+	return tempSessionPool
 }
 
 // 获取可用session
