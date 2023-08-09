@@ -629,10 +629,6 @@ func (b *Booster) sendAdditionFile() {
 			continue
 		}
 
-		if info.Basic().IsDir() {
-			continue
-		}
-
 		lt := ""
 		if info.Basic().Mode().IsDir() {
 			if lInfo := dcFile.Lstat(f); lInfo.Basic().Mode()&os.ModeSymlink != 0 {
