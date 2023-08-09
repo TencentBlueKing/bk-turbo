@@ -664,14 +664,20 @@ func (b *Booster) parseDir() {
 	res := []string{}
 	dir := []string{}
 	for _, f := range b.config.Works.AdditionFiles {
+		isSubdir := false
+		for _, d := range dir {
+			if strings.HasPrefix(f, d) {
+				isSubdir = true
+				blog.Infof("booster: get aditonal file, dir(%s) is subdir of (%s), skip", f, d)
+				break
+			}
+		}
+		if isSubdir {
+			continue
+		}
+
 		info := dcFile.Stat(f)
 		if info.Basic().IsDir() {
-			for _, d := range dir {
-				if strings.HasPrefix(f, d) {
-					blog.Infof("booster: get aditonal file, dir(%s) is subdir of (%s), skip", f, d)
-					continue
-				}
-			}
 			err := filepath.Walk(f, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					blog.Warnf("parse path %s failed: %v\n", path, err)
