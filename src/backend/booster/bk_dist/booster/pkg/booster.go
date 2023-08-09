@@ -610,9 +610,10 @@ func (b *Booster) sendAdditionFile() {
 	if b.config.Works.Local || b.config.Works.Degraded {
 		return
 	}
+
+	c, _ := os.Getwd()
 	for i, f := range b.config.Works.AdditionFiles {
 		if !filepath.IsAbs(f) {
-			c, _ := os.Getwd()
 			b.config.Works.AdditionFiles[i] = filepath.Join(c, f)
 		}
 	}
