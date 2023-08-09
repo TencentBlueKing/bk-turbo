@@ -667,7 +667,7 @@ func (b *Booster) parseDir() {
 		info := dcFile.Stat(f)
 		if info.Basic().IsDir() {
 			for _, d := range dir {
-				if strings.HasPrefix(d, f) {
+				if strings.HasPrefix(f, d) {
 					blog.Infof("booster: get aditonal file, dir(%s) is subdir of (%s), skip", f, d)
 					continue
 				}
