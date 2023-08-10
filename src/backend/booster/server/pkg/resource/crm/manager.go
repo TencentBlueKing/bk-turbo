@@ -1069,11 +1069,7 @@ func (rm *resourceManager) checkBroker(broker *Broker) {
 		for i := 0; i < delta; i++ {
 			if err := broker.Launch(); err != nil {
 				switch err {
-				case ErrorBrokerNotEnoughResources:
-					blog.Errorf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
-						broker.name, broker.user, err)
-					return
-				case ErrorBrokeringUnderCoolingTime:
+				case ErrorBrokeringUnderCoolingTime, ErrorBrokerNotEnoughResources:
 					blog.Warnf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
 						broker.name, broker.user, err)
 
