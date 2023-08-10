@@ -221,6 +221,13 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		}
 	}
 
+	defer func() {
+		if memorylocked {
+			r.slot.Unlock(totalsize)
+			blog.Debugf("remotehandle: succeed to release one memory lock")
+		}
+	}()
+
 	var err error
 	messages := req.Messages
 	if messages == nil {
@@ -244,10 +251,10 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		if err != nil {
 			blog.Warnf("error: %v", err)
 
-			if memorylocked {
-				r.slot.Unlock(totalsize)
-				blog.Debugf("remotehandle: succeed to release one memory lock")
-			}
+			// if memorylocked {
+			// 	r.slot.Unlock(totalsize)
+			// 	blog.Debugf("remotehandle: succeed to release one memory lock")
+			// }
 
 			return nil, err
 		}

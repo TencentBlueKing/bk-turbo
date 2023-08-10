@@ -27,6 +27,7 @@ var (
 	ErrorConnectionInvalid      = fmt.Errorf("connection is invalid")
 	ErrorResponseLengthInvalid  = fmt.Errorf("response data length is invalid")
 	ErrorAllConnectionInvalid   = fmt.Errorf("all connections are invalid")
+	ErrorSessionPoolCleaned     = fmt.Errorf("session pool cleaned")
 	ErrorLessThanLongTCPHeadLen = fmt.Errorf("data length is less than long tcp head length")
 	ErrorLongTCPHeadLenInvalid  = fmt.Errorf("data length of long tcp head length is invalid")
 )
@@ -290,6 +291,8 @@ func (s *Session) putWait(msg *Message) error {
 
 	if s.waitMap != nil {
 		s.waitMap[msg.TCPHead.UniqID] = msg
+	} else {
+		return ErrorConnectionInvalid
 	}
 
 	return nil
@@ -389,7 +392,14 @@ func (s *Session) sendReal() {
 
 	for _, m := range msgs {
 		if m.WaitResponse {
-			s.putWait(m)
+			err := s.putWait(m)
+			if err != nil {
+				m.RetChan <- &MessageResult{
+					Err:  err,
+					Data: nil,
+				}
+				continue
+			}
 		}
 
 		// encode long tcp head
@@ -637,7 +647,7 @@ func (s *Session) check(wg *sync.WaitGroup) {
 			s.Clean(ErrorContextCanceled)
 			return
 		case err := <-s.errorChan:
-			blog.Warnf("[longtcp] session check found error:%v", err)
+			blog.Warnf("[longtcp] session %s found error:%v", s.Desc(), err)
 			s.Clean(err)
 			return
 		}
@@ -646,15 +656,16 @@ func (s *Session) check(wg *sync.WaitGroup) {
 
 // 清理资源，包括关闭连接，停止协程等
 func (s *Session) Clean(err error) {
-	blog.Debugf("[longtcp] session clean %s now", s.Desc())
-	if s.client != nil {
-		s.client.Close()
-	}
-	s.cancel()
+	blog.Debugf("[longtcp] session %s clean now", s.Desc())
 
 	// 通知发送队列中的任务
 	s.sendMutex.Lock()
-	s.valid = false
+	if !s.valid { // 避免重复clean
+		blog.Debugf("[longtcp] session %s has cleaned before", s.Desc())
+		return
+	} else {
+		s.valid = false
+	}
 	for _, m := range s.sendQueue {
 		m.RetChan <- &MessageResult{
 			Err:  err,
@@ -674,15 +685,20 @@ func (s *Session) Clean(err error) {
 	}
 	s.waitMap = nil
 	s.waitMutex.Unlock()
+
+	if s.client != nil {
+		s.client.Close()
+	}
+	s.cancel()
 }
 
 func (s *Session) IsValid() bool {
 	return s.valid
 }
 
-// 返回当前session的任务数
+// 返回当前未完成的任务数
 func (s *Session) Size() int {
-	return len(s.sendQueue)
+	return len(s.waitMap)
 }
 
 // ----------------------------------------------------
@@ -702,10 +718,12 @@ type ClientSessionPool struct {
 	mutex    sync.RWMutex
 
 	checkNotifyChan chan bool
+
+	cleaned bool
 }
 
 const (
-	checkSessionInterval = 3
+	checkSessionInterval = 20 * time.Second
 )
 
 var globalmutex sync.RWMutex
@@ -713,7 +731,7 @@ var globalSessionPools []*ClientSessionPool
 
 type HandshadeData func() []byte
 
-// 用于初始化并返回全局客户端的session pool
+// 用于初始化并返回session pool
 func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake HandshadeData, size int32, callback OnReceivedFunc) *ClientSessionPool {
 	// 初始化全局pool，并返回一个可用的
 	if globalSessionPools != nil {
@@ -752,6 +770,7 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 		size:            size,
 		sessions:        make([]*Session, size, size),
 		checkNotifyChan: make(chan bool, size*2),
+		cleaned:         false,
 	}
 
 	blog.Infof("[longtcp] client pool ready new client sessions")
@@ -782,6 +801,27 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 	return tempSessionPool
 }
 
+func removeElement(arr []*ClientSessionPool, index int) []*ClientSessionPool {
+	arr[len(arr)-1], arr[index] = arr[index], arr[len(arr)-1]
+	return arr[:len(arr)-1]
+}
+
+// 用于清理相应的session pool
+func CleanGlobalSessionPool(ip string, port int32) {
+	blog.Infof("[longtcp] clean session %s:%d", ip, port)
+
+	globalmutex.Lock()
+	defer globalmutex.Unlock()
+
+	for i, v := range globalSessionPools {
+		if v != nil && v.ip == ip && v.port == port {
+			v.Clean(ErrorSessionPoolCleaned)
+			globalSessionPools = removeElement(globalSessionPools, i)
+			break
+		}
+	}
+}
+
 // 获取可用session
 func (sp *ClientSessionPool) GetSession() (*Session, error) {
 	blog.Debugf("[longtcp] ready get session now")
@@ -791,17 +831,23 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 	minsize := 99999
 	targetindex := -1
 	needchecksession := false
-	for i, s := range sp.sessions {
-		if s != nil && s.IsValid() {
-			if s.Size() < minsize {
-				targetindex = i
-				minsize = s.Size()
+	if !sp.cleaned {
+		for i, s := range sp.sessions {
+			if s != nil && s.IsValid() {
+				if s.Size() < minsize {
+					targetindex = i
+					minsize = s.Size()
+				}
+			} else {
+				needchecksession = true
 			}
-		} else {
-			needchecksession = true
 		}
 	}
 	sp.mutex.RUnlock()
+
+	if sp.cleaned {
+		return nil, ErrorSessionPoolCleaned
+	}
 
 	// 注意，如果chan满了，则下面通知会阻塞，所以这时不要持锁，避免其它地方需要锁，导致死锁
 	if needchecksession {
@@ -817,15 +863,20 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 }
 
 func (sp *ClientSessionPool) Clean(err error) error {
+	blog.Infof("[longtcp] session pool %s:%d clean now", sp.ip, sp.port)
 	sp.cancel()
 
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
 
-	for _, s := range sp.sessions {
-		if s != nil && s.IsValid() {
-			s.Clean(err)
+	if !sp.cleaned {
+		for _, s := range sp.sessions {
+			if s != nil && s.IsValid() {
+				s.Clean(err)
+			}
 		}
+
+		sp.cleaned = true
 	}
 
 	return nil
@@ -833,13 +884,19 @@ func (sp *ClientSessionPool) Clean(err error) error {
 
 func (sp *ClientSessionPool) check(wg *sync.WaitGroup) {
 	wg.Done()
+	ticker := time.NewTicker(checkSessionInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-sp.ctx.Done():
-			blog.Debugf("[longtcp] session pool check routine canceled by context")
+			blog.Infof("[longtcp] session pool %s:%d check routine canceled by context", sp.ip, sp.port)
 			return
 		case <-sp.checkNotifyChan:
-			blog.Debugf("[longtcp] session check triggled")
+			blog.Infof("[longtcp] session pool %s:%d check triggled by notify", sp.ip, sp.port)
+			sp.checkSessions()
+		case <-ticker.C:
+			blog.Debugf("[longtcp] session pool %s:%d check triggled by ticker", sp.ip, sp.port)
 			sp.checkSessions()
 		}
 	}
@@ -849,6 +906,11 @@ func (sp *ClientSessionPool) checkSessions() {
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
 
+	if sp.cleaned {
+		blog.Infof("[longtcp] session pool %s:%d has cleaned, do not check now", sp.ip, sp.port)
+		return
+	}
+
 	invalidIndex := make([]int, 0)
 	for i, s := range sp.sessions {
 		if s == nil || !s.IsValid() {
@@ -857,25 +919,24 @@ func (sp *ClientSessionPool) checkSessions() {
 	}
 
 	if len(invalidIndex) > 0 {
-		blog.Debugf("[longtcp] session check found %d invalid sessions", len(invalidIndex))
+		blog.Infof("[longtcp] session pool %s:%d check found %d invalid sessions", sp.ip, sp.port, len(invalidIndex))
 
 		for i := 0; i < len(invalidIndex); i++ {
 			client := NewSession(sp.ip, sp.port, sp.timeout, sp.handshakedata, sp.callback)
 			if client != nil {
-				blog.Debugf("[longtcp] got Lock")
 				sessionid := invalidIndex[i]
 				if sp.sessions[sessionid] != nil {
 					sp.sessions[sessionid].Clean(ErrorConnectionInvalid)
 				}
 				sp.sessions[sessionid] = client
-				blog.Debugf("[longtcp] update %dth session to new", sessionid)
+				blog.Infof("[longtcp] update %dth session to new %s", sessionid, client.Desc())
 			} else {
 				// TODO : if failed ,we should try later?
-				blog.Debugf("[longtcp] check sessions failed to NewSession")
-				time.Sleep(time.Duration(checkSessionInterval) * time.Second)
-				go func() {
-					sp.checkNotifyChan <- true
-				}()
+				blog.Warnf("[longtcp] check session pool %s:%d, failed to NewSession", sp.ip, sp.port)
+				// time.Sleep(time.Duration(checkSessionInterval) * time.Second)
+				// go func() {
+				// 	sp.checkNotifyChan <- true
+				// }()
 				return
 			}
 		}

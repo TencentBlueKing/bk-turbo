@@ -80,7 +80,7 @@ func receiveCommonHead(client *TCPClient) (*protocol.PBHead, error) {
 	// receive head token
 	data, datalen, err := client.ReadData(protocol.TOKENBUFLEN)
 	if err != nil {
-		blog.Warnf("failed to receive head token")
+		blog.Warnf("failed to receive head token with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("succeed to recieve head token %s", string(data))
@@ -142,14 +142,14 @@ func encodeSynctimeReq() ([]protocol.Message, error) {
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -199,7 +199,7 @@ func receiveSynctimeRsp(client *TCPClient) (*protocol.PBBodySyncTimeRsp, error) 
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -239,7 +239,7 @@ func fillOneFile(
 		} else {
 			data, err = ioutil.ReadFile(filefullpath)
 			if err != nil {
-				blog.Warnf("failed to read file[%s]", filefullpath)
+				blog.Warnf("failed to read file[%s] with error:%v", filefullpath, err)
 				return message, 0, err
 			}
 		}
@@ -342,7 +342,7 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 
 				m, compressedsize, err := fillOneFile(f.FilePath, f.Buffer, f.Compresstype, filemode)
 				if err != nil {
-					blog.Warnf("failed to encode message for file", f.FilePath)
+					blog.Warnf("failed to encode message for file %s with error:%v", f.FilePath, err)
 					continue
 				}
 
@@ -368,7 +368,7 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 
 	bodydata, err := proto.Marshal(&pbbody)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbbody")
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
 		return nil, err
 	}
 	bodymessage := protocol.Message{
@@ -390,14 +390,14 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -453,7 +453,7 @@ func receiveCommonDispatchRsp(client *TCPClient, sandbox *syscall.Sandbox) (*pro
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -488,7 +488,7 @@ func receiveCommonDispatchRspBuf(
 	if buflen > 0 {
 		data, datalen, err := client.ReadData(int(buflen))
 		if err != nil {
-			blog.Warnf("failed to receive pb buf")
+			blog.Warnf("failed to receive pb buf with error:%v", err)
 			return err
 		}
 
@@ -719,7 +719,7 @@ func receiveCommonDispatchRspWithoutSaveFile(client *TCPClient) (*protocol.PBBod
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -753,7 +753,7 @@ func receiveCommonDispatchRspBufWithoutSaveFile(
 	if buflen > 0 {
 		data, datalen, err := client.ReadData(int(buflen))
 		if err != nil {
-			blog.Warnf("failed to receive pb buf")
+			blog.Warnf("failed to receive pb buf with error:%v", err)
 			return err
 		}
 
@@ -844,7 +844,7 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 
 		m, compressedsize, err := fillOneFile(fullpath, f.Buffer, f.Compresstype, filemode)
 		if err != nil {
-			blog.Warnf("failed to encode message for file", f.FilePath)
+			blog.Warnf("failed to encode message for file with error:%v", f.FilePath, err)
 			continue
 		}
 
@@ -872,7 +872,7 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 
 	bodydata, err := proto.Marshal(&pbbody)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbbody")
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
 		return nil, err
 	}
 	bodymessage := protocol.Message{
@@ -894,14 +894,14 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -957,7 +957,7 @@ func receiveSendFileRsp(client *TCPClient) (*protocol.PBBodySendFileRsp, error) 
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -1015,7 +1015,7 @@ func encodeCheckCacheReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) 
 
 	bodydata, err := proto.Marshal(&pbbody)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbbody")
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
 		return nil, err
 	}
 	bodymessage := protocol.Message{
@@ -1038,14 +1038,14 @@ func encodeCheckCacheReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) 
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -1097,7 +1097,7 @@ func receiveCheckCacheRsp(client *TCPClient) (*protocol.PBBodyCheckCacheRsp, err
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 

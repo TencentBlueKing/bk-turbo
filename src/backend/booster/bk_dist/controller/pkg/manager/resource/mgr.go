@@ -18,7 +18,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -51,6 +53,7 @@ func NewMgr(pCtx context.Context, work *types.Work) types.ResourceMgr {
 		// maybe should adjust cool time
 		applyCoolSeconds: 10,
 		newlyTaskID:      "",
+		conf:             work.Config(),
 	}
 
 	mgr.RegisterCallback(mgr.callback4ResChanged)
@@ -99,6 +102,8 @@ type Mgr struct {
 	applyLastFailTime int64
 
 	newlyTaskID string
+
+	conf *config.ServerConfig
 }
 
 // IsApplyFinished check whether apply finished
@@ -345,6 +350,7 @@ func (m *Mgr) Release(req *v2.ParamRelease) error {
 		if r.canRelease() {
 			resourcechanged = true
 			r.status = ResourceReleasing
+			m.cleanLongTCP(r)
 			err := m.sendReleaseReq(req, r)
 			if err != nil {
 				r.status = ResourceReleaseFailed
@@ -382,6 +388,7 @@ func (m *Mgr) releaseOne(req *v2.ParamRelease, r *Res) error {
 	}
 
 	r.status = ResourceReleasing
+	m.cleanLongTCP(r)
 	err := m.sendReleaseReq(req, r)
 	if err != nil {
 		r.status = ResourceReleaseFailed
@@ -393,6 +400,29 @@ func (m *Mgr) releaseOne(req *v2.ParamRelease, r *Res) error {
 	r.status = ResourceReleaseSucceed
 	// should remove from array ???
 
+	return nil
+}
+
+func (m *Mgr) cleanLongTCP(r *Res) error {
+	if m.conf.LongTCP {
+		if r != nil && r.taskInfo != nil {
+			blog.Infof("resource: try to clean long tcp for task(%s) work(%s)", r.taskid, m.work.ID())
+			for _, v := range r.taskInfo.HostList {
+				hostField := strings.Split(v, "/")
+				if len(hostField) > 1 {
+					server := hostField[0]
+					ip := ""
+					port := 0
+					i := strings.LastIndex(server, ":")
+					if i > 0 && i < len(server)-1 {
+						ip = server[:i]
+						port, _ = strconv.Atoi(server[i+1:])
+					}
+					longtcp.CleanGlobalSessionPool(ip, int32(port))
+				}
+			}
+		}
+	}
 	return nil
 }
 
