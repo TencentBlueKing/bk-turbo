@@ -61,7 +61,12 @@ func RunServer(command string) error {
 // GetSysProcAttr set process group id to a new id,
 // in case of the signals sent to the caller affect the process as well
 func GetSysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{Setpgid: true, Pgid: 0}
+	return &syscall.SysProcAttr{
+		Setpgid:    true,
+		Pgid:       0,
+		Setsid:     true,
+		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+	}
 }
 
 // GetCallerAndOptions return the caller and options in unix
