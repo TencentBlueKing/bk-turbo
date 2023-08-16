@@ -64,7 +64,6 @@ func GetSysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
 		Setpgid:    true,
 		Pgid:       0,
-		Setsid:     true,
 		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 	}
 }
