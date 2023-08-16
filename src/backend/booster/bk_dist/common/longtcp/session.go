@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -76,20 +77,6 @@ func byte2LongTCPHead(data []byte) (*LongTCPHead, error) {
 	}, nil
 }
 
-// func receiveLongTCPHead(client *TCPClient) (*LongTCPHead, error) {
-// 	blog.Debugf("[longtcp] receive long tcp head now")
-
-// 	// receive head token
-// 	data, datalen, err := client.ReadData(TotalLongTCPHeadLength)
-// 	if err != nil {
-// 		blog.Warnf("[longtcp] read data failed with error:%v", err)
-// 		return nil, err
-// 	}
-// 	blog.Debugf("[longtcp] succeed to recieve long tcp head token %s", string(data))
-
-// 	return byte2LongTCPHead(data[0:datalen])
-// }
-
 // 固定长度UniqIDLength，用于识别命令
 type MessageID string
 
@@ -111,6 +98,8 @@ type Message struct {
 	Data         [][]byte
 	WaitResponse bool // 发送成功后，是否还需要等待对方返回结果
 	RetChan      chan *MessageResult
+
+	F OnSendDoneFunc
 }
 
 func (m *Message) Desc() string {
@@ -153,10 +142,16 @@ type Session struct {
 	// 生成唯一id
 	idMutext sync.Mutex
 	id       uint64
+
+	// 记录当前session的请求数
+	requestNum int64
 }
 
 // 处理收到的消息，一般是流程是将data转成需要的格式，然后业务逻辑处理，处理完，再通过 Session发送回去
 type OnReceivedFunc func(id MessageID, data []byte, s *Session) error
+
+// 发送完成后的回调
+type OnSendDoneFunc func() error
 
 // server端创建session
 func NewSessionWithConn(conn *net.TCPConn, callback OnReceivedFunc) *Session {
@@ -342,7 +337,7 @@ func formatID(id uint64) MessageID {
 	return MessageID(data)
 }
 
-func (s *Session) encData2Message(data [][]byte, waitresponse bool) *Message {
+func (s *Session) encData2Message(data [][]byte, waitresponse bool, f OnSendDoneFunc) *Message {
 	totallen := 0
 	for _, v := range data {
 		totallen += len(v)
@@ -355,6 +350,7 @@ func (s *Session) encData2Message(data [][]byte, waitresponse bool) *Message {
 		Data:         data,
 		WaitResponse: waitresponse,
 		RetChan:      make(chan *MessageResult, 1),
+		F:            f,
 	}
 }
 
@@ -394,6 +390,9 @@ func (s *Session) sendReal() {
 		if m.WaitResponse {
 			err := s.putWait(m)
 			if err != nil {
+				if m.F != nil {
+					m.F()
+				}
 				m.RetChan <- &MessageResult{
 					Err:  err,
 					Data: nil,
@@ -406,6 +405,9 @@ func (s *Session) sendReal() {
 		handshakedata, err := longTCPHead2Byte(m.TCPHead)
 		if err != nil {
 			blog.Warnf("[longtcp] session[%s] head to byte failed with error:%v", s.Desc(), err)
+			if m.F != nil {
+				m.F()
+			}
 			s.onMessageError(m, err)
 			continue
 		}
@@ -414,6 +416,9 @@ func (s *Session) sendReal() {
 		err = s.client.WriteData(handshakedata)
 		if err != nil {
 			blog.Warnf("[longtcp] session[%s] send header failed with error:%v", s.Desc(), err)
+			if m.F != nil {
+				m.F()
+			}
 			s.onMessageError(m, err)
 			continue
 		}
@@ -427,6 +432,9 @@ func (s *Session) sendReal() {
 				err = s.client.WriteData(d)
 				if err != nil {
 					blog.Warnf("[longtcp] session[%s] send body failed with error:%v", s.Desc(), err)
+					if m.F != nil {
+						m.F()
+					}
 					s.onMessageError(m, err)
 					// continue
 					sendfailed = true
@@ -438,6 +446,10 @@ func (s *Session) sendReal() {
 		// skip to next message if failed, we should send all messages which has been copied here
 		if sendfailed {
 			continue
+		}
+
+		if m.F != nil {
+			m.F()
 		}
 
 		blog.Infof("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
@@ -554,7 +566,7 @@ func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 
 // session 内部将data封装为Message发送，并通过chan接收发送结果，Message的id需要内部生成
 // 如果 waitresponse为true，则需要等待返回的结果
-func (s *Session) Send(data [][]byte, waitresponse bool) *MessageResult {
+func (s *Session) Send(data [][]byte, waitresponse bool, f OnSendDoneFunc) *MessageResult {
 	if !s.valid {
 		return &MessageResult{
 			Err:  ErrorConnectionInvalid,
@@ -562,8 +574,11 @@ func (s *Session) Send(data [][]byte, waitresponse bool) *MessageResult {
 		}
 	}
 
+	atomic.AddInt64(&s.requestNum, 1)
+	defer atomic.AddInt64(&s.requestNum, -1)
+
 	// data 转到 message
-	msg := s.encData2Message(data, waitresponse)
+	msg := s.encData2Message(data, waitresponse, f)
 
 	ret := s.notifyAndWait(msg)
 
@@ -697,8 +712,9 @@ func (s *Session) IsValid() bool {
 }
 
 // 返回当前未完成的任务数
-func (s *Session) Size() int {
-	return len(s.waitMap)
+func (s *Session) Size() int64 {
+	// return len(s.waitMap)
+	return atomic.LoadInt64(&s.requestNum)
 }
 
 // ----------------------------------------------------
@@ -828,7 +844,7 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 
 	sp.mutex.RLock()
 	// select most free
-	minsize := 99999
+	var minsize int64 = 99999
 	targetindex := -1
 	needchecksession := false
 	if !sp.cleaned {
@@ -933,10 +949,6 @@ func (sp *ClientSessionPool) checkSessions() {
 			} else {
 				// TODO : if failed ,we should try later?
 				blog.Warnf("[longtcp] check session pool %s:%d, failed to NewSession", sp.ip, sp.port)
-				// time.Sleep(time.Duration(checkSessionInterval) * time.Second)
-				// go func() {
-				// 	sp.checkNotifyChan <- true
-				// }()
 				return
 			}
 		}
