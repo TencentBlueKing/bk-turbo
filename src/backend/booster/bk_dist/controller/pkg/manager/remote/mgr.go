@@ -1094,12 +1094,12 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 
 	t2 := time.Now().Local()
 	if d1 := t2.Sub(t1); d1 > 50*time.Millisecond {
-		blog.Debugf("check cache lock wait too long server(%s): %s", server, d1.String())
+		// blog.Debugf("check cache lock wait too long server(%s): %s", server, d1.String())
 	}
 
 	defer func() {
 		if d2 := time.Now().Local().Sub(t2); d2 > 50*time.Millisecond {
-			blog.Debugf("check cache process wait too long server(%s): %s", server, d2.String())
+			// blog.Debugf("check cache process wait too long server(%s): %s", server, d2.String())
 		}
 	}()
 

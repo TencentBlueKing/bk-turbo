@@ -52,13 +52,7 @@ func (r *CommonRemoteHandler) getTCPSession(
 	blog.Infof("ready execute remote task to server %s (%s:%d) with long tcp",
 		server, ip, port)
 
-	// headdata, err := encodeLongTCPHandshakeReq()
-	// if err != nil {
-	// 	blog.Warnf("encode long tcp head failed with error: %v", err)
-	// 	return nil, err
-	// }
-
-	sp := longtcp.GetGlobalSessionPool(ip, int32(port), r.ioTimeout, encodeLongTCPHandshakeReq, 10, nil)
+	sp := longtcp.GetGlobalSessionPool(ip, int32(port), r.ioTimeout, encodeLongTCPHandshakeReq, 48, nil)
 	session, err := sp.GetSession()
 	if err != nil && session == nil {
 		blog.Warnf("get tcp session failed with error: %v", err)
@@ -79,30 +73,6 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 	}()
 	blog.Debugf("execute remote task with server %s and do not save file", server)
 	r.recordStats.RemoteWorker = server.Server
-
-	// ip := ""
-	// var port int
-	// // The port starts after the last colon.
-	// i := strings.LastIndex(server.Server, ":")
-	// if i > 0 && i < len(server.Server)-1 {
-	// 	ip = server.Server[:i]
-	// 	port, _ = strconv.Atoi(server.Server[i+1:])
-	// }
-	// blog.Infof("ready execute remote task to server %s (%s:%d) with long tcp and do not save file",
-	// 	server, ip, port)
-
-	// headdata, err := encodeLongTCPHandshakeReq()
-	// if err != nil {
-	// 	blog.Warnf("encode long tcp head failed with error: %v", err)
-	// 	return nil, err
-	// }
-
-	// sp := longtcp.GetGlobalSessionPool(ip, int32(port), r.ioTimeout, headdata, 10, nil)
-	// session, err := sp.GetSession()
-	// if err != nil && session == nil {
-	// 	blog.Warnf("get tcp session failed with error: %v", err)
-	// 	return nil, err
-	// }
 
 	session, err := r.getTCPSession(server.Server)
 	if err != nil && session == nil {
@@ -134,15 +104,16 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendStartTime)
 	// record the send starting status, sending should be waiting for a while.
 	r.updateJobStatsFunc()
-	// err = sendMessages(client, messages)
+
 	reqdata := [][]byte{}
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true)
+	ret := session.Send(reqdata, true, func() error {
+		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
+		return nil
+	})
 
-	// TODO : 用了长连接后，因为是异步的，这儿的发送时间统计不准确了
-	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
 	if ret.Err != nil {
 		r.recordStats.RemoteWorkFatal = true
 		blog.Warnf("execute remote task with long tcp failed with error: %v", ret.Err)
@@ -217,9 +188,17 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		}
 		if r.slot.Lock(totalsize) {
 			memorylocked = true
-			blog.Debugf("remotehandle: succeed to get one memory lock")
+			blog.Debugf("remotehandle: succeed to get lock with size %d", totalsize)
 		}
 	}
+
+	defer func() {
+		if memorylocked {
+			r.slot.Unlock(totalsize)
+			blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
+			memorylocked = false
+		}
+	}()
 
 	var err error
 	messages := req.Messages
@@ -243,12 +222,6 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 
 		if err != nil {
 			blog.Warnf("error: %v", err)
-
-			if memorylocked {
-				r.slot.Unlock(totalsize)
-				blog.Debugf("remotehandle: succeed to release one memory lock")
-			}
-
 			return nil, err
 		}
 	}
@@ -274,7 +247,15 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true)
+	ret := session.Send(reqdata, true, func() error {
+		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
+		if memorylocked {
+			r.slot.Unlock(totalsize)
+			blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
+			memorylocked = false
+		}
+		return nil
+	})
 	if ret.Err != nil {
 		blog.Warnf("send file failed with error: %v", ret.Err)
 		return nil, ret.Err
@@ -283,10 +264,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	debug.FreeOSMemory() // free memory anyway
 
 	blog.Debugf("success sent to server %s", server)
-	// receive result
-	// data, err := receiveSendFileRsp(client)
 	data, err := decodeSendFileRspLongTCP(ret.Data)
-	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
 
 	if err != nil {
 		blog.Warnf("error: %v", err)
@@ -326,7 +304,10 @@ func (r *CommonRemoteHandler) ExecuteCheckCacheLongTCP(
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true)
+	ret := session.Send(reqdata, true, func() error {
+		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
+		return nil
+	})
 	if ret.Err != nil {
 		blog.Warnf("error: %v", ret.Err)
 		return nil, ret.Err
@@ -336,7 +317,6 @@ func (r *CommonRemoteHandler) ExecuteCheckCacheLongTCP(
 
 	// receive result
 	data, err := decodeCheckCacheRspLongTCP(ret.Data)
-	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
 
 	if err != nil {
 		blog.Warnf("error: %v", err)
@@ -375,7 +355,7 @@ func (r *CommonRemoteHandler) ExecuteSyncTimeLongTCP(server string) (int64, erro
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true)
+	ret := session.Send(reqdata, true, nil)
 	if ret.Err != nil {
 		blog.Warnf("error: %v", ret.Err)
 		return 0, ret.Err
