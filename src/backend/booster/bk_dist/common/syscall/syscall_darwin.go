@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build darwin
+// +build darwin
 
 /*
  * Copyright (c) 2021 THL A29 Limited, a Tencent company. All rights reserved
@@ -62,9 +62,8 @@ func RunServer(command string) error {
 // in case of the signals sent to the caller affect the process as well
 func GetSysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
-		Setpgid:    true,
-		Pgid:       0,
-		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		Setpgid: true,
+		Pgid:    0,
 	}
 }
 
