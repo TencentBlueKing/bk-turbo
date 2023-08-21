@@ -242,30 +242,33 @@ class TurboEngineConfigService @Autowired constructor(
         return with(turboEngineConfigEntity) {
             TurboEngineConfigVO(
                 engineCode = engineCode,
-                engineName = engineName,
+                engineName = I18NUtil.getMessage("$engineCode.engineName"),
                 priorityNum = priorityNum,
-                desc = desc,
+                desc = I18NUtil.getMessage("$engineCode.desc"),
                 spelExpression = spelExpression,
                 spelParamMap = spelParamMap,
                 enabled = enabled,
-                userManual = userManual,
+                userManual = translateEngineUserManual(engineCode, userManual ?: ""),
                 docUrl = docUrl,
                 recommend = recommend,
-                recommendReason = recommendReason,
+                recommendReason = I18NUtil.getMessage("$engineCode.recommendReason"),
                 paramConfig = paramConfig?.map {
                     ParamConfigModel(
                         paramKey = it.paramKey,
-                        paramName = it.paramName,
+                        paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey}.paramName"),
                         paramType = it.paramType,
                         paramProps = it.paramProps,
                         paramEnum = it.paramEnum?.map { paramEnumEntity ->
+                            val paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey
+                            }.paramEnum.${paramEnumEntity.paramValue}")
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
-                                paramName = paramEnumEntity.paramName,
+                                paramName = paramName,
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
-                        tips = it.tips,
+                        tips = if (!it.tips.isNullOrBlank()) I18NUtil.getMessage("$engineCode.paramConfig.${it
+                            .paramKey}.tips") else it.tips,
                         displayed = it.displayed,
                         defaultValue = it.defaultValue,
                         required = it.required,
@@ -282,7 +285,7 @@ class TurboEngineConfigService @Autowired constructor(
                         linkVariable = it.linkVariable
                     )
                 },
-                pluginTips = pluginTips,
+                pluginTips = I18NUtil.getMessage("$engineCode.pluginTips"),
                 updatedBy = updatedBy,
                 updatedDate = updatedDate
             )
@@ -315,7 +318,7 @@ class TurboEngineConfigService @Autowired constructor(
                     docUrl = docUrl,
                     recommend = recommend,
                     recommendReason = I18NUtil.getMessage("$engineCode.recommendReason"),
-                    pluginTips = pluginTips,
+                    pluginTips = I18NUtil.getMessage("$engineCode.pluginTips"),
                     paramConfig = paramConfig?.map {
                         ParamConfigModel(
                             paramKey = it.paramKey,
@@ -327,7 +330,7 @@ class TurboEngineConfigService @Autowired constructor(
                                 }.paramEnum.${paramEnumEntity.paramValue}")
                                 ParamEnumModel(
                                     paramValue = paramEnumEntity.paramValue,
-                                    paramName = paramEnumEntity.paramName,
+                                    paramName = if (I18NUtil.ERROR == paramName) paramEnumEntity.paramName else paramName,
                                     visualRange = paramEnumEntity.visualRange
                                 )
                             },
@@ -610,7 +613,7 @@ class TurboEngineConfigService @Autowired constructor(
                 },
                 recommend = it.recommend,
                 recommendReason = I18NUtil.getMessage("${it.engineCode}.recommendReason"),
-                pluginTips = it.pluginTips,
+                pluginTips = I18NUtil.getMessage("${it.engineCode}.pluginTips"),
                 updatedBy = it.updatedBy,
                 updatedDate = it.updatedDate
             )
