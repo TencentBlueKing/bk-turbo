@@ -111,6 +111,7 @@ type TaskCL struct {
 	forcedepend          bool
 	pumpremote           bool
 	needcopypumpheadfile bool
+	pumpremotefailed     bool
 
 	// how to save result file
 	customSave bool
@@ -252,6 +253,20 @@ func (cl *TaskCL) NeedRemoteResource(command []string) bool {
 // RemoteRetryTimes will return the remote retry times
 func (cl *TaskCL) RemoteRetryTimes() int {
 	return 0
+}
+
+// TODO : OnRemoteFail give chance to try other way if failed to remote execute
+func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	blog.Infof("cl: start OnRemoteFail for: %v", command)
+
+	if cl.pumpremote {
+		blog.Infof("cl: set pumpremotefailed to true now")
+		cl.pumpremotefailed = true
+		cl.needcopypumpheadfile = true
+		cl.pumpremote = false
+		return cl.preExecute(command)
+	}
+	return nil, nil
 }
 
 // LocalLockWeight decide local-execute lock weight, default 1
@@ -762,7 +777,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if dcPump.SupportPump(cl.sandbox.Env) {
+	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) {
 		if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
 			req, err, notifyerr := cl.trypump(command)
 			if err != nil {
