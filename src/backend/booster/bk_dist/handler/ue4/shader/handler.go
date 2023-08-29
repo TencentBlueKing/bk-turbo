@@ -190,6 +190,11 @@ func (u *UE4Shader) RemoteRetryTimes() int {
 	return 1
 }
 
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (u *UE4Shader) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	return nil, nil
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (u *UE4Shader) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	return 1
