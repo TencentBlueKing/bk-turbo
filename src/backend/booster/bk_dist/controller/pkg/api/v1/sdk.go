@@ -248,6 +248,11 @@ func (s *sdk) launchServer() error {
 		enablelink = "--enable_link"
 	}
 
+	useDefaultWorker := "--use_default_worker"
+	if !s.config.UseDefaultWorker {
+		useDefaultWorker = ""
+	}
+
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
@@ -256,7 +261,8 @@ func (s *sdk) launchServer() error {
 		" --send_file_memory_limit=%d"+
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
-		" %s %s",
+		" %s %s"+
+		" %s",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -279,6 +285,7 @@ func (s *sdk) launchServer() error {
 		remoteRetryTimes,
 		enablelib,
 		enablelink,
+		useDefaultWorker,
 	))
 }
 

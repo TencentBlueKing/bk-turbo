@@ -85,6 +85,7 @@ type BoosterWorks struct {
 	BazelPlus  bool
 	Bazel4Plus bool
 	Launcher   bool
+	// BazelNoLauncher bool
 
 	Preload           sdk.PreloadConfig
 	PreloadContent    string

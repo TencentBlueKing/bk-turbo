@@ -138,7 +138,7 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 
 	appendPreload()
 
-	if config.Works.BazelPlus || config.Works.Bazel4Plus {
+	if config.Works.BazelPlus || config.Works.Bazel4Plus || config.Controller.UseDefaultWorker {
 		additions := make([]string, 0, 10)
 		for k, v := range config.Works.Environments {
 			if _, ok := bazelActionConstOptions[k]; !ok {
