@@ -25,6 +25,7 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/config"
 	pbcmd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cmd_handler"
@@ -87,6 +88,10 @@ type buffedcmd struct {
 	// basedir to save all files which belong this task and not absolute path
 	// this dir will be removed when task finished
 	basedir string
+
+	// for long tcp
+	session *longtcp.Session
+	id      *longtcp.MessageID
 
 	// // commondir to save all files which belong this task and with absolute path
 	// // we will not remove this dir when task finished, only specified file type will be deleted
@@ -331,6 +336,9 @@ func (o *tcpManager) dealTCPConn(conn *net.TCPConn) error {
 		return o.dealSendFileCmd(client, head)
 	case dcProtocol.PBCmdType_CHECKCACHEREQ:
 		return o.dealCheckCacheCmd(client, head)
+	case dcProtocol.PBCmdType_LONGTCPHANDSHAKEREQ:
+		longtcp.NewSessionWithConn(conn, o.onLongTCPReceived)
+		return nil
 	default:
 		err := fmt.Errorf("unknow cmd %s", head.GetCmdtype())
 		blog.Warnf("%v", err)
@@ -399,7 +407,7 @@ func (o *tcpManager) dealSyncTimeCmd(client *protocol.TCPClient, head *dcProtoco
 		return err
 	}
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, nil, nil)
 }
 
 func (o *tcpManager) dealUnknownCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -413,7 +421,7 @@ func (o *tcpManager) dealUnknownCmd(client *protocol.TCPClient, head *dcProtocol
 
 	_, _ = handler.ReceiveBody(client, head, "", nil)
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, nil, nil)
 }
 
 func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -450,7 +458,7 @@ func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtoco
 	}()
 
 	//
-	err = handler.Handle(client, head, body, time.Now(), basedir, nil)
+	err = handler.Handle(client, head, body, time.Now(), basedir, nil, nil, nil)
 	return err
 }
 
@@ -486,7 +494,7 @@ func (o *tcpManager) dealCheckCacheCmd(client *protocol.TCPClient, head *dcProto
 	}()
 
 	//
-	err = handler.Handle(client, head, body, time.Now(), "", nil)
+	err = handler.Handle(client, head, body, time.Now(), "", nil, nil, nil)
 	return err
 }
 
@@ -550,11 +558,14 @@ func (o *tcpManager) dealBufferedCmd(cmd *buffedcmd) error {
 	// blog.Infof("deal cmd in...")
 	defer func() {
 		debug.FreeOSMemory() // free memory anyway
-		// wait until connection closed by client or timeout
-		waitConnection(cmd.client, maxWaitConnectionSeconds)
 
-		// blog.Infof("ready to close tcp connection after deal this cmd")
-		_ = cmd.client.Close()
+		// wait until connection closed by client or timeout
+		if cmd.client != nil {
+			waitConnection(cmd.client, maxWaitConnectionSeconds)
+			// blog.Infof("ready to close tcp connection after deal this cmd")
+			_ = cmd.client.Close()
+		}
+
 		if o.conf.CleanTempFiles {
 			// remove basedir here
 			_ = os.RemoveAll(cmd.basedir)
@@ -565,7 +576,8 @@ func (o *tcpManager) dealBufferedCmd(cmd *buffedcmd) error {
 	}()
 
 	_ = os.MkdirAll(cmd.basedir, os.ModePerm)
-	err := cmd.handler.Handle(cmd.client, cmd.head, cmd.body, cmd.receivedtime, cmd.basedir, o.conf.CmdReplaceRules)
+	err := cmd.handler.Handle(cmd.client, cmd.head, cmd.body, cmd.receivedtime,
+		cmd.basedir, o.conf.CmdReplaceRules, cmd.id, cmd.session)
 
 	// nextcmd := o.popcmd()
 	// if nextcmd != nil {

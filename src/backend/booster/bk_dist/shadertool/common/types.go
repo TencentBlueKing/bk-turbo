@@ -72,6 +72,7 @@ type ApplyParameters struct {
 	ControllerRemoteRetryTimes    int               `json:"controller_remote_retry_times" value:"0" usage:"default remote retry times"`
 	ControllerEnableLink          bool              `json:"controller_enable_link" value:"false" usage:"if true, controller will enable dist link"`
 	ControllerEnableLib           bool              `json:"controller_enable_lib" value:"false" usage:"if true, controller will enable dist lib"`
+	ControllerLongTCP             bool              `json:"controller_long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
 	LimitPerWorker                int               `json:"limit_per_worker"`
 	MaxLocalTotalJobs             int               `json:"max_Local_total_jobs"`
 	MaxLocalPreJobs               int               `json:"max_Local_pre_jobs"`

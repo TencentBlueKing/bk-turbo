@@ -55,6 +55,8 @@ type WorkJob interface {
 	// return http code / http message / execute result / execute error
 	ExecuteLocalTask(commands []string, workdir string) (int, string, *LocalTaskResult, error)
 	SendRemoteFile2All(req []FileDesc) error
+
+	ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *LocalTaskResult, error)
 }
 
 const (
@@ -134,6 +136,7 @@ type ControllerConfig struct {
 	RemoteRetryTimes    int
 	EnableLink          bool
 	EnableLib           bool
+	LongTCP             bool
 }
 
 // Target return the server ip and port of controller

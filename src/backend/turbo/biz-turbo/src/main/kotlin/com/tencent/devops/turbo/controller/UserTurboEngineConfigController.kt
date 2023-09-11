@@ -91,4 +91,8 @@ class UserTurboEngineConfigController @Autowired constructor(
             )
         )
     }
+
+    override fun getDistTaskVersion(): Response<List<String>> {
+        return Response.success(turboEngineConfigService.getDistTaskVersion())
+    }
 }

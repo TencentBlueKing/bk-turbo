@@ -1,5 +1,5 @@
-//go:build linux || darwin
-// +build linux darwin
+//go:build linux
+// +build linux
 
 /*
  * Copyright (c) 2021 THL A29 Limited, a Tencent company. All rights reserved
@@ -61,7 +61,11 @@ func RunServer(command string) error {
 // GetSysProcAttr set process group id to a new id,
 // in case of the signals sent to the caller affect the process as well
 func GetSysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{Setpgid: true, Pgid: 0}
+	return &syscall.SysProcAttr{
+		Setpgid: true,
+		Pgid:    0,
+		// Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+	}
 }
 
 // GetCallerAndOptions return the caller and options in unix

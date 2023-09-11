@@ -2,6 +2,7 @@ package com.tencent.devops.turbo.service
 
 import com.tencent.devops.auth.api.service.ServiceManagerResource
 import com.tencent.devops.auth.api.service.ServiceProjectAuthResource
+import com.tencent.devops.common.client.Client
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -10,8 +11,7 @@ import org.springframework.stereotype.Service
 @Suppress("SpringJavaInjectionPointsAutowiringInspection")
 @Service
 class TurboAuthService @Autowired constructor(
-    private val serviceProjectAuthResource: ServiceProjectAuthResource,
-    private val serviceManagerResource: ServiceManagerResource
+    private val client : Client
 ){
 
     companion object {
@@ -34,7 +34,7 @@ class TurboAuthService @Autowired constructor(
     private fun validateProjectMember(projectId: String, userId: String) : Boolean {
         logger.info("project id: $projectId, user id: $userId, token : $token")
         val projectValidateResult = try {
-            serviceProjectAuthResource.isProjectUser(
+            client.get(ServiceProjectAuthResource::class.java).isProjectUser(
                 token = token!!,
                 userId = userId,
                 projectCode = projectId
@@ -53,7 +53,7 @@ class TurboAuthService @Autowired constructor(
      */
     fun validatePlatformMember(projectId : String, userId: String) : Boolean {
         val adminValidateResult =  try {
-            serviceManagerResource.validateManagerPermission(
+            client.get(ServiceManagerResource::class.java).validateManagerPermission(
                 userId = userId,
                 token = token!!,
                 projectCode = projectId,

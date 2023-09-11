@@ -222,6 +222,33 @@ func (l *LocalTaskExecuteResp) Write2Resp(resp *api.RestResponse) {
 	_, _ = resp.Resp.Write(resp.Wrap(r))
 }
 
+// EncResp encode http response body to []byte
+func (l *LocalTaskExecuteResp) EncResp(resp *api.RestResponse) ([]byte, error) {
+	resp.Check()
+	if l.Result == nil {
+		l.Result = &dcSDK.LocalTaskResult{}
+	}
+
+	var code = int32(resp.ErrCode.Int())
+	var exitCode = int32(l.Result.ExitCode)
+	var res = code == 0
+	var msg = []byte(resp.Message)
+
+	r, _ := proto.Marshal(&PBLocalExecuteResult{
+		Basic: &PBHttpResult{
+			Code:    &code,
+			Result:  &res,
+			Message: msg,
+		},
+		ExitCode: &exitCode,
+		Stdout:   l.Result.Stdout,
+		Stderr:   l.Result.Stderr,
+		Message:  []byte(l.Result.Message),
+	})
+
+	return r, nil
+}
+
 // Read parse LocalTaskExecuteResp from http response body
 func (l *LocalTaskExecuteResp) Read(data []byte) (int, string, error) {
 	var r PBLocalExecuteResult

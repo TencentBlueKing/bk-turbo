@@ -144,4 +144,11 @@ interface IUserTurboEngineConfigController {
         @RequestParam("queueName")
         queueName: String?
     ): Response<List<ParamEnumModel>>
+
+    @ApiOperation("获取编译加速工具的版本清单")
+    @GetMapping(
+        "/disttask/resource/version",
+        produces = [MediaType.APPLICATION_JSON_VALUE]
+    )
+    fun getDistTaskVersion(): Response<List<String>>
 }

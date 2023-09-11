@@ -49,6 +49,8 @@ type ServerConfig struct {
 
 	EnableLib  bool `json:"enable_lib" value:"false" usage:"if true, controller will enable remote lib.exe"`
 	EnableLink bool `json:"enable_link" value:"false" usage:"if true, controller will enable remote link.exe"`
+
+	LongTCP bool `json:"long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
 }
 
 // CertConfig  configuration of Cert

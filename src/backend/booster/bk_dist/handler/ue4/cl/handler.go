@@ -111,6 +111,7 @@ type TaskCL struct {
 	forcedepend          bool
 	pumpremote           bool
 	needcopypumpheadfile bool
+	pumpremotefailed     bool
 
 	// how to save result file
 	customSave bool
@@ -254,6 +255,20 @@ func (cl *TaskCL) RemoteRetryTimes() int {
 	return 0
 }
 
+// TODO : OnRemoteFail give chance to try other way if failed to remote execute
+func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	blog.Infof("cl: start OnRemoteFail for: %v", command)
+
+	if cl.pumpremote {
+		blog.Infof("cl: set pumpremotefailed to true now")
+		cl.pumpremotefailed = true
+		cl.needcopypumpheadfile = true
+		cl.pumpremote = false
+		return cl.preExecute(command)
+	}
+	return nil, nil
+}
+
 // LocalLockWeight decide local-execute lock weight, default 1
 func (cl *TaskCL) LocalLockWeight(command []string) int32 {
 	return 1
@@ -357,7 +372,7 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
 	if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
-		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env)), nil
+		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
 	} else {
 		includes := []*dcFile.Info{}
 		for _, l := range uniqlines {
@@ -368,7 +383,9 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 			if fstat.Exist() && !fstat.Basic().IsDir() {
 				includes = append(includes, fstat)
 			} else {
-				blog.Infof("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+				blog.Warnf("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+				// return fail if not existed
+				return nil, fmt.Errorf("%s not existed", f)
 			}
 		}
 
@@ -521,7 +538,7 @@ func (cl *TaskCL) Includes(responseFile string, args []string, workdir string, f
 
 	// TOOD : maybe we should pass responseFile to calc md5, to ensure unique
 	var err error
-	cl.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args)
+	cl.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
 		blog.Errorf("cl: do includes get output file failed: %v", err)
 		return nil, err
@@ -760,7 +777,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if dcPump.SupportPump(cl.sandbox.Env) {
+	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) {
 		if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
 			req, err, notifyerr := cl.trypump(command)
 			if err != nil {
@@ -956,7 +973,7 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) error {
 		goto ERROREND
 	}
 
-	blog.Debugf("cl: output [%s] errormessage [%s]", r.Results[0].OutputMessage, r.Results[0].ErrorMessage)
+	blog.Infof("cl: output [%s] errormessage [%s]", r.Results[0].OutputMessage, r.Results[0].ErrorMessage)
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cl: success done post execute for: %v", cl.originArgs)

@@ -64,6 +64,9 @@ type Handler interface {
 	// RemoteRetryTimes will return the remote retry times
 	RemoteRetryTimes() int
 
+	// OnRemoteFail give chance to try other way if failed to remote execute
+	OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error)
+
 	// PostExecuteNeedLock decide whether executor should lock before post execution
 	PostExecuteNeedLock(result *dcSDK.BKDistResult) bool
 
