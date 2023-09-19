@@ -64,6 +64,10 @@ const (
 	WorkHeartbeatTimeout = 10 * WorkHeartbeatTick
 )
 
+const (
+	EmptyWorkerID = "EMPTY_0123456789"
+)
+
 // GetControllerConfigFromEnv generate the controller config from environment variables
 func GetControllerConfigFromEnv() ControllerConfig {
 	config := ControllerConfig{

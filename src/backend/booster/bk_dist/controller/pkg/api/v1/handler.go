@@ -465,8 +465,8 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 
 	if workID == "" {
 		blog.Infof("api: executeLocalTask get work_id from path empty")
-		// r.Write2Resp(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam, Message: "work_id empty"})
-		// return
+		r.Write2Resp(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam, Message: "work_id empty"})
+		return
 	}
 	blog.Infof("api: executeLocalTask try to execute local task: %s", workID)
 

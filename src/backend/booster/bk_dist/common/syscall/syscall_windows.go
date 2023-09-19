@@ -493,3 +493,8 @@ func RedirectStderror(f string) error {
 
 	return nil
 }
+
+// do not implement in windows
+func IsStdinPipe() bool {
+	return false
+}

@@ -23,14 +23,14 @@ import (
 
 // define const vars
 const (
-	FlagProjectID  = "project_id"
-	FlagBuildID    = "build_id"
-	FlagArgs       = "args"
-	FlagGccVersion = "gcc_version"
-	FlagBazel      = "bazel"
-	FlagBazelPlus  = "bazel_plus"
-	FlagBazel4Plus = "bazel4_plus"
-	// FlagBazel4NoLauncher     = "bazel4_no_launcher"
+	FlagProjectID            = "project_id"
+	FlagBuildID              = "build_id"
+	FlagArgs                 = "args"
+	FlagGccVersion           = "gcc_version"
+	FlagBazel                = "bazel"
+	FlagBazelPlus            = "bazel_plus"
+	FlagBazel4Plus           = "bazel4_plus"
+	FlagBazelNoLauncher      = "bazel_no_launcher"
 	FlagLauncher             = "launcher"
 	FlagLog                  = "log"
 	FlagLogDir               = "log_dir"
@@ -472,11 +472,11 @@ func GetApp(ct ClientType) *commandCli.App {
 				Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
 					"compilation works with at least bazel 4.0",
 			},
-			// commandCli.BoolFlag{
-			// 	Name: "bazel4_no_launcher, bz4nl",
-			// 	Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
-			// 		"compilation works with at least bazel 4.0; this will simplify bazel accelerate environment",
-			// },
+			commandCli.BoolFlag{
+				Name: "bazel_no_launcher, bz4nl",
+				Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
+					"compilation works with at least bazel 4.0; this will simplify bazel accelerate environment",
+			},
 			commandCli.BoolFlag{
 				Name:  "launcher, lc",
 				Usage: "if the flag set, then take launcher instead of calling executor directly",

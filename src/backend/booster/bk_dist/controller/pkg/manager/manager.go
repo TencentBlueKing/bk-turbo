@@ -365,7 +365,7 @@ func (m *mgr) ExecuteLocalTask(
 
 	var work *types.Work
 	var err error
-	if workID == "" {
+	if workID == dcSDK.EmptyWorkerID {
 		if m.conf.UseDefaultWorker {
 			work, err = m.worksPool.getFirstWork()
 			if err != nil {
