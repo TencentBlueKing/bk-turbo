@@ -425,6 +425,7 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 			handler := m.remoteWorker.Handler(0, nil, nil, nil)
 			for _, w := range m.resource.getDeadWorkers() {
 				go func(w *worker) {
+					// do not use long tcp here, it's only check
 					_, err := handler.ExecuteSyncTime(w.host.Server)
 					if err != nil {
 						blog.Debugf("remote: try to sync time for host(%s) failed: %v", w.host.Server, err)
@@ -510,10 +511,18 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 	m.work.Basic().UpdateJobStats(req.Stats)
 
 	var result *dcSDK.BKDistResult
-	if !req.Req.CustomSave {
-		result, err = handler.ExecuteTask(req.Server, req.Req)
+	if m.conf.LongTCP {
+		if !req.Req.CustomSave {
+			result, err = handler.ExecuteTaskLongTCP(req.Server, req.Req)
+		} else {
+			result, err = handler.ExecuteTaskWithoutSaveFileLongTCP(req.Server, req.Req)
+		}
 	} else {
-		result, err = handler.ExecuteTaskWithoutSaveFile(req.Server, req.Req)
+		if !req.Req.CustomSave {
+			result, err = handler.ExecuteTask(req.Server, req.Req)
+		} else {
+			result, err = handler.ExecuteTaskWithoutSaveFile(req.Server, req.Req)
+		}
 	}
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkEndTime)
@@ -914,7 +923,12 @@ func (m *Mgr) ensureSingleFile(
 
 	// 同步发送文件
 	t := time.Now().Local()
-	result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+	var result *dcSDK.BKSendFileResult
+	if m.conf.LongTCP {
+		result, err = handler.ExecuteSendFileLongTCP(host, req, sandbox, m.work.LockMgr())
+	} else {
+		result, err = handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+	}
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
@@ -1016,7 +1030,13 @@ func (m *Mgr) checkSingleCache(
 
 	blog.Debugf("remote: try to check cache for single file(%s) for work(%s) to server(%s)",
 		desc.FilePath, m.work.ID(), host.Server)
-	r, err := handler.ExecuteCheckCache(host, &dcSDK.BKDistFileSender{Files: []dcSDK.FileDesc{desc}}, sandbox)
+	var r []bool
+	var err error
+	if m.conf.LongTCP {
+		r, err = handler.ExecuteCheckCacheLongTCP(host, &dcSDK.BKDistFileSender{Files: []dcSDK.FileDesc{desc}}, sandbox)
+	} else {
+		r, err = handler.ExecuteCheckCache(host, &dcSDK.BKDistFileSender{Files: []dcSDK.FileDesc{desc}}, sandbox)
+	}
 	if err != nil {
 		blog.Warnf("remote: try to check cache for single file(%s) for work(%s) to server(%s) failed: %v",
 			desc.FilePath, m.work.ID(), host.Server, err)
@@ -1049,7 +1069,13 @@ func (m *Mgr) checkBatchCache(
 	}
 
 	blog.Debugf("remote: try to check cache for batch file for work(%s) to server(%s)", m.work.ID(), host.Server)
-	result, err := handler.ExecuteCheckCache(host, &dcSDK.BKDistFileSender{Files: desc}, sandbox)
+	var result []bool
+	var err error
+	if m.conf.LongTCP {
+		result, err = handler.ExecuteCheckCacheLongTCP(host, &dcSDK.BKDistFileSender{Files: desc}, sandbox)
+	} else {
+		result, err = handler.ExecuteCheckCache(host, &dcSDK.BKDistFileSender{Files: desc}, sandbox)
+	}
 	if err != nil {
 		blog.Warnf("remote: try to check cache for batch file for work(%s) to server(%s) failed: %v",
 			m.work.ID(), host.Server, err)
@@ -1068,12 +1094,12 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 
 	t2 := time.Now().Local()
 	if d1 := t2.Sub(t1); d1 > 50*time.Millisecond {
-		blog.Debugf("check cache lock wait too long server(%s): %s", server, d1.String())
+		// blog.Debugf("check cache lock wait too long server(%s): %s", server, d1.String())
 	}
 
 	defer func() {
 		if d2 := time.Now().Local().Sub(t2); d2 > 50*time.Millisecond {
-			blog.Debugf("check cache process wait too long server(%s): %s", server, d2.String())
+			// blog.Debugf("check cache process wait too long server(%s): %s", server, d2.String())
 		}
 	}()
 
@@ -1478,7 +1504,13 @@ func (m *Mgr) syncHostTime(hostList []*dcProtocol.Host) []*dcProtocol.Host {
 				defer wg.Done()
 
 				t1 := time.Now().Local().UnixNano()
-				remoteTime, err := handler.ExecuteSyncTime(h.Server)
+				var remoteTime int64
+				var err error
+				if m.conf.LongTCP {
+					remoteTime, err = handler.ExecuteSyncTimeLongTCP(h.Server)
+				} else {
+					remoteTime, err = handler.ExecuteSyncTime(h.Server)
+				}
 				if err != nil {
 					blog.Warnf("remote: try to sync time for host(%s) failed: %v", h.Server, err)
 					return
@@ -1792,7 +1824,11 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 	waitsecs := 5
 	var err error
 	for i := 0; i < 4; i++ {
-		result, err = handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+		if m.conf.LongTCP {
+			result, err = handler.ExecuteSendFileLongTCP(host, req, sandbox, m.work.LockMgr())
+		} else {
+			result, err = handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
+		}
 		if err == nil {
 			break
 		} else {

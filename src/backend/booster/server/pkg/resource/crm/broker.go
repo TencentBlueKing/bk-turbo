@@ -359,7 +359,8 @@ func (b *Broker) launch() error {
 		if availableInstance >= b.param.Instance {
 			return b.param.Instance, nil
 		}
-
+		blog.Warnf("crm broker: failed to launch resource(%s) for broker(%s) with user(%s), need (%d) instances"+
+			", only (%d) available", brokerID, b.name, b.user, b.param.Instance, availableInstance)
 		return 0, ErrorBrokerNotEnoughResources
 	}, false)
 	if err == ErrorBrokerNotEnoughResources {
@@ -472,8 +473,9 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 		}
 
 		if !instanceok {
-			blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s), not found expected %d instances, release it",
-				resourceID, b.name, b.user, b.param.Instance)
+			blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s), not found "+
+				"expected %d instances after %f seconds, release it",
+				resourceID, b.name, b.user, b.param.Instance, time.Since(startTime).Seconds())
 			// release this resource
 			err = b.mgr.release(resource.resourceID, b.user)
 			if err != nil {

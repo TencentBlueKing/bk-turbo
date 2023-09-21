@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build darwin
+// +build darwin
 
 /*
  * Copyright (c) 2021 THL A29 Limited, a Tencent company. All rights reserved
@@ -64,7 +64,6 @@ func GetSysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
 		Setpgid: true,
 		Pgid:    0,
-		// Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 	}
 }
 

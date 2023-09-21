@@ -33,6 +33,13 @@ type RemoteWorkerHandler interface {
 	ExecuteTaskWithoutSaveFile(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
 	ExecuteSendFile(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox, mgr LockMgr) (*BKSendFileResult, error)
 	ExecuteCheckCache(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) ([]bool, error)
+
+	// with long tcp connection
+	ExecuteTaskWithoutSaveFileLongTCP(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
+	ExecuteTaskLongTCP(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
+	ExecuteSendFileLongTCP(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox, mgr LockMgr) (*BKSendFileResult, error)
+	ExecuteCheckCacheLongTCP(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) ([]bool, error)
+	ExecuteSyncTimeLongTCP(server string) (int64, error)
 }
 
 // FileDescPriority from 0 ~ 100, from high to low

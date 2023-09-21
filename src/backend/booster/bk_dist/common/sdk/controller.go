@@ -136,6 +136,7 @@ type ControllerConfig struct {
 	RemoteRetryTimes    int
 	EnableLink          bool
 	EnableLib           bool
+	LongTCP             bool
 }
 
 // Target return the server ip and port of controller

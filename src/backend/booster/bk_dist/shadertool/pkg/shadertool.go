@@ -204,6 +204,7 @@ func (h *ShaderTool) launchController() error {
 		h.controllerconfig.RemoteRetryTimes = h.settings.ControllerRemoteRetryTimes
 		h.controllerconfig.EnableLink = h.settings.ControllerEnableLink
 		h.controllerconfig.EnableLib = h.settings.ControllerEnableLib
+		h.controllerconfig.LongTCP = h.settings.ControllerLongTCP
 		h.controller = v1.NewSDK(h.controllerconfig)
 	}
 
@@ -262,8 +263,10 @@ func (h *ShaderTool) executeShaders(ctx context.Context) error {
 			// blog.Debugf("ShaderTool: main loop tick")
 			err := h.tryExecuteActions(ctx)
 			if err != nil && err != ErrorNoActionsToRun {
-				blog.Errorf("ShaderTool: failed to execute shader actions with error:%v", err)
-				return err
+				blog.Errorf("ShaderTool: failed to execute shader actions with error:%v,exit now", err)
+				h.ReleaseResource()
+				h.commitSuicide()
+				// return err
 			}
 		}
 	}

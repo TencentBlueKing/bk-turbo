@@ -1075,9 +1075,9 @@ func makeTmpFile(tmpDir, prefix, ext string) (string, error) {
 	return "", fmt.Errorf("cc: create tmp file failed: %s", target)
 }
 
-func getPumpIncludeFile(tmpDir, prefix, ext string, args []string) (string, error) {
+func getPumpIncludeFile(tmpDir, prefix, ext string, args []string, workdir string) (string, error) {
 	fullarg := strings.Join(args, " ")
-	md5str := md5.Sum([]byte(fullarg))
+	md5str := md5.Sum([]byte((fullarg + workdir)))
 	target := filepath.Join(tmpDir, fmt.Sprintf("%s_%x%s", prefix, md5str, ext))
 
 	return target, nil
@@ -1201,6 +1201,10 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 		return fmt.Errorf("file path is empty")
 	}
 
+	if !filepath.IsAbs(fp) {
+		fp = filepath.Join(dir, fp)
+	}
+
 	f, err := os.Create(fp)
 	if err != nil {
 		if !filepath.IsAbs(fp) && dir != "" {
@@ -1282,6 +1286,7 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 				blog.Errorf("cc: save file [%s] error: [%v]", fp, err)
 				return err
 			}
+			blog.Infof("cc: succeed save file %s size [%d]", fp, outlen)
 			break
 		default:
 			return fmt.Errorf("cc: unknown compress type [%s]", rf.Compresstype)

@@ -81,6 +81,7 @@ type TaskCC struct {
 	forcedepend          bool
 	pumpremote           bool
 	needcopypumpheadfile bool
+	pumpremotefailed     bool
 
 	pchFileDesc *dcSDK.FileDesc
 
@@ -155,6 +156,20 @@ func (cc *TaskCC) NeedRemoteResource(command []string) bool {
 // RemoteRetryTimes will return the remote retry times
 func (cc *TaskCC) RemoteRetryTimes() int {
 	return 0
+}
+
+// TODO : OnRemoteFail give chance to try other way if failed to remote execute
+func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	blog.Infof("cc: start OnRemoteFail for: %v", command)
+
+	if cc.pumpremote {
+		blog.Infof("cc: set pumpremotefailed to true now")
+		cc.pumpremotefailed = true
+		cc.needcopypumpheadfile = true
+		cc.pumpremote = false
+		return cc.preExecute(command)
+	}
+	return nil, nil
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -407,7 +422,7 @@ func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, f
 
 	// TOOD : maybe we should pass responseFile to calc md5, to ensure unique
 	var err error
-	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args)
+	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
 		blog.Errorf("cc: do includes get output file failed: %v", err)
 		return nil, err
@@ -649,7 +664,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	cc.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if dcPump.SupportPump(cc.sandbox.Env) {
+	if !cc.pumpremotefailed && dcPump.SupportPump(cc.sandbox.Env) {
 		if satisfied, _ := cc.isPumpActionNumSatisfied(); satisfied {
 			req, err, notifyerr := cc.trypump(command)
 			if err != nil {
