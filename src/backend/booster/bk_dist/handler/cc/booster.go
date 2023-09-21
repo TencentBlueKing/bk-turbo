@@ -70,6 +70,15 @@ func appendPreload() error {
 	return nil
 }
 
+func (cc *TaskCC) appendCcache(config dcType.BoosterConfig) error {
+	if cc.ccacheEnable && config.Works.BazelNoLauncher {
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCacheNoCPP2)
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCachePrefix)
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCachePrefixCPP)
+	}
+	return nil
+}
+
 // ProjectExtraData describe the extra data store in project
 // ccache_enable and ccache_enabled are both to control ccache usage, if one of them is true, then ccache enabled.
 type ProjectExtraData struct {
@@ -136,6 +145,7 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 	}
 
 	appendPreload()
+	cc.appendCcache(config)
 
 	if config.Works.BazelPlus || config.Works.Bazel4Plus || config.Works.BazelNoLauncher {
 		additions := make([]string, 0, 10)

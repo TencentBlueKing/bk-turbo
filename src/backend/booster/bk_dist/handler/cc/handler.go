@@ -690,8 +690,17 @@ func (cc *TaskCC) statisticsCCache() (*types.Ccache, error) {
 		return nil, err
 	}
 
+	statsicstr := buf.String()
+	if strings.Contains(statsicstr, "Cacheable calls:") {
+		return cc.analyzeCCacheNew(statsicstr)
+	} else {
+		return cc.analyzeCCache(statsicstr)
+	}
+}
+
+func (cc *TaskCC) analyzeCCache(data string) (*types.Ccache, error) {
 	ccache := &types.Ccache{}
-	arr := strings.Split(buf.String(), "\n")
+	arr := strings.Split(data, "\n")
 	for _, str := range arr {
 		str = strings.TrimSpace(str)
 		if str == "" {
@@ -738,6 +747,54 @@ func (cc *TaskCC) statisticsCCache() (*types.Ccache, error) {
 			ccache.CacheSize = value
 		case "max cache size":
 			ccache.MaxCacheSize = value
+		}
+	}
+
+	return ccache, nil
+}
+
+func (cc *TaskCC) analyzeCCacheNew(data string) (*types.Ccache, error) {
+	ccache := &types.Ccache{}
+	arr := strings.Split(data, "\n")
+	for _, str := range arr {
+		str = strings.TrimSpace(str)
+		if str == "" {
+			continue
+		}
+		kv := strings.Split(str, ":")
+		if len(kv) < 2 {
+			continue
+		}
+		key := strings.TrimSpace(kv[0])
+
+		tempvalue := strings.TrimSpace(kv[len(kv)-1])
+		valuearr := strings.Split(tempvalue, "/")
+		if len(valuearr) < 2 {
+			continue
+		}
+		value := strings.TrimSpace(valuearr[0])
+
+		switch key {
+		case "Direct":
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, err
+			}
+			ccache.DirectHit = i
+		case "Preprocessed":
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, err
+			}
+			ccache.PreprocessedHit = i
+		case "Misses":
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, err
+			}
+			ccache.CacheMiss = i
+		case "Cache size (GiB)":
+			ccache.CacheSize = tempvalue
 		}
 	}
 
