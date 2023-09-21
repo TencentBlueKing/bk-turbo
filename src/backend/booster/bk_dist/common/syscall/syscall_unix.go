@@ -324,17 +324,3 @@ func RedirectStderror(f string) error {
 
 	return nil
 }
-
-func IsStdinPipe() bool {
-	stat := syscall.Stat_t{}
-	err := syscall.Fstat(int(os.Stdin.Fd()), &stat)
-	if err != nil {
-		return true
-	}
-
-	if (stat.Mode & syscall.S_IFMT) == syscall.S_IFIFO {
-		return true
-	} else {
-		return false
-	}
-}

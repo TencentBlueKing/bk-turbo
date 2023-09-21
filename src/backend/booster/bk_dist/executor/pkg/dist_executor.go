@@ -106,13 +106,35 @@ func (d *DistExecutor) Run() (int, string, error) {
 	//	return runDirect()
 	//}
 
-	if dcSyscall.IsStdinPipe() {
+	if compileReadFromStdin() {
 		savePipedLog(strings.Join(os.Args, " "))
 		return runDirect()
 	}
 
 	// work available, run work with executor-progress
 	return d.runWork()
+}
+
+func compileReadFromStdin() bool {
+	if len(os.Args) < 2 {
+		return false
+	}
+
+	exe := os.Args[1]
+	if !strings.HasSuffix(exe, "gcc") &&
+		!strings.HasSuffix(exe, "g++") &&
+		!strings.HasSuffix(exe, "clang") &&
+		!strings.HasSuffix(exe, "clang++") {
+		return false
+	}
+
+	for _, v := range os.Args[1:] {
+		if v == "-" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func runDirect() (int, string, error) {
