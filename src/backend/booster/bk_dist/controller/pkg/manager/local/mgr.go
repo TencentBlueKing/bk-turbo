@@ -212,6 +212,11 @@ func (m *Mgr) ExecuteTask(
 		blog.Warnf("local: execute post-task for work(%s) from pid(%d) failed: %v", m.work.ID(), req.Pid, err)
 		req.Stats.RemoteErrorMessage = err.Error()
 
+		lr, err := m.retryOnRemoteFail(req, globalWork, e)
+		if err == nil && lr != nil {
+			return lr, err
+		}
+
 		if !e.skipLocalRetry() {
 			return e.executeLocalTask(), nil
 		}
@@ -240,6 +245,67 @@ func (m *Mgr) ExecuteTask(
 			Message:  "success to process all steps",
 		},
 	}, nil
+}
+
+// 远程失败后调用handle的特殊处理函数，方便支持某些特殊流程
+func (m *Mgr) retryOnRemoteFail(
+	req *types.LocalTaskExecuteRequest,
+	globalWork *types.Work,
+	e *executor) (*types.LocalTaskExecuteResult, error) {
+	blog.Infof("local: onRemoteFail with task(%s) for work(%s) from pid(%d) ",
+		strings.Join(req.Commands, " "), m.work.ID(), req.Pid)
+
+	m.work.Basic().Info().IncPrepared()
+	m.work.Remote().IncRemoteJobs()
+
+	// 重新走流程，比如预处理
+	cnew, errnew := e.onRemoteFail()
+	if cnew != nil && errnew == nil {
+		remoteReqNew := &types.RemoteTaskExecuteRequest{
+			Pid:           req.Pid,
+			Req:           cnew,
+			Stats:         req.Stats,
+			Sandbox:       e.sandbox,
+			IOTimeout:     e.ioTimeout,
+			BanWorkerList: []*protocol.Host{},
+		}
+		// 重新远程执行命令
+		r, err := m.work.Remote().ExecuteTask(remoteReqNew)
+
+		m.work.Basic().Info().DecPrepared()
+		m.work.Remote().DecRemoteJobs()
+
+		if err != nil {
+			blog.Warnf("local: failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)", m.work.ID(), req.Pid, err)
+			return nil, err
+		}
+
+		blog.Infof("local: succeed to remote in onRemoteFail from work(%s) from pid(%d)", m.work.ID(), req.Pid)
+		// 重新post环节
+		err = e.executePostTask(r.Result)
+		if err != nil {
+			blog.Warnf("local: execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v", m.work.ID(), req.Pid, err)
+			return nil, err
+		}
+
+		req.Stats.Success = true
+		m.work.Basic().UpdateJobStats(req.Stats)
+		blog.Infof("local: success to execute post task in onRemoteFail for work(%s) from pid(%d) in env(%v) dir(%s)",
+			m.work.ID(), req.Pid, req.Environments, req.Dir)
+		return &types.LocalTaskExecuteResult{
+			Result: &dcSDK.LocalTaskResult{
+				ExitCode: 0,
+				Stdout:   e.Stdout(),
+				Stderr:   e.Stderr(),
+				Message:  "success to process all steps",
+			},
+		}, nil
+	}
+
+	m.work.Basic().Info().DecPrepared()
+	m.work.Remote().DecRemoteJobs()
+
+	return nil, nil
 }
 
 // Slots get current total and occupied slots

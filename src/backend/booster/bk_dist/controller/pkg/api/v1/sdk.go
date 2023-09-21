@@ -185,12 +185,12 @@ func (s *sdk) checkServer(launchedtime int64) (int, error) {
 func (s *sdk) launchServer() error {
 	blog.Infof("sdk: ready launchServer...")
 
-	ctrlPath, err := dcUtil.CheckExecutable(dcSDK.ControllerBinary)
+	target := controllerTarget(dcSDK.ControllerBinary)
+	ctrlPath, err := dcUtil.CheckFileWithCallerPath(target)
 	if err != nil {
 		blog.Infof("sdk: not found exe file with default path, info: %v", err)
 
-		target := controllerTarget(dcSDK.ControllerBinary)
-		ctrlPath, err = dcUtil.CheckFileWithCallerPath(target)
+		ctrlPath, err = dcUtil.CheckExecutable(dcSDK.ControllerBinary)
 		if err != nil {
 			blog.Errorf("sdk: not found exe file with error: %v", err)
 			return err
@@ -248,6 +248,10 @@ func (s *sdk) launchServer() error {
 		enablelink = "--enable_link"
 	}
 
+	longTCP := ""
+	if s.config.LongTCP {
+		longTCP = "--long_tcp"
+    
 	useDefaultWorker := "--use_default_worker"
 	if !s.config.UseDefaultWorker {
 		useDefaultWorker = ""
@@ -262,7 +266,7 @@ func (s *sdk) launchServer() error {
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
 		" %s %s"+
-		" %s",
+		" %s %s",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -285,6 +289,7 @@ func (s *sdk) launchServer() error {
 		remoteRetryTimes,
 		enablelib,
 		enablelink,
+		longTCP,
 		useDefaultWorker,
 	))
 }

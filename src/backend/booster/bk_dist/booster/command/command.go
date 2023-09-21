@@ -103,7 +103,8 @@ const (
 	FlagRemoteRetryTimes     = "remote_retry_times"
 	FlagEnableLink           = "enable_link"
 	FlagEnableLib            = "enable_lib"
-	FlagUseDefaultWorker     = "use_default_worker"
+	FlagLongTCP              = "long_tcp"
+  FlagUseDefaultWorker     = "use_default_worker"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -434,6 +435,10 @@ var (
 			Usage: "enable remote lib.exe",
 		},
 		commandCli.BoolFlag{
+			Name:  "long_tcp",
+			Usage: "whether connect to worker with long tcp connection",
+		},
+    commandCli.BoolFlag{
 			Name:  "use_default_worker",
 			Usage: "use default worker if worker id is empty",
 		},

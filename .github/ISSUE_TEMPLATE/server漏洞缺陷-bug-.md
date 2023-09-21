@@ -1,7 +1,10 @@
 ---
-name: Bug Report
-about: Report a bug encountered while operating bk-ci
-labels: kind/bug
+name: Server漏洞缺陷(BUG)
+about: Report a bug encountered for this project
+title: "【Server BUG】"
+labels: server, todo
+assignees: ''
+
 ---
 
 <!-- Please use this template while reporting a bug and provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner. Thanks!-->
