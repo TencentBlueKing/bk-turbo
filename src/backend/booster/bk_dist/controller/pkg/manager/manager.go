@@ -363,10 +363,24 @@ func (m *mgr) ExecuteLocalTask(
 	blog.Infof("mgr: try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
 		workID, req.Pid, req.Environments, req.Commands)
 
-	work, err := m.worksPool.getWork(workID)
-	if err != nil {
-		blog.Errorf("mgr: get work(%s) failed: %v", workID, err)
-		return nil, err
+	var work *types.Work
+	var err error
+	if workID == dcSDK.EmptyWorkerID {
+		if m.conf.UseDefaultWorker {
+			work, err = m.worksPool.getFirstWork()
+			if err != nil {
+				blog.Errorf("mgr: get first work failed: %v", err)
+				return nil, err
+			}
+		} else {
+			return nil, types.ErrWorkIDEmpty
+		}
+	} else {
+		work, err = m.worksPool.getWork(workID)
+		if err != nil {
+			blog.Errorf("mgr: get work(%s) failed: %v", workID, err)
+			return nil, err
+		}
 	}
 
 	if !work.Basic().Info().IsWorking() {

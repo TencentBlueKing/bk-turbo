@@ -64,6 +64,10 @@ const (
 	WorkHeartbeatTimeout = 10 * WorkHeartbeatTick
 )
 
+const (
+	EmptyWorkerID = "EMPTY_0123456789"
+)
+
 // GetControllerConfigFromEnv generate the controller config from environment variables
 func GetControllerConfigFromEnv() ControllerConfig {
 	config := ControllerConfig{
@@ -137,6 +141,7 @@ type ControllerConfig struct {
 	EnableLink          bool
 	EnableLib           bool
 	LongTCP             bool
+  UseDefaultWorker    bool
 }
 
 // Target return the server ip and port of controller

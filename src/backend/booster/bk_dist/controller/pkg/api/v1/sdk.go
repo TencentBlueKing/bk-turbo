@@ -250,7 +250,12 @@ func (s *sdk) launchServer() error {
 
 	longTCP := ""
 	if s.config.LongTCP {
-		longTCP = "--long_tcp"
+		longTCP = "--long_tcp"	
+	}
+
+	useDefaultWorker := "--use_default_worker"
+	if !s.config.UseDefaultWorker {
+		useDefaultWorker = ""
 	}
 
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
@@ -262,7 +267,7 @@ func (s *sdk) launchServer() error {
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
 		" %s %s"+
-		" %s",
+		" %s %s",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -286,6 +291,7 @@ func (s *sdk) launchServer() error {
 		enablelib,
 		enablelink,
 		longTCP,
+		useDefaultWorker,
 	))
 }
 

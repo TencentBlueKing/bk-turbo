@@ -271,6 +271,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			Bazel:                c.Bool(FlagBazel),
 			BazelPlus:            c.Bool(FlagBazelPlus),
 			Bazel4Plus:           c.Bool(FlagBazel4Plus),
+			BazelNoLauncher:      c.Bool(FlagBazelNoLauncher),
 			Launcher:             c.Bool(FlagLauncher) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus),
 			AdditionFiles:        c.StringSlice(FlagAdditionFile),
 			WorkerList:           c.StringSlice(FlagWorkerList),
@@ -345,7 +346,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			RemoteRetryTimes:    remoteRetryTimes,
 			EnableLink:          c.Bool(FlagEnableLink),
 			EnableLib:           c.Bool(FlagEnableLib),
-			LongTCP:             c.Bool(FlagLongTCP),
+      LongTCP:             c.Bool(FlagLongTCP),
+			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
 		},
 	}
 

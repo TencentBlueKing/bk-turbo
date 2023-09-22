@@ -81,10 +81,11 @@ type BoosterWorks struct {
 	WorkerSideCache    bool
 	LocalRecord        bool
 
-	Bazel      bool
-	BazelPlus  bool
-	Bazel4Plus bool
-	Launcher   bool
+	Bazel           bool
+	BazelPlus       bool
+	Bazel4Plus      bool
+	Launcher        bool
+	BazelNoLauncher bool
 
 	Preload           sdk.PreloadConfig
 	PreloadContent    string

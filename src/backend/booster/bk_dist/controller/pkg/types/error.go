@@ -37,4 +37,5 @@ var (
 	ErrSlotsLockFailed              = fmt.Errorf("slots lock failed`")
 	ErrNoWaitingTask                = fmt.Errorf("no waitting task")
 	ErrFileLock                     = fmt.Errorf("lock file failed")
+	ErrWorkIDEmpty                  = fmt.Errorf("work id is empty")
 )

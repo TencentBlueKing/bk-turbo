@@ -49,25 +49,33 @@ const (
 	ccacheName   = "ccache"
 )
 
-var bazelActionConstOptions = map[string]bool{
-	// env.KeyExecutorHookPreloadLibraryLinux:             true,
-	// env.KeyExecutorHookPreloadLibraryMacos:             true,
-	env.GetEnvKey(env.KeyExecutorHookConfigContent):    true,
-	env.GetEnvKey(env.KeyExecutorHookConfigContentRaw): true,
-	env.GetEnvKey(env.BoosterType):                     true,
-	env.GetEnvKey(env.KeyExecutorIOTimeout):            true,
+// change bazelActionConstOptions from map to array, to keep sequence for bazel
+var bazelActionConstOptions = []string{
+	env.GetEnvKey(env.KeyExecutorHookConfigContent),
+	env.GetEnvKey(env.KeyExecutorHookConfigContentRaw),
+	env.GetEnvKey(env.BoosterType),
+	env.GetEnvKey(env.KeyExecutorIOTimeout),
 }
 
 func appendPreload() error {
 	switch runtime.GOOS {
 	case "linux":
-		bazelActionConstOptions[env.KeyExecutorHookPreloadLibraryLinux] = true
+		bazelActionConstOptions = append(bazelActionConstOptions, env.KeyExecutorHookPreloadLibraryLinux)
 	case "darwin":
-		bazelActionConstOptions[env.KeyExecutorHookPreloadLibraryMacos] = true
+		bazelActionConstOptions = append(bazelActionConstOptions, env.KeyExecutorHookPreloadLibraryMacos)
 	default:
 		blog.Warnf("booster: What os is this?", runtime.GOOS)
 	}
 
+	return nil
+}
+
+func (cc *TaskCC) appendCcache(config dcType.BoosterConfig) error {
+	if cc.ccacheEnable && config.Works.BazelNoLauncher {
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCacheNoCPP2)
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCachePrefix)
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCachePrefixCPP)
+	}
 	return nil
 }
 
@@ -137,17 +145,19 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 	}
 
 	appendPreload()
+	cc.appendCcache(config)
 
-	if config.Works.BazelPlus || config.Works.Bazel4Plus {
+	if config.Works.BazelPlus || config.Works.Bazel4Plus || config.Works.BazelNoLauncher {
 		additions := make([]string, 0, 10)
-		for k, v := range config.Works.Environments {
-			if _, ok := bazelActionConstOptions[k]; !ok {
+		for _, bkey := range bazelActionConstOptions {
+			v, ok := config.Works.Environments[bkey]
+			if !ok {
 				continue
 			}
 
-			additions = append(additions, wrapActionOptions("action_env", k, v))
-			if config.Works.Bazel4Plus {
-				additions = append(additions, wrapActionOptions("host_action_env", k, v))
+			additions = append(additions, wrapActionOptions("action_env", bkey, v))
+			if config.Works.Bazel4Plus || config.Works.BazelNoLauncher {
+				additions = append(additions, wrapActionOptions("host_action_env", bkey, v))
 			}
 		}
 
@@ -155,6 +165,7 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 			originArgs += " " + strings.Join(additions, " ")
 		}
 		return originArgs
+
 	}
 
 	return originArgs
