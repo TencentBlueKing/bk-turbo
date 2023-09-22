@@ -104,7 +104,7 @@ const (
 	FlagEnableLink           = "enable_link"
 	FlagEnableLib            = "enable_lib"
 	FlagLongTCP              = "long_tcp"
-  FlagUseDefaultWorker     = "use_default_worker"
+	FlagUseDefaultWorker     = "use_default_worker"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -438,7 +438,7 @@ var (
 			Name:  "long_tcp",
 			Usage: "whether connect to worker with long tcp connection",
 		},
-    commandCli.BoolFlag{
+		commandCli.BoolFlag{
 			Name:  "use_default_worker",
 			Usage: "use default worker if worker id is empty",
 		},
