@@ -141,7 +141,7 @@ type ControllerConfig struct {
 	EnableLink          bool
 	EnableLib           bool
 	LongTCP             bool
-  UseDefaultWorker    bool
+	UseDefaultWorker    bool
 }
 
 // Target return the server ip and port of controller

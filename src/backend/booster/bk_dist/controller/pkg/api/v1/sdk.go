@@ -250,7 +250,7 @@ func (s *sdk) launchServer() error {
 
 	longTCP := ""
 	if s.config.LongTCP {
-		longTCP = "--long_tcp"	
+		longTCP = "--long_tcp"
 	}
 
 	useDefaultWorker := "--use_default_worker"
