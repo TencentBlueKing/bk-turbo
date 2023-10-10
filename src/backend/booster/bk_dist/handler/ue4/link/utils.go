@@ -297,7 +297,7 @@ func scanArgs(args []string, workdir string) (*libArgs, error) {
 	r := new(libArgs)
 	outputfilekeys := []string{"/OUT:", "/PDB:", "/PDBSTRIPPED:", "/MAP:",
 		"/TSAWARE:", "/PROFILE:", "/WINMDFILE:", "/IMPLIB:"}
-	inputfilekeys := []string{"/MANIFESTINPUT:", "/DEF:", "/PGD:", "/SOURCELINK:"}
+	inputfilekeys := []string{"/MANIFESTINPUT:", "/DEF:", "/PGD:", "/SOURCELINK:", "/NATVIS:"}
 	libpathkey := "/LIBPATH:"
 	libpaths := make([]string, 0, 0)
 	libfiles := make([]string, 0, 0)

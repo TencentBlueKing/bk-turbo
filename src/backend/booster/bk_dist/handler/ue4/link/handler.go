@@ -225,11 +225,12 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	if err == nil {
 		addDir := filepath.Dir(mtpath)
 
-		tempInputs := make([]string, 0, 4)
+		tempInputs := make([]string, 0, 5)
 		tempInputs = append(tempInputs, mtpath)
 		tempInputs = append(tempInputs, filepath.Join(addDir, "midlrtmd.dll"))
 		tempInputs = append(tempInputs, filepath.Join(addDir, "rc.exe"))
 		tempInputs = append(tempInputs, filepath.Join(addDir, "rcdll.dll"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "ServicingCommon.dll"))
 		blog.Debugf("link: found additional files:%v", tempInputs)
 
 		for _, v := range tempInputs {

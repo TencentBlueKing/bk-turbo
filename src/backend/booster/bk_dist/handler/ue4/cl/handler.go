@@ -106,6 +106,7 @@ type TaskCL struct {
 	responseFile     string
 	sourcedependfile string
 	pumpHeadFile     string
+	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
 
 	// forcedepend 是我们主动导出依赖文件，showinclude 是编译命令已经指定了导出依赖文件
 	forcedepend          bool
@@ -496,6 +497,17 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			l, _ = filepath.Abs(filepath.Join(workdir, l))
 		}
 		includes = append(includes, formatFilePath(l))
+	}
+
+	// copy includeRspFiles
+	if len(cl.includeRspFiles) > 0 {
+		for _, l := range cl.includeRspFiles {
+			blog.Infof("cl: ready add rsp file: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, formatFilePath(l))
+		}
 	}
 
 	blog.Infof("cl: copy pump head got %d uniq include file from file: %s", len(includes), cl.sourcedependfile)
@@ -1066,6 +1078,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 	cl.inputFile = scannedData.inputFile
 	cl.outputFile = scannedData.outputFile
 	cl.rewriteCrossArgs = cl.scannedArgs
+	cl.includeRspFiles = scannedData.includeRspFiles
 
 	// handle the pch options
 	finalArgs := cl.scanPchFile(cl.scannedArgs)
