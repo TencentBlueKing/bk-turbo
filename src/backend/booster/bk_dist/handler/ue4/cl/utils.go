@@ -522,8 +522,9 @@ var (
 		"/Fp":         true, // Preprocesses the specified include file.
 		"/Yu":         true, // Uses a precompiled header file during build.
 		"/Zm":         true, // Specifies the precompiled header memory allocation limit.
-		"/external:W": true, //specify compiler diagnostic behavior for certain header files
-		"-external:W": true, //specify compiler diagnostic behavior for certain header files
+		"/external:W": true, // specify compiler diagnostic behavior for certain header files
+		"-external:W": true, // specify compiler diagnostic behavior for certain header files
+		"@":           true, // such as @"..\XXX\XXX.rsp"
 	}
 )
 
@@ -600,6 +601,7 @@ type ccArgs struct {
 	outputFile          string
 	args                []string
 	specifiedSourceType bool
+	includeRspFiles     []string
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
@@ -680,6 +682,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 				seenOptionC = true
 				continue
 			}
+		} else if strings.HasPrefix(arg, "@") {
+			r.includeRspFiles = append(r.includeRspFiles, arg[1:])
 		}
 
 		// if this is not start with /, then it maybe a file.
