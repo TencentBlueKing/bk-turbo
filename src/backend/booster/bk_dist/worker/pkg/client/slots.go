@@ -21,7 +21,7 @@ const (
 	largeRequest  = 100 * 1024 * 1024
 	largeLocked   = 1024 * 1024 * 1024
 	leastFree     = 2 * 1024 * 1024 * 1024
-	maxMemPercent = 0.85
+	maxMemPercent = 85.0
 )
 
 // by tming to limit send file memory
