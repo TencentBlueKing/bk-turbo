@@ -524,6 +524,7 @@ var (
 		"-MT":      true,
 		"-MQ":      true,
 		"-isystem": true,
+		"@":        true, // such as @"..\XXX\XXX.rsp"
 	}
 )
 
@@ -666,9 +667,10 @@ func copyExtraArgs(option string) ([]string, error) {
 }
 
 type ccArgs struct {
-	inputFile  string
-	outputFile string
-	args       []string
+	inputFile       string
+	outputFile      string
+	args            []string
+	includeRspFiles []string
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
@@ -826,6 +828,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 				continue
 			}
 			continue
+		} else if strings.HasPrefix(arg, "@") {
+			r.includeRspFiles = append(r.includeRspFiles, arg[1:])
 		}
 
 		// if this is not start with -, then it maybe a file.
