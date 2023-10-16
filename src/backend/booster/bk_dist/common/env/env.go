@@ -61,6 +61,7 @@ const (
 	KeyExecutorIdleKeepSecs            = "IDLE_KEEP_SECS"
 	KeyExecutorTotalActionNum          = "TOTAL_ACTION_NUM"
 	KeyExecutorUseWebSocket            = "USE_WEBSOCKET"
+	KeyExecutorNewShader               = "NEW_SHADER"
 
 	KeyUserDefinedLogLevel         = "USER_DEFINED_LOG_LEVEL"
 	KeyUserDefinedExecutorLogLevel = "USER_DEFINED_EXECUTOR_LOG_LEVEL"
