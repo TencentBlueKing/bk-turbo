@@ -75,7 +75,6 @@ BUILDBOOSTER_BIN_PATH=${BIN_PATH}/buildbooster
 
 buildbooster_prepare:
 	mkdir -p ${BUILDBOOSTER_BIN_PATH}
-	if [ -z "${DISABLE_PACKR2}" ]; then cd bk_dist/dashboard/pkg/dashboard && packr2; fi
 
 buildbooster_server:buildbooster_prepare
 	go build -ldflags "${LDFLAG}" -o ${BUILDBOOSTER_BIN_PATH}/bk-buildbooster-server ./server/main.go
@@ -108,9 +107,6 @@ DISTEXECUTOR_BIN_PATH=${BIN_PATH}/bkdist
 
 dist_prepare:
 	mkdir -p ${DISTEXECUTOR_BIN_PATH}
-	go get -u github.com/gobuffalo/packr/v2/packr2
-	export PATH=${GOPATH}/bin:${PATH}
-	if [ -z "${DISABLE_PACKR2}" ]; then cd bk_dist/controller/pkg/dashboard && packr2; fi
 
 dist_executor:dist_prepare
 	# bk-dist-executor
