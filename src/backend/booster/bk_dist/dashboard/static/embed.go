@@ -7,7 +7,7 @@
  *
  */
 
-// Package static is
+// Package static embed static resource and index.html
 package static
 
 import (
@@ -15,23 +15,25 @@ import (
 	"io/fs"
 )
 
-// go:embed controller stats
+//go:embed controller stats
 var assets embed.FS
 
 // StatsFS stats 静态资源
-func StatsFS() fs.FS {
+func StatsFS() (fs.FS, error) {
 	stats, err := fs.Sub(assets, "stats")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return stats
+
+	return stats, nil
 }
 
 // ControllerFS controller 静态资源
-func ControllerFS() fs.FS {
-	stats, err := fs.Sub(assets, "controller")
+func ControllerFS() (fs.FS, error) {
+	controller, err := fs.Sub(assets, "controller")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return stats
+
+	return controller, nil
 }

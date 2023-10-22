@@ -18,9 +18,11 @@ import (
 
 // RegisterStaticServer add the static server to router
 func RegisterStaticServer(svr *httpserver.HTTPServer) error {
-	controllerHander := http.FS(static.StatsFS())
+	controllerFS, err := static.ControllerFS()
+	if err != nil {
+		return err
+	}
 
-	svr.GetWebContainer().Handle("/", http.FileServer(controllerHander))
-
+	svr.GetWebContainer().Handle("/", http.FileServer(http.FS(controllerFS)))
 	return nil
 }

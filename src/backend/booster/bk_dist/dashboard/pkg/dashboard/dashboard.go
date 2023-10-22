@@ -18,8 +18,11 @@ import (
 
 // RegisterStaticServer register the static server into router
 func RegisterStaticServer(svr *httpserver.HTTPServer) error {
-	statsHander := http.FS(static.StatsFS())
-	svr.GetWebContainer().Handle("/", http.FileServer(statsHander))
+	statsFS, err := static.StatsFS()
+	if err != nil {
+		return err
+	}
 
+	svr.GetWebContainer().Handle("/", http.FileServer(http.FS(statsFS)))
 	return nil
 }
