@@ -342,8 +342,6 @@ func (h *ShaderTool) server(ctx context.Context) error {
 
 // execute actions got from ready queue
 func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
-	// blog.Debugf("ShaderTool: try to run actions")
-
 	if h.actionlist.Len() <= 0 {
 		return nil
 	}
@@ -389,7 +387,7 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 	}
 
 	// execute actions no more than max jobs
-	blog.Infof("ShaderTool: try to run actions with %d jobs", h.maxjobs)
+	blog.Infof("ShaderTool: try to run actions up to %d jobs", h.maxjobs)
 	h.actionchan = make(chan common.Actionresult, h.maxjobs)
 
 	// execute first batch actions
@@ -832,7 +830,7 @@ func (h *ShaderTool) shaders(actions *common.UE4Action) error {
 		h.actionindex++
 		h.actionlist.PushBack(&temp)
 	}
-	blog.Infof("ShaderTool: got total %d shader jobs", h.actionlist.Len())
+	blog.Infof("ShaderTool: got %d shader jobs, total jobs in queue: %d", len(actions.Actions), h.actionlist.Len())
 
 	// awake action execution
 	if h.actionchan != nil {
