@@ -545,12 +545,15 @@ func (b *Booster) registerWork() error {
 	}
 
 	blog.Debugf("booster: try to find controller or launch it")
-	pid, err := b.controller.EnsureServer()
+	pid, port, err := b.controller.EnsureServer()
 	if err != nil {
 		blog.Errorf("booster: ensure controller failed: %v", err)
 		return err
 	}
-	blog.Infof("booster: success to connect to controller: %s", b.config.Controller.Target())
+
+	blog.Infof("booster: success to connect to controller: %s, real port[%d]", b.config.Controller.Target(), port)
+	os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
+	blog.Infof("booster: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), port)
 
 	b.work, err = b.controller.Register(dcSDK.ControllerRegisterConfig{
 		BatchMode:        b.config.BatchMode,

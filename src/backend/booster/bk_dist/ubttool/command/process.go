@@ -14,10 +14,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/pkg"
@@ -77,20 +75,8 @@ func newCustomProcess(c *commandCli.Context) *pkg.UBTTool {
 		ActionChainFile: c.String(FlagActionJSONFile),
 		ToolChainFile:   c.String(FlagToolChainJSONFile),
 		MostDepentFirst: c.Bool(FlagMostDependFirst),
-	}, sdk.ControllerConfig{
-		NoLocal: false,
-		Scheme:  ControllerScheme,
-		IP:      ControllerIP,
-		Port:    ControllerPort,
-		Timeout: 5 * time.Second,
-		LogDir:  getLogDir(c.String(FlagLogDir)),
-		LogVerbosity: func() int {
-			// debug模式下, --v=3
-			if c.String(FlagLog) == dcUtil.PrintDebug.String() {
-				return 3
-			}
-			return 0
-		}(),
+		LogLevel:        c.String(FlagLog),
+		LogDir:          getLogDir(FlagLogDir),
 	})
 }
 

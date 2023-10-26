@@ -11,7 +11,9 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -78,7 +80,10 @@ type sdk struct {
 }
 
 // EnsureServer make sure the controller is running and ready to work
-func (s *sdk) EnsureServer() (int, error) {
+func (s *sdk) EnsureServer() (int, int, error) {
+	if s.config.DynamicPort {
+		return s.ensureServerDynamicPort()
+	}
 	return s.ensureServer()
 }
 
@@ -97,7 +102,138 @@ func (s *sdk) SetConfig(config *dcSDK.CommonControllerConfig) error {
 	return s.setConfig(config)
 }
 
-func (s *sdk) ensureServer() (int, error) {
+var (
+	ControllerProcessfile = "bk-dist-controller-process.json"
+	ShaderProcessfile     = "bk-shader-tool-process.json" // 文件名不能改，和ue源码中保持一致
+)
+
+func getProcessConfig(d, f string) (string, error) {
+	dir := d
+	if dir == "" {
+		dir = dcUtil.GetGlobalDir()
+	}
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, f), nil
+}
+
+// save and load the controller process info
+func saveProcessInfo(i *dcSDK.ControllerProcessInfo, d, f string) error {
+	f, err := getProcessConfig(d, f)
+	if err != nil {
+		blog.Infof("[controller]: get process config file error:%v\n", err)
+		return err
+	}
+
+	jsonData, err := json.Marshal(i)
+	if err != nil {
+		blog.Infof("[controller]: encode [%v] to json with error:%v\n", *i, err)
+		return err
+	}
+
+	err = ioutil.WriteFile(f, jsonData, os.ModePerm)
+	if err != nil {
+		blog.Infof("[controller]: save process config file[%f] with error:%v\n", f, err)
+		return err
+	}
+
+	return nil
+}
+
+func SaveControllerInfo(pid, port int, success bool, message string, d, f string) error {
+	i := &dcSDK.ControllerProcessInfo{
+		ProcessID:  pid,
+		ListenPort: port,
+		Success:    success,
+		Message:    message,
+	}
+
+	return saveProcessInfo(i, d, f)
+}
+
+func loadProcessInfo(d, f string) (*dcSDK.ControllerProcessInfo, error) {
+	f, err := getProcessConfig(d, f)
+	if err != nil {
+		blog.Infof("[controller]: get process config file error:%v\n", err)
+		return nil, err
+	}
+
+	data, err := ioutil.ReadFile(f)
+	if err != nil {
+		blog.Infof("[controller]: read process config json file %s with error %v", f, err)
+		return nil, err
+	}
+
+	var t dcSDK.ControllerProcessInfo
+	if err = codec.DecJSON(data, &t); err != nil {
+		blog.Infof("[controller]: decode json content[%s] failed: %v", string(data), err)
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func getListenPort(d, f string) (int, error) {
+	i, err := loadProcessInfo(d, f)
+	if err != nil {
+		return 0, err
+	}
+
+	return i.ListenPort, nil
+}
+
+// support dynamic listen port
+func (s *sdk) ensureServerDynamicPort() (int, int, error) {
+	blog.Infof("[controller]: ensure bk-dist-controller with dynamic port now")
+
+	// 0: first check
+	pid, port, err := s.checkServerByDynamicPort("", ControllerProcessfile)
+	if err == nil && pid > 0 && port > 0 {
+		return pid, port, err
+	}
+
+	// 1. launch with --dynamic_port
+	err = s.launchServer()
+	if err != nil {
+		return 0, s.config.Port, err
+	}
+
+	// 2. check from local config file
+	timeout := time.After(serverEnsureTime)
+
+	for ; ; time.Sleep(100 * time.Millisecond) {
+		select {
+		case <-timeout:
+			return 0, s.config.Port, fmt.Errorf("ensure server timeout")
+		default:
+			pid, port, err := s.checkServerByDynamicPort("", ControllerProcessfile)
+			if err == nil && pid > 0 && port > 0 {
+				return pid, port, err
+			}
+		}
+	}
+}
+
+func (s *sdk) checkServerByDynamicPort(d, f string) (int, int, error) {
+	var err error
+	var pid, port int
+	port, err = getListenPort(d, f)
+	if err == nil && port > 0 {
+		s.config.Port = port
+		pid, err = s.checkServerByPort()
+		if err == nil && pid > 0 {
+			return pid, port, nil
+		}
+	}
+
+	return 0, 0, err
+}
+
+// return pid,port,error
+func (s *sdk) ensureServer() (int, int, error) {
+	blog.Infof("[controller]: ensure bk-dist-controller now")
+
 	launched := false
 	var launchedtime int64
 	timeout := time.After(serverEnsureTime)
@@ -105,22 +241,24 @@ func (s *sdk) ensureServer() (int, error) {
 	for ; ; time.Sleep(100 * time.Millisecond) {
 		select {
 		case <-timeout:
-			return 0, fmt.Errorf("ensure server timeout")
+			return 0, s.config.Port, fmt.Errorf("ensure server timeout")
 		default:
-			pid, err := s.checkServer(launchedtime)
+			pid, err := s.checkServer(launchedtime, 30)
 
 			switch err {
 			case nil:
-				return pid, nil
+				return pid, s.config.Port, nil
 
 			case dcSDK.ErrControllerNotReady:
+				// TODO : check conroller port file whether failed to launch
+
 				if launched {
 					continue
 				}
 
 				err = s.launchServer()
 				if err != nil {
-					return 0, err
+					return 0, s.config.Port, err
 				}
 				launched = true
 				launchedtime = time.Now().Unix()
@@ -129,32 +267,38 @@ func (s *sdk) ensureServer() (int, error) {
 			case dcSDK.ErrControllerKilled:
 				err = s.launchServer()
 				if err != nil {
-					return 0, err
+					return 0, s.config.Port, err
 				}
 				launched = true
 				launchedtime = time.Now().Unix()
 				continue
 
 			default:
-				return 0, err
+				return 0, s.config.Port, err
 			}
 		}
 	}
 }
 
-func (s *sdk) checkServer(launchedtime int64) (int, error) {
+func (s *sdk) checkServer(launchedtime int64, waitsecs int64) (int, error) {
 	blog.Infof("sdk: check server...")
 
 	// ProcessExistTimeoutAndKill(windows.EnumProcesses) maybe block, call it carefully
-	// kill launched process if not succeed after 30 seconds
+	// kill launched process if not succeed after waitsecs seconds
 	if launchedtime > 0 {
 		nowsecs := time.Now().Unix()
-		if nowsecs-launchedtime > 30 {
+		if nowsecs-launchedtime > waitsecs {
 			blog.Infof("sdk: try kill existed server for unavailable after long time")
 			_ = dcUtil.ProcessExistTimeoutAndKill(controllerTarget(dcSDK.ControllerBinary), 1*time.Minute)
 			return 0, dcSDK.ErrControllerKilled
 		}
 	}
+
+	return s.checkServerByPort()
+}
+
+func (s *sdk) checkServerByPort() (int, error) {
+	blog.Infof("sdk: check server by port with target:%s", s.config.Target())
 
 	// check tcp port
 	conn, err := net.DialTimeout("tcp", s.config.Target(), 1*time.Second)
@@ -258,6 +402,12 @@ func (s *sdk) launchServer() error {
 		useDefaultWorker = ""
 	}
 
+	dynamicPort := ""
+	if s.config.DynamicPort {
+		dynamicPort = "--dynamic_port"
+		s.config.Port = 0
+	}
+
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
@@ -267,7 +417,8 @@ func (s *sdk) launchServer() error {
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
 		" %s %s"+
-		" %s %s",
+		" %s %s"+
+		" %s",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -292,6 +443,7 @@ func (s *sdk) launchServer() error {
 		enablelink,
 		longTCP,
 		useDefaultWorker,
+		dynamicPort,
 	))
 }
 
@@ -821,6 +973,7 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
 	// 获取session
 	url := fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id)
+	// TODO : support dinamic listen port
 	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10, nil)
 
 	servercode := int(api.ServerErrOK)

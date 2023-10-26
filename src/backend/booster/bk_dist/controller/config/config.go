@@ -53,6 +53,8 @@ type ServerConfig struct {
 	LongTCP bool `json:"long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
 
 	UseDefaultWorker bool `json:"use_default_worker" value:"true" usage:"if true, controller will use first worker available"`
+
+	DynamicPort bool `json:"dynamic_port" value:"false" usage:"if true, controller will listen dynamic port"`
 }
 
 // CertConfig  configuration of Cert

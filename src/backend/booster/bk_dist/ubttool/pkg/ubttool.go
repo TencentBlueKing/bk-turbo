@@ -30,6 +30,8 @@ import (
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
+
+	// "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/command"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -50,12 +52,14 @@ const (
 )
 
 // NewUBTTool get a new UBTTool
-func NewUBTTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *UBTTool {
-	blog.Infof("UBTTool: new ubt tool with config:%+v,flags:%+v", config, *flagsparam)
+// func NewUBTTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *UBTTool {
+func NewUBTTool(flagsparam *common.Flags) *UBTTool {
+	// blog.Infof("UBTTool: new ubt tool with config:%+v,flags:%+v", config, *flagsparam)
+	blog.Infof("UBTTool: new ubt tool with flags:%+v", *flagsparam)
 
 	return &UBTTool{
-		flags:          flagsparam,
-		controller:     v1.NewSDK(config),
+		flags: flagsparam,
+		// controller:     v1.NewSDK(config),
 		allactions:     []common.Action{},
 		readyactions:   []common.Action{},
 		finishednumber: 0,
@@ -63,7 +67,7 @@ func NewUBTTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *UBTToo
 		maxjobs:        0,
 		finished:       false,
 		actionchan:     nil,
-		executor:       NewExecutor(),
+		// executor:       NewExecutor(),
 		moduleselected: make(map[string]int, 0),
 	}
 }
@@ -116,12 +120,20 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 	}
 
 	blog.Infof("UBTTool: try to find controller or launch it")
-	_, err = h.controller.EnsureServer()
+	// TODO : support dinamic listen port
+	var port int
+	_, port, err = h.controller.EnsureServer()
 	if err != nil {
 		blog.Errorf("UBTTool: ensure controller failed: %v", err)
 		return 1, err
 	}
-	blog.Infof("UBTTool: success to connect to controller")
+
+	blog.Infof("UBTTool: success to connect to controller with port[%d]", port)
+	os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
+	blog.Infof("UBTTool: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), port)
+
+	// executor依赖动态端口
+	h.executor = NewExecutor()
 
 	if !h.executor.Valid() {
 		blog.Errorf("UBTTool: ensure controller failed: %v", ErrorInvalidWorkID)
@@ -562,6 +574,34 @@ func (h *UBTTool) dump() {
 }
 
 //---------------------------------to support set tool chain----------------------------------------------------------
+func (h *UBTTool) getControllerConfig() dcSDK.ControllerConfig {
+	return dcSDK.ControllerConfig{
+		NoLocal: false,
+		Scheme:  common.ControllerScheme,
+		IP:      common.ControllerIP,
+		Port:    common.ControllerPort,
+		Timeout: 5 * time.Second,
+		LogDir:  h.flags.LogDir,
+		LogVerbosity: func() int {
+			// debug模式下, --v=3
+			if h.flags.LogLevel == dcUtil.PrintDebug.String() {
+				return 3
+			}
+			return 0
+		}(),
+		RemainTime:          h.settings.ControllerIdleRunSeconds,
+		NoWait:              h.settings.ControllerNoBatchWait,
+		SendCork:            h.settings.ControllerSendCork,
+		SendFileMemoryLimit: h.settings.ControllerSendFileMemoryLimit,
+		NetErrorLimit:       h.settings.ControllerNetErrorLimit,
+		RemoteRetryTimes:    h.settings.ControllerRemoteRetryTimes,
+		EnableLink:          h.settings.ControllerEnableLink,
+		EnableLib:           h.settings.ControllerEnableLib,
+		LongTCP:             h.settings.ControllerLongTCP,
+		DynamicPort:         h.settings.ControllerDynamicPort,
+	}
+}
+
 func (h *UBTTool) initsettings() error {
 	var err error
 	h.projectSettingFile, err = h.getProjectSettingFile()
@@ -587,6 +627,8 @@ func (h *UBTTool) initsettings() error {
 		}
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")
+
+	h.controller = v1.NewSDK(h.getControllerConfig())
 
 	return nil
 }
@@ -674,6 +716,7 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 			CommitSuicideCheckTick: 5 * time.Second,
 		},
 
+		// TODO : got controller listen port from local file
 		Controller: sdk.ControllerConfig{
 			NoLocal: false,
 			Scheme:  shaderToolComm.ControllerScheme,

@@ -105,6 +105,7 @@ const (
 	FlagEnableLib            = "enable_lib"
 	FlagLongTCP              = "long_tcp"
 	FlagUseDefaultWorker     = "use_default_worker"
+	FlagDynamicPort          = "dynamic_port"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -441,6 +442,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "use_default_worker",
 			Usage: "use default worker if worker id is empty",
+		},
+		commandCli.BoolFlag{
+			Name:  "dynamic_port",
+			Usage: "controller will listen dynamic port if true",
 		},
 	}
 )

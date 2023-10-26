@@ -236,6 +236,12 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		remoteRetryTimes = c.Int(FlagRemoteRetryTimes)
 	}
 
+	withDynamicPort := c.Bool(FlagDynamicPort)
+	// bazel 暂时不支持动态端口，没办法解决参数变化的问题
+	if c.Bool(FlagBazel) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus) || c.Bool(FlagBazelNoLauncher) {
+		withDynamicPort = false
+	}
+
 	// generate a new booster.
 	cmdConfig := dcType.BoosterConfig{
 		Type:      dcType.GetBoosterType(bt),
@@ -348,6 +354,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			EnableLib:           c.Bool(FlagEnableLib),
 			LongTCP:             c.Bool(FlagLongTCP),
 			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
+			DynamicPort:         withDynamicPort,
 		},
 	}
 
