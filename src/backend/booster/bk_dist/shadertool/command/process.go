@@ -60,6 +60,8 @@ func sysSignalHandler(cancel context.CancelFunc, handle *pkg.ShaderTool) {
 		// handle.Clean()
 		handle.ReleaseResource()
 
+		blog.CloseLogs()
+
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {
 			os.Exit(130)
