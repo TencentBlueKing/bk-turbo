@@ -55,10 +55,12 @@ func sysSignalHandler(cancel context.CancelFunc, _ *pkg.IdleLoop) {
 
 		p, err := process.NewProcess(int32(os.Getpid()))
 		if err == nil {
-			blog.Debugf("idelloop: ready kill children when recieved sinal")
+			blog.Debugf("idelloop: ready kill children when received signal")
 			// kill children
 			pkg.KillChildren(p)
 		}
+
+		blog.CloseLogs()
 
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {

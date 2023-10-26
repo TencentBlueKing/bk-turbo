@@ -265,6 +265,7 @@ func (d *DistExecutor) sysSignalHandler() {
 	select {
 	case sig := <-interrupt:
 		blog.Warnf("executor-command: get system signal %s, going to exit", sig.String())
+		blog.CloseLogs()
 
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {
