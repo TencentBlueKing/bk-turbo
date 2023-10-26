@@ -15,10 +15,6 @@ type ClientType string
 // define vars
 var (
 	ClientBKUBTTool ClientType = "bk-ubt-tool"
-
-	ControllerScheme = "http"
-	ControllerIP     = "127.0.0.1"
-	ControllerPort   = 30117
 )
 
 // const vars
