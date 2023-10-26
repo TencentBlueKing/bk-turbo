@@ -12,16 +12,17 @@ package dashboard
 import (
 	"net/http"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/static"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
-
-	"github.com/gobuffalo/packr/v2"
 )
 
 // RegisterStaticServer add the static server to router
 func RegisterStaticServer(svr *httpserver.HTTPServer) error {
-	box := packr.New("controller_box", "../../../dashboard/static/controller")
+	controllerFS, err := static.ControllerFS()
+	if err != nil {
+		return err
+	}
 
-	svr.GetWebContainer().Handle("/", http.FileServer(box))
-
+	svr.GetWebContainer().Handle("/", http.FileServer(http.FS(controllerFS)))
 	return nil
 }
