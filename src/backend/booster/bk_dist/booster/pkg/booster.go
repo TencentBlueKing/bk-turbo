@@ -268,6 +268,7 @@ func (b *Booster) getWorkersEnv() map[string]string {
 	if b.work != nil {
 		requiredEnv[env.KeyExecutorControllerWorkID] = b.workID
 	}
+
 	for k, v := range dcSDK.GetControllerConfigToEnv(b.config.Controller) {
 		requiredEnv[k] = v
 	}
@@ -554,6 +555,7 @@ func (b *Booster) registerWork() error {
 	blog.Infof("booster: success to connect to controller: %s, real port[%d]", b.config.Controller.Target(), port)
 	os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
 	blog.Infof("booster: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), port)
+	b.config.Controller.Port = port
 
 	b.work, err = b.controller.Register(dcSDK.ControllerRegisterConfig{
 		BatchMode:        b.config.BatchMode,
