@@ -60,6 +60,8 @@ func sysSignalHandler(cancel context.CancelFunc, _ *pkg.Monitor) {
 		// cancel context
 		cancel()
 
+		blog.CloseLogs()
+
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {
 			os.Exit(130)

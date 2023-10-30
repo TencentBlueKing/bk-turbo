@@ -51,10 +51,12 @@ func sysSignalHandler(cancel context.CancelFunc, handle *pkg.UBTTool) {
 
 	select {
 	case sig := <-interrupt:
-		blog.Warnf("helptool: get system signal %s, going to exit", sig.String())
+		blog.Warnf("ubttool: get system signal %s, going to exit", sig.String())
 
 		// cancel handle's context and make sure that task is released.
 		cancel()
+
+		blog.CloseLogs()
 
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {

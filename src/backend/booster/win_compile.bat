@@ -1,14 +1,11 @@
 echo "windows compile"
 @echo off
 SET curpath=%cd%
-cd ..\..
-set GOPATH=%cd%
 
 set "encryption_key=%1"
 set server_cert_pwd=
 set client_cert_pwd=
 
-cd %curpath%\fastbuild\
 for /F %%i in ('git describe --tags') do ( set gittag=%%i)
 echo GITTAG=%gittag%
 
@@ -37,10 +34,6 @@ if not exist %bindir% (
 	mkdir %bindir%
 )
 
-go build -ldflags "%LDFLAG%" -o %bindir%\bk-FbMain.exe %curpath%\fastbuild\bk-fb-main\main.go
-
-go build -ldflags "%LDFLAG%" -o %bindir%\bk-FBuild.exe %curpath%\fastbuild\bk-fb-build\main.go
-
 go build -ldflags "%LDFLAG%" -o %bindir%\bk-bb-agent.exe %curpath%\server\pkg\resource\direct\agent\main.go
 
 go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-booster.exe %curpath%\bk_dist\booster\main.go
@@ -58,8 +51,6 @@ go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-shader-tool.ex
 go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-dist-controller.exe %curpath%\bk_dist\controller\main.go
 
 go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-dist-executor.exe %curpath%\bk_dist\executor\main.go
-
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-cl-pre-deal.exe %curpath%\tools\cl_pre_deal\main.go
 
 set "Hide_LDFLAG=-H=windowsgui"
 go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Hide_LDFLAG%" -o %bindir%/bk-dist-worker.exe %curpath%\bk_dist\worker\main.go
