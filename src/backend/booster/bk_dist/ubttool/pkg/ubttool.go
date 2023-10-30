@@ -193,8 +193,6 @@ func (h *UBTTool) runActions() error {
 
 // execute actions got from ready queue
 func (h *UBTTool) executeActions() error {
-	blog.Infof("UBTTool: try to run actions")
-
 	h.maxjobs = DefaultJobs
 
 	// get max jobs from env
@@ -211,7 +209,7 @@ func (h *UBTTool) executeActions() error {
 	// h.dump()
 
 	// execute actions no more than max jobs
-	blog.Infof("UBTTool: try to run actions with %d jobs", h.maxjobs)
+	blog.Infof("UBTTool: try to run actions up to %d jobs", h.maxjobs)
 	h.actionchan = make(chan common.Actionresult, h.maxjobs)
 
 	// execute first batch actions
