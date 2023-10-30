@@ -30,12 +30,15 @@ type AvailableResp struct {
 
 // Flags define flags needed by shader tool
 type Flags struct {
-	ToolDir       string
-	JobDir        string
-	JobJSONPrefix string
-	JobStartIndex int32
-	CommitSuicide bool
-	Port          int32
+	ToolDir         string
+	JobDir          string
+	JobJSONPrefix   string
+	JobStartIndex   int32
+	CommitSuicide   bool
+	Port            int32
+	LogLevel        string
+	LogDir          string
+	ProcessInfoFile string
 }
 
 // Action define shader action
@@ -62,6 +65,8 @@ type ApplyParameters struct {
 	BatchMode                     bool              `json:"batch_mode"`
 	WorkerList                    []string          `json:"specific_host_list"`
 	NeedApply                     bool              `json:"need_apply"`
+	ControllerDynamicPort         bool              `json:"controller_dynamic_port" value:"false" usage:"if true, controller will listen dynamic port"`
+	ShaderDynamicPort             bool              `json:"shader_dynamic_port" value:"false" usage:"if true, shader will listen dynamic port"`
 	BuildID                       string            `json:"build_id"`
 	ShaderToolIdleRunSeconds      int               `json:"shader_tool_idle_run_seconds"`
 	ControllerIdleRunSeconds      int               `json:"controller_idle_run_seconds" value:"120" usage:"controller remain time after there is no active work (seconds)"`

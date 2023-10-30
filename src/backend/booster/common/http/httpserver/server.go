@@ -160,3 +160,36 @@ func (s *HTTPServer) ListenAndServe() error {
 
 	return <-chError
 }
+
+// 将 ListenAndServe 拆分成 listen和server，方便支持绑定动态端口，并获取真正的端口
+func (s *HTTPServer) Listen() (*http.Server, net.Listener, error) {
+	addrport := net.JoinHostPort(s.addr, strconv.FormatUint(uint64(s.port), 10))
+	srv := &http.Server{Addr: addrport, Handler: s.webContainer}
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return srv, ln, nil
+}
+
+func (s *HTTPServer) Serve(srv *http.Server, ln net.Listener) error {
+	var chError = make(chan error)
+	go func() {
+		if s.isSSL {
+			defer ln.Close()
+			tlsConf, err := ssl.ServerTSLConf(s.caFile, s.certFile, s.keyFile, s.certPasswd)
+			if err != nil {
+				blog.Error("fail to load certfile, err:%s", err.Error())
+				chError <- fmt.Errorf("fail to load certfile")
+				return
+			}
+			srv.TLSConfig = tlsConf
+			chError <- srv.ServeTLS(ln, "", "")
+		} else {
+			chError <- srv.Serve(ln)
+		}
+	}()
+
+	return <-chError
+}

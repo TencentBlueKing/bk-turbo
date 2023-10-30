@@ -45,6 +45,10 @@ type Executor struct {
 
 // NewExecutor return new Executor
 func NewExecutor() *Executor {
+	// for debug by tomtian
+	c := dcSDK.GetControllerConfigFromEnv()
+	blog.Debugf("ubtexecutor: got config [%+v],env:%+v", c, os.Environ())
+
 	return &Executor{
 		bt:     dcTypes.GetBoosterType(env.GetEnv(env.BoosterType)),
 		work:   v1.NewSDK(dcSDK.GetControllerConfigFromEnv()).GetWork(env.GetEnv(env.KeyExecutorControllerWorkID)),
