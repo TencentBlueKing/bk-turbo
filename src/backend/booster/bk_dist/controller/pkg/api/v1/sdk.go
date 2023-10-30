@@ -250,8 +250,6 @@ func (s *sdk) ensureServer() (int, int, error) {
 				return pid, s.config.Port, nil
 
 			case dcSDK.ErrControllerNotReady:
-				// TODO : check conroller port file whether failed to launch
-
 				if launched {
 					continue
 				}
@@ -973,7 +971,6 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
 	// 获取session
 	url := fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id)
-	// TODO : support dinamic listen port
 	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10, nil)
 
 	servercode := int(api.ServerErrOK)
