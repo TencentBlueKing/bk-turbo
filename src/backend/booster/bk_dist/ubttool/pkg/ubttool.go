@@ -120,7 +120,7 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 	}
 
 	blog.Infof("UBTTool: try to find controller or launch it")
-	// TODO : support dinamic listen port
+	// support dinamic listen port
 	var port int
 	_, port, err = h.controller.EnsureServer()
 	if err != nil {
@@ -716,7 +716,7 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 			CommitSuicideCheckTick: 5 * time.Second,
 		},
 
-		// TODO : got controller listen port from local file
+		// got controller listen port from local file
 		Controller: sdk.ControllerConfig{
 			NoLocal: false,
 			Scheme:  shaderToolComm.ControllerScheme,
