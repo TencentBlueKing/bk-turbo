@@ -340,26 +340,28 @@ func (erd *etcdRegisterDiscover) watch() {
 	for {
 		select {
 		case resp := <-watchChan:
-			blog.Infof("rd: watch resp [%+v]", resp)
-			for _, ev := range resp.Events {
-				blog.Infof("rd: watch event [%s %q : %q]", ev.Type, ev.Kv.Key, ev.Kv.Value)
-				if ev.Type == etcdClient.EventTypePut {
-					if string(ev.Kv.Value) == string(erd.serverInfo) {
-						blog.Infof("rd: watch resp [found self succeed put]")
-						erd.selfServerKey = string(ev.Kv.Key)
-						blog.Infof("rd: watch resp erd.selfServerKey is[%s]", erd.selfServerKey)
-					}
-				} else if ev.Type == etcdClient.EventTypeDelete {
-					if string(ev.Kv.Key) == erd.selfServerKey {
-						blog.Infof("rd: watch resp [found self succeed delete]")
-						erd.selfServerKey = ""
-						// 通知manager重置
-						erd.reset()
+			if len(resp.Events) > 0 {
+				blog.Infof("rd: watch resp [%+v]", resp)
+				for _, ev := range resp.Events {
+					blog.Infof("rd: watch event [%s %q : %q]", ev.Type, ev.Kv.Key, ev.Kv.Value)
+					if ev.Type == etcdClient.EventTypePut {
+						if string(ev.Kv.Value) == string(erd.serverInfo) {
+							blog.Infof("rd: watch resp [found self succeed put]")
+							erd.selfServerKey = string(ev.Kv.Key)
+							blog.Infof("rd: watch resp erd.selfServerKey is[%s]", erd.selfServerKey)
+						}
+					} else if ev.Type == etcdClient.EventTypeDelete {
+						if string(ev.Kv.Key) == erd.selfServerKey {
+							blog.Infof("rd: watch resp [found self succeed delete]")
+							erd.selfServerKey = ""
+							// 通知manager重置
+							erd.reset()
+						}
 					}
 				}
-			}
 
-			erd.updateServerInfo()
+				erd.updateServerInfo()
+			}
 		}
 	}
 }
