@@ -147,7 +147,7 @@ func (t *tracker) track(taskID string, egn engine.Engine) {
 }
 
 func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
-	t.layer.LockTask(taskID)
+	t.layer.LockTask(taskID, "isFinishStarting_of_tracker")
 	defer t.layer.UnLockTask(taskID)
 
 	blog.V(5).Infof("tracker: try to check if task(%s) is finish starting", taskID)

@@ -503,7 +503,8 @@ func (rm *resourceManager) isFinishDeploying(resourceID, user string) bool {
 
 	switch info.Status {
 	case ServiceStatusRunning, ServiceStatusFailed:
-		blog.Infof("crm: check isFinishDeploying resource(%s) user(%s) finish deploying", resourceID, user)
+		blog.Infof("crm: check isFinishDeploying resource(%s) user(%s) finish deploying with status:%s",
+			resourceID, user, info.Status.String())
 		return true
 	default:
 		return false

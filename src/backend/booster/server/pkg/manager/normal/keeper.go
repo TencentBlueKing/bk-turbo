@@ -111,7 +111,7 @@ func (k *keeper) check() {
 func (k *keeper) checkTaskBasic(taskID string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	k.layer.LockTask(taskID)
+	k.layer.LockTask(taskID, "checkTaskBasic_of_keeper")
 	defer k.layer.UnLockTask(taskID)
 
 	tb, err := k.layer.GetTaskBasic(taskID)
