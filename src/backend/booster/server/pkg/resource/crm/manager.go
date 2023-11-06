@@ -703,7 +703,7 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		d1 := t1end - t1start
 		d2 := t2end - t2start
 		d3 := t3end - t3start
-		if d1 > 1 || d2 > 1 || d3 > 1 {
+		if d1 > 2 || d2 > 2 || d3 > 2 {
 			blog.Infof("crm: resourceID(%s) user(%s) too long spent %d seconds to getServerRealName,"+
 				"%d to GetServerStatus,%d to freshDeployingStatus",
 				resourceID, user, d1, d2, d3)

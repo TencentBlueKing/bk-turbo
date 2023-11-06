@@ -157,7 +157,7 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 		d1 := tGetTaskBasicEnd - tGetTaskBasicStart
 		d2 := tLaunchDoneEnd - tLaunchDoneStart
 		d3 := tGetTaskExtensionEnd - tGetTaskExtensionStart
-		if d1 > 1 || d2 > 1 || d3 > 1 {
+		if d1 > 2 || d2 > 2 || d3 > 2 {
 			blog.Infof("tracker: task(%s) too long spent %d seconds to GetTaskBasic,%d to LaunchDone,%d to GetTaskExtension",
 				taskID, d1, d2, d3)
 		}

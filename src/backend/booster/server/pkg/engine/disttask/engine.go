@@ -787,7 +787,7 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 	defer func() {
 		d1 := tIsServicePreparingEnd - tIsServicePreparingStart
 		d2 := tGetServiceInfoEnd - tGetServiceInfoStart
-		if d1 > 1 || d2 > 1 {
+		if d1 > 2 || d2 > 2 {
 			blog.Infof("engine(%s) launchCRMDone for task(%s) too long spent %d seconds to IsServicePreparing,"+
 				"%d to GetServiceInfo",
 				EngineName, task.ID, d1, d2)
