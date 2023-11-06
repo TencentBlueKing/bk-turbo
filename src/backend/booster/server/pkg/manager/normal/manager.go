@@ -343,7 +343,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 		return nil, err
 	}
 
-	m.layer.LockTask(taskID)
+	m.layer.LockTask(taskID, "createTask_of_manager")
 	defer m.layer.UnLockTask(taskID)
 
 	tb := &engine.TaskBasic{
@@ -429,7 +429,7 @@ func (m *manager) sendProjectMessage(projectID string, data []byte) ([]byte, err
 }
 
 func (m *manager) sendTaskMessage(taskID string, data []byte) ([]byte, error) {
-	m.layer.LockTask(taskID)
+	m.layer.LockTask(taskID, "sendTaskMessage_of_manager")
 	defer m.layer.UnLockTask(taskID)
 
 	tb, err := m.layer.GetTaskBasic(taskID)
@@ -459,7 +459,7 @@ func (m *manager) sendTaskMessage(taskID string, data []byte) ([]byte, error) {
 func (m *manager) releaseTask(param *mgr.TaskReleaseParam) error {
 	blog.Infof("manager: release task(%s), will make it to terminated status finish/failed, %+v",
 		param.TaskID, param)
-	m.layer.LockTask(param.TaskID)
+	m.layer.LockTask(param.TaskID, "releaseTask_of_manager")
 	defer m.layer.UnLockTask(param.TaskID)
 
 	tb, err := m.layer.GetTaskBasic(param.TaskID)

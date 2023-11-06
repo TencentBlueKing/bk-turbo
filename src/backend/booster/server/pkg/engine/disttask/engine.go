@@ -781,8 +781,23 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 		blog.Errorf("engine(%s) try launch crm task(%s) done failed: crmMgr is null", EngineName, task.ID)
 		return false, errors.New("crmMgr is null")
 	}
+
+	var tIsServicePreparingStart, tIsServicePreparingEnd int64
+	var tGetServiceInfoStart, tGetServiceInfoEnd int64
+	defer func() {
+		d1 := tIsServicePreparingEnd - tIsServicePreparingStart
+		d2 := tGetServiceInfoEnd - tGetServiceInfoStart
+		if d1 > 2 || d2 > 2 {
+			blog.Infof("engine(%s) launchCRMDone for task(%s) too long spent %d seconds to IsServicePreparing,"+
+				"%d to GetServiceInfo",
+				EngineName, task.ID, d1, d2)
+		}
+	}()
+
+	tIsServicePreparingStart = time.Now().Unix()
 	// if still preparing, then it's not need to get service info
 	isPreparing, err := crmMgr.IsServicePreparing(task.ID)
+	tIsServicePreparingEnd = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("engine(%s) try checking service info, check if crm service preparing(%s) failed: %v",
 			EngineName, task.ID, err)
@@ -792,7 +807,9 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 		return false, nil
 	}
 
+	tGetServiceInfoStart = time.Now().Unix()
 	info, err := crmMgr.GetServiceInfo(task.ID)
+	tGetServiceInfoEnd = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("engine(%s) try checking service info, get crm info(%s) failed: %v",
 			EngineName, task.ID, err)
