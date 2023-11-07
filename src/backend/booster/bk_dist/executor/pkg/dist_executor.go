@@ -27,7 +27,6 @@ import (
 	dcTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/dashboard/pkg/api"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -113,28 +112,7 @@ func (d *DistExecutor) Run() (int, string, error) {
 	}
 
 	// work available, run work with executor-progress
-	// add retry here
-	var retcode int
-	retmsg := ""
-	waitsecs := 5
-	var err error
-	for i := 0; i < 3; i++ {
-		retcode, retmsg, err = d.runWork()
-		if retcode != int(api.ServerErrOK) {
-			break
-		}
-
-		if err != nil {
-			blog.Warnf("executor: failed to execute with error [%+v] for %d times cmd:%s", err, i+1, strings.Join(os.Args, " "))
-			time.Sleep(time.Duration(waitsecs) * time.Second)
-			waitsecs = waitsecs * 2
-			continue
-		}
-
-		break
-	}
-
-	return retcode, retmsg, err
+	return d.runWork()
 }
 
 func compileReadFromStdin() bool {
