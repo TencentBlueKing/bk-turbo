@@ -85,7 +85,10 @@ func (wp *worksPool) getFirstWork() (*types.Work, error) {
 	defer wp.RUnlock()
 
 	for _, work := range wp.works {
-		return work, nil
+		// check whether work is valid
+		if work.Basic().Info().IsWorking() {
+			return work, nil
+		}
 	}
 
 	return nil, types.ErrNoWork
