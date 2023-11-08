@@ -14,10 +14,12 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
@@ -99,6 +101,10 @@ func (m *mgr) RegisterWork(config *types.WorkRegisterConfig) (*types.WorkInfo, b
 		if work := m.worksPool.find(config.Apply.ProjectID, config.Apply.Scene, config.BatchMode); work != nil {
 			work.Lock()
 			info := work.Basic().Info()
+			bazelNoLauncher := strings.Contains(config.Apply.Extra, command.FlagBazelNoLauncher)
+			info.SetBazelNoLauncher(bazelNoLauncher)
+			blog.Infof("mgr: work(%s) project(%s) scene(%s) update bazelNoLauncher to %v",
+				work.ID(), config.Apply.ProjectID, config.Apply.Scene, bazelNoLauncher)
 			if info.CanBeHeartbeat() {
 				defer work.Unlock()
 				_ = work.Basic().Heartbeat()
@@ -367,7 +373,7 @@ func (m *mgr) ExecuteLocalTask(
 	var err error
 	if workID == dcSDK.EmptyWorkerID {
 		if m.conf.UseDefaultWorker {
-			work, err = m.worksPool.getFirstWork()
+			work, err = m.worksPool.getFirstBazelNoLauncherWork()
 			if err != nil {
 				blog.Errorf("mgr: get first work failed: %v", err)
 				return nil, err
@@ -884,6 +890,16 @@ func (m *mgr) decLocalResourceTask() {
 // Get first workid
 func (m *mgr) GetFirstWorkID() (string, error) {
 	work, err := m.worksPool.getFirstWork()
+	if err == nil {
+		return work.ID(), nil
+	} else {
+		return "", err
+	}
+}
+
+// Get first bazel workid
+func (m *mgr) GetFirstBazelNoLauncherWorkID() (string, error) {
+	work, err := m.worksPool.getFirstBazelNoLauncherWork()
 	if err == nil {
 		return work.ID(), nil
 	} else {

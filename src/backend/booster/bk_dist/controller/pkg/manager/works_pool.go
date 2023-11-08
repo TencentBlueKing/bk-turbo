@@ -85,7 +85,23 @@ func (wp *worksPool) getFirstWork() (*types.Work, error) {
 	defer wp.RUnlock()
 
 	for _, work := range wp.works {
-		return work, nil
+		// check whether work is valid
+		if work.Basic().Info().IsWorking() {
+			return work, nil
+		}
+	}
+
+	return nil, types.ErrNoWork
+}
+
+func (wp *worksPool) getFirstBazelNoLauncherWork() (*types.Work, error) {
+	wp.RLock()
+	defer wp.RUnlock()
+
+	for _, work := range wp.works {
+		if work.Basic().Info().IsWorking() && work.Basic().Info().BazelNoLauncher() {
+			return work, nil
+		}
 	}
 
 	return nil, types.ErrNoWork

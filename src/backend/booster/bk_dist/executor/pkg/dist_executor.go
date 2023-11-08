@@ -180,13 +180,6 @@ func (d *DistExecutor) runWork() (int, string, error) {
 		return 0, "", fmt.Errorf("not enough args to execute")
 	}
 
-	// ignore argv[0], it's itself
-	// _, _, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "")
-	// if err != nil {
-	// 	blog.Errorf("executor: execute failed, error: %v, exit code: -1", err)
-	// 	return -1, err
-	// }
-
 	retcode, retmsg, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "")
 	if err != nil || retcode != 0 {
 		if r != nil {

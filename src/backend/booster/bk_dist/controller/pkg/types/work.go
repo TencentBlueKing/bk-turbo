@@ -197,6 +197,8 @@ type WorkInfo struct {
 	success   bool
 	batchMode bool
 
+	bazelNoLauncher bool
+
 	lastHeartbeat time.Time
 
 	commonStatus *WorkCommonStatus
@@ -428,6 +430,16 @@ func (wi *WorkInfo) DecPrepared() {
 // GetPrepared to get preared remote task number
 func (wi *WorkInfo) GetPrepared() int32 {
 	return atomic.LoadInt32(&wi.preparedRemoteTasks)
+}
+
+// BazelNoLauncher return bazelNoLauncher
+func (wi WorkInfo) BazelNoLauncher() bool {
+	return wi.bazelNoLauncher
+}
+
+// SetBazelNoLauncher update bazelNoLauncher
+func (wi *WorkInfo) SetBazelNoLauncher(flag bool) {
+	wi.bazelNoLauncher = flag
 }
 
 // WorkCommonStatus describe the work status and actions timestamp

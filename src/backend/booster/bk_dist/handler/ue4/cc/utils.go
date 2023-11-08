@@ -513,18 +513,20 @@ var (
 
 	// skip options start with flags
 	skipLocalOptionStartWith = map[string]bool{
-		"-Wp,":     true,
-		"-Wl,":     true,
-		"-D":       true,
-		"-I":       true,
-		"-U":       true,
-		"-L":       true,
-		"-l":       true,
-		"-MF":      true,
-		"-MT":      true,
-		"-MQ":      true,
-		"-isystem": true,
-		"@":        true, // such as @"..\XXX\XXX.rsp"
+		"-Wp,":            true,
+		"-Wl,":            true,
+		"-D":              true,
+		"-I":              true,
+		"-U":              true,
+		"-L":              true,
+		"-l":              true,
+		"-MF":             true,
+		"-MT":             true,
+		"-MQ":             true,
+		"-isystem":        true,
+		"@":               true, // such as @"..\XXX\XXX.rsp"
+		"--gcc-toolchain": true,
+		"--sysroot":       true,
 	}
 )
 
