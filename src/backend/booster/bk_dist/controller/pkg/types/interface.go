@@ -84,6 +84,9 @@ type Mgr interface {
 
 	// Get first workid
 	GetFirstWorkID() (string, error)
+
+	// Get first bazelNoLauncher workid
+	GetFirstBazelNoLauncherWorkID() (string, error)
 }
 
 // RemoteMgr describe a manager for handling all actions with remote workers for work

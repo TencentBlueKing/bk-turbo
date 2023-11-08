@@ -94,6 +94,19 @@ func (wp *worksPool) getFirstWork() (*types.Work, error) {
 	return nil, types.ErrNoWork
 }
 
+func (wp *worksPool) getFirstBazelNoLauncherWork() (*types.Work, error) {
+	wp.RLock()
+	defer wp.RUnlock()
+
+	for _, work := range wp.works {
+		if work.Basic().Info().IsWorking() && work.Basic().Info().BazelNoLauncher() {
+			return work, nil
+		}
+	}
+
+	return nil, types.ErrNoWork
+}
+
 func (wp *worksPool) find(projectID, scene string, batchMode bool) *types.Work {
 	wp.RLock()
 	defer wp.RUnlock()

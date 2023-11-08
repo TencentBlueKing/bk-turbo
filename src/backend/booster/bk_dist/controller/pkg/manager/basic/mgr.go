@@ -12,10 +12,12 @@ package basic
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -156,6 +158,12 @@ func (m *Mgr) Register(config *types.WorkRegisterConfig) error {
 
 	m.info.SetProjectID(config.Apply.ProjectID)
 	m.info.SetScene(config.Apply.Scene)
+
+	// 新加bazelNoLauncher状态
+	bazelNoLauncher := strings.Contains(config.Apply.Extra, command.FlagBazelNoLauncher)
+	m.info.SetBazelNoLauncher(bazelNoLauncher)
+	blog.Infof("basic: work(%s) project(%s) scene(%s) set bazelNoLauncher to %v",
+		m.work.ID(), config.Apply.ProjectID, config.Apply.Scene, bazelNoLauncher)
 
 	m.work.Resource().SetServerHost(config.ServerHost)
 	if len(config.SpecificHostList) > 0 {

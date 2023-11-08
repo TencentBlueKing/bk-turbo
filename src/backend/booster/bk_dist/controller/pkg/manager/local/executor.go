@@ -271,7 +271,7 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		locallockweight = e.handler.LocalLockWeight(e.req.Commands)
 	}
 	if !e.lock(dcSDK.JobUsageLocalExe, locallockweight) {
-		blog.Infof("executor:failed to lock with local job usage(%s) weight %d", dcSDK.JobUsageLocalExe, locallockweight)
+		blog.Errorf("executor:failed to lock with local job usage(%s) weight %d", dcSDK.JobUsageLocalExe, locallockweight)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: -1,
