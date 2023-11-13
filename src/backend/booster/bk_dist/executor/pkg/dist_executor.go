@@ -105,6 +105,9 @@ func (d *DistExecutor) Run() (int, string, error) {
 	//if d.work.ID() == "" {
 	//	return runDirect()
 	//}
+	if d.bt == dcTypes.BoosterUnknown {
+		return runDirect()
+	}
 
 	if compileReadFromStdin() {
 		savePipedLog(strings.Join(os.Args, " "))
