@@ -16,3 +16,4 @@ bk_dist/dashboard/pkg/dashboard/packrd/packed-packr.go
 build.yml
 .codecc
 .idea
+.envrc
