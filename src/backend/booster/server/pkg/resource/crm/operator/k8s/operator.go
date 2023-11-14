@@ -778,7 +778,7 @@ func (o *operator) generateNativeClient(clusterID, kubeconfigPath string) (*clus
 		timeoutTime: time.Now().Local().Add(1 * time.Minute),
 	}
 	o.cacheLock.Lock()
-	o.clusterClientCache[kubeconfigPath] = cs
+	o.clusterClientCache[clusterID] = cs
 	o.cacheLock.Unlock()
 
 	blog.Infof("k8s-operator: get client set, create new native client set for cluster(%s), config host: %s", clusterID, c.Host)
