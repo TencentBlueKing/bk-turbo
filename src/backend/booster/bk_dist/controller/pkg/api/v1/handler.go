@@ -10,6 +10,7 @@
 package v1
 
 import (
+	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -564,7 +565,7 @@ func executeLocalTaskWithWebSocket(req *restful.Request, resp *restful.Response)
 }
 
 func getWorkRegisterConfig(req *restful.Request) (*types.WorkRegisterConfig, error) {
-	body, err := ioutil.ReadAll(req.Request.Body)
+	body, err := io.ReadAll(req.Request.Body)
 	if err != nil {
 		blog.Errorf("api: get work register param from body failed: %v", err)
 		return nil, err

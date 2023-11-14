@@ -32,10 +32,11 @@ const (
 
 // MgrSet describe the newer functions for work
 type MgrSet struct {
-	Basic    func(context.Context, *Work) BasicMgr
-	Local    func(context.Context, *Work) LocalMgr
-	Remote   func(context.Context, *Work) RemoteMgr
-	Resource func(context.Context, *Work) ResourceMgr
+	Basic      func(context.Context, *Work) BasicMgr
+	Local      func(context.Context, *Work) LocalMgr
+	Remote     func(context.Context, *Work) RemoteMgr
+	Resource   func(context.Context, *Work) ResourceMgr
+	Autoscaler func(context.Context, *Work) AutoscalerMgr
 }
 
 // NewWork get a new Work
@@ -52,11 +53,17 @@ func NewWork(id string, conf *config.ServerConfig, mgrSet MgrSet, rp *recorder.R
 	work.local = mgrSet.Local(ctx, work)
 	work.remote = mgrSet.Remote(ctx, work)
 	work.resource = mgrSet.Resource(ctx, work)
+	work.autoscaler = mgrSet.Autoscaler(ctx, work)
 	work.basic.Info().Init()
 
 	// TODO : work.local need Init also, but it depend basic.Setting
 	work.local.Init()
 	work.remote.Init()
+
+	// 动态扩缩容任务, global work 的忽略
+	if id != "" {
+		go work.autoscaler.Run()
+	}
 
 	return work
 }
@@ -76,10 +83,11 @@ type Work struct {
 	conf *config.ServerConfig
 	rp   *recorder.RecordersPool
 
-	basic    BasicMgr
-	local    LocalMgr
-	remote   RemoteMgr
-	resource ResourceMgr
+	basic      BasicMgr
+	local      LocalMgr
+	remote     RemoteMgr
+	resource   ResourceMgr
+	autoscaler AutoscalerMgr
 }
 
 // Lock lock work

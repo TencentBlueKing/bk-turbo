@@ -105,6 +105,9 @@ type RemoteMgr interface {
 	// get total remote worker slots
 	TotalSlots() int
 
+	// get remote slots info
+	Slots() (int, int)
+
 	// inc remote jobs
 	IncRemoteJobs()
 
@@ -250,4 +253,25 @@ type BasicMgr interface {
 
 	// minus registered count for batch mode
 	DecRegistered()
+}
+
+// AutoscalerMgr 自动扩缩容
+type AutoscalerMgr interface {
+	// Compute 计算资源, 判断是否需要扩缩容
+	Compute() int
+
+	// ScaleUp 扩容
+	ScaleUp(ctx context.Context) error
+
+	// ScaleDown 缩容
+	ScaleDown(ctx context.Context) error
+
+	Run()
+}
+
+// AutoscalerPredicter 自动
+type AutoscalerPredicter interface {
+	Feed()
+	ScaleUp()
+	ScaleDown()
 }
