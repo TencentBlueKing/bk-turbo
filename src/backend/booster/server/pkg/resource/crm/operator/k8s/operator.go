@@ -759,6 +759,7 @@ func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
 func (o *operator) generateNativeClient(clusterID, kubeconfigPath string) (*clusterClientSet, error) {
 	c, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
+		blog.Errorf("k8s-operator: get client set(%s), create new native client set, build config failed: %v", clusterID, err)
 		return nil, err
 	}
 
@@ -768,6 +769,7 @@ func (o *operator) generateNativeClient(clusterID, kubeconfigPath string) (*clus
 
 	clientSet, err := kubernetes.NewForConfig(c)
 	if err != nil {
+		blog.Errorf("k8s-operator: get client set(%s), create new native client set failed: %v", clusterID, err)
 		return nil, err
 	}
 
