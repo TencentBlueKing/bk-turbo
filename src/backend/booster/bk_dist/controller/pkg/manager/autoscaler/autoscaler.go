@@ -30,53 +30,18 @@ func NewMgr(ctx context.Context, work *types.Work) types.AutoscalerMgr {
 	}
 }
 
-func (s *scaler) Compute() int {
-	// 每2分钟最多执行一次扩缩容策略
-	if time.Since(s.lastTime) < time.Minute*2 {
-		return 0
-	}
-
-	// 数据过少，不能决策
-	dateLen := len(s.data)
-	if dateLen < 10 {
-		return 0
-	}
-
-	sum := 0
-	for i := dateLen - 10; i < dateLen; i++ {
-		sum += s.data[i].RemoteWorkWaiting
-	}
-
-	mean := sum / 10
-	// 扩容场景
-	if s.lastPending == 0 || mean > 2 {
-		return 1
-	}
-
-	// 缩容场景
-	if mean <= 2 {
-		totalSlots, _ := s.work.Local().Slots()
-		remoteTotalSlots, _ := s.work.Remote().Slots()
-		if remoteTotalSlots-totalSlots > 2 {
-			return -1
-		}
-	}
-
-	return 0
-}
-
 func (s *scaler) ScaleUp(ctx context.Context, cores int) error {
 	req := &v2.ParamApply{
 		RequestCPU:    cores,
 		RequestMemory: cores * 1024 * 2, // 内存是CPU的2倍
 	}
 	resp, err := s.work.Resource().Apply(req, true)
-	blog.Infof("scale up %s, %s", resp, err)
+	blog.Infof("scale up core=%d, %s, %s", cores, resp, err)
 	if err != nil {
 		return err
 	}
 	s.lastTime = time.Now()
-	return err
+	return nil
 }
 
 func (s *scaler) ScaleDown(ctx context.Context, cores int) error {
@@ -85,7 +50,7 @@ func (s *scaler) ScaleDown(ctx context.Context, cores int) error {
 		return err
 	}
 
-	blog.Infof("scale up err, %s", err)
+	blog.Infof("scale down core=%d, err, %s", cores, err)
 	s.lastTime = time.Now()
 	return nil
 }
@@ -125,9 +90,9 @@ func (s *scaler) Run() {
 			if cores > 0 {
 				err := s.ScaleUp(s.ctx, cores)
 				if err != nil {
-					blog.Errorf("scale up %s, err: %s", s.workID, err)
+					blog.Errorf("scale up %s, core=%d, err: %s", s.workID, cores, err)
 				} else {
-					blog.Info("scale up %s, done", s.workID)
+					blog.Info("scale up %s, core=%d, done", s.workID, cores)
 				}
 				continue
 			}
@@ -135,9 +100,9 @@ func (s *scaler) Run() {
 			if cores < 0 {
 				err := s.ScaleDown(s.ctx, cores)
 				if err != nil {
-					blog.Errorf("scale down %s, err: %s", s.workID, err)
+					blog.Errorf("scale down %s, core=%d, err: %s", s.workID, cores, err)
 				} else {
-					blog.Info("scale down %s, done", s.workID)
+					blog.Info("scale down %s, core=%d, done", s.workID, cores)
 				}
 				continue
 			}
