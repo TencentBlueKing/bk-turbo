@@ -74,6 +74,11 @@ type TaskCreateParam struct {
 	// Extra contains the raw string for different engines' settings
 	// it is the engine's responsibility to decode from it.
 	Extra string
+
+	// RequestCPU 自定义CPU资源
+	RequestCPU int
+	// RequestMemory 自定义内存资源
+	RequestMemory int
 }
 
 // TaskReleaseParam describe the param struct when releasing a unterminated task

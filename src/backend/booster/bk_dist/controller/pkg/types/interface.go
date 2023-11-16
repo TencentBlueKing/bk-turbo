@@ -261,10 +261,10 @@ type AutoscalerMgr interface {
 	Compute() int
 
 	// ScaleUp 扩容
-	ScaleUp(ctx context.Context) error
+	ScaleUp(ctx context.Context, cores int) error
 
 	// ScaleDown 缩容
-	ScaleDown(ctx context.Context) error
+	ScaleDown(ctx context.Context, cores int) error
 
 	Run()
 }

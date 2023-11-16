@@ -8,6 +8,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/basic"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 )
 
 type scaler struct {
@@ -64,9 +65,13 @@ func (s *scaler) Compute() int {
 	return 0
 }
 
-func (s *scaler) ScaleUp(ctx context.Context) error {
-	info, err := s.work.Resource().Apply(nil, true)
-	blog.Infof("scale up %s, %s", info, err)
+func (s *scaler) ScaleUp(ctx context.Context, cores int) error {
+	req := &v2.ParamApply{
+		RequestCPU:    cores,
+		RequestMemory: cores * 1024 * 2, // 内存是CPU的2倍
+	}
+	resp, err := s.work.Resource().Apply(req, true)
+	blog.Infof("scale up %s, %s", resp, err)
 	if err != nil {
 		return err
 	}
@@ -74,7 +79,7 @@ func (s *scaler) ScaleUp(ctx context.Context) error {
 	return err
 }
 
-func (s *scaler) ScaleDown(ctx context.Context) error {
+func (s *scaler) ScaleDown(ctx context.Context, cores int) error {
 	err := s.work.Resource().Release(nil)
 	if err != nil {
 		return err
@@ -111,12 +116,14 @@ func (s *scaler) Run() {
 			)
 			s.data = append(s.data, s.work.Basic().GetDetails(0).GetRuntimeState())
 
-			if s.Compute() == 0 {
+			cores := s.Compute()
+			if cores == 0 {
+				blog.Errorf("cores == 0, ignore scale up")
 				continue
 			}
 
-			if s.Compute() > 0 {
-				err := s.ScaleUp(s.ctx)
+			if cores > 0 {
+				err := s.ScaleUp(s.ctx, cores)
 				if err != nil {
 					blog.Errorf("scale up %s, err: %s", s.workID, err)
 				} else {
@@ -125,8 +132,8 @@ func (s *scaler) Run() {
 				continue
 			}
 
-			if s.Compute() < 0 {
-				err := s.ScaleDown(s.ctx)
+			if cores < 0 {
+				err := s.ScaleDown(s.ctx, cores)
 				if err != nil {
 					blog.Errorf("scale down %s, err: %s", s.workID, err)
 				} else {

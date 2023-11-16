@@ -138,17 +138,22 @@ type ResourceParam struct {
 
 	// if it is a broker resource, then broker name should be specified
 	BrokerName string `json:"broker_name"`
+
+	RequestCPU    int
+	RequestMemory int
 }
 
 func (rp *ResourceParam) copy() ResourceParam {
 	newrp := ResourceParam{
-		City:       rp.City,
-		Platform:   rp.Platform,
-		Image:      rp.Image,
-		BrokerName: rp.BrokerName,
-		Env:        make(map[string]string),
-		Ports:      make(map[string]string),
-		Volumes:    make(map[string]op.BcsVolume),
+		City:          rp.City,
+		Platform:      rp.Platform,
+		Image:         rp.Image,
+		BrokerName:    rp.BrokerName,
+		Env:           make(map[string]string),
+		Ports:         make(map[string]string),
+		Volumes:       make(map[string]op.BcsVolume),
+		RequestCPU:    rp.RequestCPU,
+		RequestMemory: rp.RequestMemory,
 	}
 
 	for k, v := range rp.Env {
@@ -891,6 +896,8 @@ func (rm *resourceManager) launch(
 			Volumes:            r.param.Volumes,
 			Image:              r.param.Image,
 			Instance:           instance,
+			RequestCPU:         r.param.RequestCPU,
+			RequestMemory:      r.param.RequestMemory,
 		}); err != nil {
 			blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
@@ -1187,7 +1194,7 @@ func (hwu *handlerWithUser) AddBroker(
 	return hwu.mgr.addBroker(name, hwu.user, strategyType, strategy, param)
 }
 
-//GetInstanceType return the instanceType from key
+// GetInstanceType return the instanceType from key
 func (hwu *handlerWithUser) GetInstanceType(platform string, group string) *config.InstanceType {
 	retIst := config.InstanceType{
 		CPUPerInstance: hwu.mgr.conf.BcsCPUPerInstance,

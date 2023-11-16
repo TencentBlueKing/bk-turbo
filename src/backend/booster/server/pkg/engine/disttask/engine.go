@@ -107,7 +107,7 @@ type EngineConfig struct {
 	Brokers []config.EngineDisttaskBrokerConfig
 }
 
-//K8sClusterInfo define
+// K8sClusterInfo define
 type K8sClusterInfo struct {
 	K8SCRMClusterID      string
 	K8SCRMCPUPerInstance float64
@@ -521,6 +521,7 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 		return nil
 	}
 
+	fmt.Println("leijiaomin2.0", tb.Client.RequestCPU, tb.Client.RequestMemory)
 	if matchDirectResource(queueName) {
 		return de.launchDirectTask(task, tb, queueName)
 	}
@@ -628,6 +629,8 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		}
 	}
 
+	fmt.Println("leijiaomin2", tb.Client.RequestCPU, tb.Client.RequestMemory)
+
 	// init resource conditions
 	if err = crmMgr.Init(tb.ID, crm.ResourceParam{
 		City:     pureQueueName,
@@ -640,8 +643,10 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 			portsService: "http",
 			portsStats:   "http",
 		},
-		Image:   task.Operator.Image,
-		Volumes: volumes,
+		Image:         task.Operator.Image,
+		Volumes:       volumes,
+		RequestCPU:    tb.Client.RequestCPU,
+		RequestMemory: tb.Client.RequestMemory,
 	}); err != nil && err != crm.ErrorResourceAlreadyInit {
 		blog.Errorf("engine(%s) try launching crm task(%s), init resource manager failed: %v",
 			EngineName, tb.ID, err)
@@ -1094,7 +1099,7 @@ type Message struct {
 	MessageRecordStats MessageRecordStats `json:"ccache_stats"`
 }
 
-//MessageType define
+// MessageType define
 type MessageType int
 
 const (
@@ -1182,7 +1187,7 @@ func (de *disttaskEngine) sendProjectMessage(projectID string, extra []byte) ([]
 	}
 }
 
-//EmptyJobs define
+// EmptyJobs define
 var EmptyJobs = compress.ToBase64String([]byte("[]"))
 
 func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTaskStats) ([]byte, error) {
@@ -1356,7 +1361,7 @@ func getQueueNameHeader(queueName string) queueNameHeader {
 	}
 }
 
-//GetK8sInstanceKey get instance type from queueName
+// GetK8sInstanceKey get instance type from queueName
 func GetK8sInstanceKey(queueName string) *config.InstanceType {
 	header := getQueueNameHeader(queueName)
 	if header == queueNameHeaderK8SDefault || header == queueNameHeaderK8SWin {

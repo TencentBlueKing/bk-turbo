@@ -687,6 +687,20 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 		}
 		break
 	}
+
+	// 主动指定 cpu / memory
+	if param.RequestCPU > 0 {
+		varCPU = float64(param.RequestCPU)
+		varLimitCPU = varCPU
+	}
+	if param.RequestMemory > 0 {
+		varMem = float64(param.RequestMemory)
+		// 内存不超卖
+		varLimitMem = varMem
+	}
+
+	fmt.Println("leijioamin3", param.RequestCPU, param.RequestMemory, varCPU, varMem)
+
 	storageRequest := ""
 	storageLimitRequest := ""
 	if o.conf.BcsStoragePerInstance > 0.0 {
@@ -702,6 +716,9 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	data = strings.ReplaceAll(data, templateLimitVarCPU, fmt.Sprintf("%.2f", varLimitCPU*1000))
 	data = strings.ReplaceAll(data, templateLimitVarMem, fmt.Sprintf("%.2f", varLimitMem))
 	data = strings.ReplaceAll(data, templateLimitStorage, storageLimitRequest)
+
+	fmt.Println("leijioamin4", data)
+
 	return data, nil
 }
 

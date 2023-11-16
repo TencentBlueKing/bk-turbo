@@ -83,7 +83,7 @@ buildbooster_prepare:
 	mkdir -p ${BUILDBOOSTER_BIN_PATH}
 
 buildbooster_server:buildbooster_prepare
-	go build -ldflags "${LDFLAG}" -o ${BUILDBOOSTER_BIN_PATH}/bk-buildbooster-server ./server/main.go
+	go build -gcflags=all="-N -l" -ldflags "${LDFLAG}" -o ${BUILDBOOSTER_BIN_PATH}/bk-buildbooster-server ./server/main.go
 
 buildbooster_gateway:buildbooster_prepare
 	go build -ldflags "${LDFLAG}" -o ${BUILDBOOSTER_BIN_PATH}/bk-buildbooster-gateway ./gateway/main.go

@@ -60,6 +60,9 @@ type BcsLaunchParam struct {
 
 	// instance number to launch
 	Instance int
+
+	RequestCPU    int
+	RequestMemory int
 }
 
 // BcsVolume describe the volume mapping settings
@@ -73,7 +76,7 @@ const (
 	AttributeKeyPlatform = "Platform"
 )
 
-//CheckQueueKey describe the function that get queue key from attributes
+// CheckQueueKey describe the function that get queue key from attributes
 func (param *BcsLaunchParam) CheckQueueKey(instanceType config.InstanceType) bool {
 	platform, city := getInstanceKey(param.AttributeCondition)
 	if instanceType.Group == city && instanceType.Platform == platform {
