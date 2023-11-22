@@ -133,6 +133,7 @@ func (tc *taskBasicLayer) LockTask(taskID string, owner string) {
 	if ok {
 		mutex.Lock()
 		mutex.lastHold = time.Now().Local()
+		mutex.owner = owner
 		return
 	}
 
@@ -169,7 +170,7 @@ func (tc *taskBasicLayer) UnLockTask(taskID string) {
 	}
 	blog.V(5).Infof("layer: unlock task(%s) by owner(%s)", taskID, mutex.owner)
 	mutex.Unlock()
-	mutex.owner = ""
+	// mutex.owner = ""
 }
 
 // LockProject get a Write-Lock with projectID.

@@ -326,7 +326,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			Scheme:  ControllerScheme,
 			IP:      controllerIP,
 			Port:    ControllerPort,
-			Timeout: 5 * time.Second,
+			Timeout: 10 * time.Second,
 			LogDir:  getLogDir(c.String(FlagLogDir)),
 			LogVerbosity: func() int {
 				// debug模式下, --v=3
