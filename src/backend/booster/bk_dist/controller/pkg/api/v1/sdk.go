@@ -458,13 +458,13 @@ func (s *sdk) register(config dcSDK.ControllerRegisterConfig) (dcSDK.ControllerW
 	tmp, _, err := s.request("POST", registerURI, data, config.BatchMode)
 	if err != nil {
 		retry := 0
-		for ; ; time.Sleep(100 * time.Millisecond) {
+		for ; ; time.Sleep(1000 * time.Millisecond) {
 			tmp, _, err = s.request("POST", registerURI, data, config.BatchMode)
 			if err == nil {
 				break
 			}
 			retry++
-			if retry >= 10 {
+			if retry >= 3 {
 				return nil, err
 			}
 		}
