@@ -126,7 +126,7 @@ func (cf *TaskCLFilter) RemoteRetryTimes() int {
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (cf *TaskCLFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 	if cf.clhandle != nil {
-		return cf.clhandle.OnRemoteFail(command)
+		return cf.clhandle.OnRemoteFail(cf.cldArgs)
 	}
 
 	return nil, nil
