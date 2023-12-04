@@ -65,6 +65,9 @@ type MySQL interface {
 	PutWorkStats(stats *TableWorkStats) error
 	UpdateWorkStats(id int, stats map[string]interface{}) error
 	DeleteWorkStats(id int) error
+
+	SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error)
+	SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*SummaryResultByUser, int64, error)
 }
 
 // NewMySQL get new mysql instance with connected orm operator.
@@ -814,6 +817,79 @@ func (m *mysql) DeleteWorkStats(id int) error {
 		return err
 	}
 	return nil
+}
+
+// SummaryTaskRecords summary task records.
+func (m *mysql) SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error) {
+	defer timeMetricRecord("summary_task_records")()
+	defer logSlowFunc(time.Now().Unix(), "summary_task_records", 2)
+
+	var tl []*SummaryResult
+	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
+	db := m.db.Table("task_records").Where("disabled = ?", false)
+
+	var length int64
+	if err := db.Count(&length).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	db = opts.AddSelector(db)
+	db = opts.AddWhere(db)
+	db = opts.AddGroup(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	return tl, length, nil
+}
+
+// SummaryTaskRecordsByUser summary task records group by user.
+func (m *mysql) SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*SummaryResultByUser, int64, error) {
+	defer timeMetricRecord("summary_task_records")()
+	defer logSlowFunc(time.Now().Unix(), "summary_task_records", 2)
+
+	var tl []*SummaryResultByUser
+	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
+	db := m.db.Table("task_records").Where("disabled = ?", false)
+
+	var length int64
+	if err := db.Count(&length).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	db = opts.AddSelector(db)
+	db = opts.AddWhere(db)
+	db = opts.AddGroup(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	return tl, length, nil
+}
+
+// SummaryResult generate summary data
+type SummaryResult struct {
+	Day               string  `json:"day"`
+	ProjectID         string  `json:"project_id"`
+	TotalTime         float64 `json:"total_time"`
+	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
+	TotalRecordNumber int     `json:"total_record_number"`
+}
+
+// SummaryResultByUser generate summary data group by user
+type SummaryResultByUser struct {
+	Day               string  `json:"day"`
+	ProjectID         string  `json:"project_id"`
+	User              string  `json:"user"`
+	TotalTime         float64 `json:"total_time"`
+	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
+	TotalRecordNumber int     `json:"total_record_number"`
 }
 
 func timeMetricRecord(operation string) func() {

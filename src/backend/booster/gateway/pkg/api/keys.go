@@ -31,6 +31,9 @@ const (
 	QueryIPKey              = "ip"
 	QueryStageTimeout       = "stage_timeout"
 	QueryReleased           = "released"
+	QueryUserKey            = "user"
+
+	QueryDate = "day"
 
 	QueryOffsetKey   = "offset"
 	QueryLimitKey    = "limit"

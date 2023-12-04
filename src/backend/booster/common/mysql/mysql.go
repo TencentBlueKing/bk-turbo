@@ -26,6 +26,7 @@ type ListOptions struct {
 	lessThan    map[string]interface{}
 	like        map[string]interface{}
 	in          map[string]interface{}
+	group       []string
 }
 
 // NewListOptions get a new, empty ListOptions.
@@ -72,6 +73,11 @@ func (lo *ListOptions) Limit(limit int) {
 // Select decide the return columns, empty for all.
 func (lo *ListOptions) Select(selector []string) {
 	lo.selector = selector
+}
+
+// Group decide the group by keys.
+func (lo *ListOptions) Group(group []string) {
+	lo.group = group
 }
 
 // Order describe the order columns.
@@ -153,6 +159,18 @@ func (lo *ListOptions) AddOrder(db *gorm.DB) *gorm.DB {
 			o = strings.TrimPrefix(o, OpsOrderDESCSuffix) + " DESC"
 		}
 		db = db.Order(o)
+	}
+	return db
+}
+
+// AddGroup add group by columns.
+func (lo *ListOptions) AddGroup(db *gorm.DB) *gorm.DB {
+	if lo.group == nil || len(lo.group) == 0 {
+		return db
+	}
+
+	for _, g := range lo.group {
+		db = db.Group(g)
 	}
 	return db
 }
