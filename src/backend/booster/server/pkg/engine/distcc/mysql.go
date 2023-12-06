@@ -681,10 +681,10 @@ func (m *mysql) SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResu
 	db := m.db.Table("task_records").Where("disabled = ?", false)
 
 	var length int64
-	if err := db.Count(&length).Error; err != nil {
-		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
-		return nil, 0, err
-	}
+	// if err := db.Count(&length).Error; err != nil {
+	// 	blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+	// 	return nil, 0, err
+	// }
 
 	db = opts.AddSelector(db)
 	db = opts.AddWhere(db)
