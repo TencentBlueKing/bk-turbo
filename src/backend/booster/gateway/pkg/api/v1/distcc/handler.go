@@ -411,8 +411,12 @@ func getSummaryOptions(req *restful.Request) (commonMySQL.ListOptions, error) {
 	// set start time
 	opts.Gt("create_time", t.Unix())
 
+	// raw where
+	opts.RawWhere([]string{"end_time > start_time"})
+
 	// set end time
 	opts.Lt("create_time", t.Unix()+3600*24)
+	opts.Lt("end_time-start_time", 6*3600)
 
 	// set selectors
 	selectors := []string{

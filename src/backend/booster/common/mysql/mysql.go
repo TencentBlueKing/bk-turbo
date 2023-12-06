@@ -26,6 +26,7 @@ type ListOptions struct {
 	lessThan    map[string]interface{}
 	like        map[string]interface{}
 	in          map[string]interface{}
+	rawWhere    []string
 	group       []string
 }
 
@@ -115,6 +116,11 @@ func (lo *ListOptions) In(key string, value interface{}) {
 	lo.in[key] = value
 }
 
+// RawWhere set raw where conditions.
+func (lo *ListOptions) RawWhere(r []string) {
+	lo.rawWhere = r
+}
+
 // AddWhere receive a database operator and register all the compare conditions into it with 'WHERE'.
 func (lo *ListOptions) AddWhere(db *gorm.DB) *gorm.DB {
 	for k, v := range lo.equal {
@@ -131,6 +137,9 @@ func (lo *ListOptions) AddWhere(db *gorm.DB) *gorm.DB {
 	}
 	for k, v := range lo.in {
 		db = db.Where(k+" in (?)", v)
+	}
+	for _, r := range lo.rawWhere {
+		db = db.Where(r)
 	}
 	return db
 }
