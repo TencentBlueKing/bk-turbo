@@ -169,10 +169,7 @@ func (lo *ListOptions) AddGroup(db *gorm.DB) *gorm.DB {
 		return db
 	}
 
-	for _, g := range lo.group {
-		db = db.Group(g)
-	}
-	return db
+	return db.Group(strings.Join(lo.group, ","))
 }
 
 const (
