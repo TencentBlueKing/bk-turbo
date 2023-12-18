@@ -9,6 +9,7 @@ import com.tencent.devops.turbo.config.TBSProperties
 import com.tencent.devops.turbo.dto.DistccRequestBody
 import com.tencent.devops.turbo.dto.DistccResponse
 import com.tencent.devops.turbo.dto.ParamEnumDto
+import com.tencent.devops.turbo.dto.TBSDaySummaryDto
 import com.tencent.devops.turbo.dto.TBSTurboStatDto
 import com.tencent.devops.turbo.dto.WhiteListDto
 import com.tencent.devops.web.util.SpringContextHolder
@@ -122,13 +123,17 @@ object TBSSdkApi {
         queryParam: Map<String, Any> = mutableMapOf(),
         jsonBody: String = "",
         headers: MutableMap<String, String> = mutableMapOf(),
-        method: String = "GET"
+        method: String = "GET",
+        customPath: String? = null
     ): String {
         val requestBody = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         val properties = SpringContextHolder.getBean<TBSProperties>()
-        val customPath =
+        val templatePath =
             properties.urlTemplate!!.replace("{engine}", engineCode).replace("{resource_type}", resourceName)
-        var url = "${properties.rootPath}/$customPath"
+        var url = "${properties.rootPath}/$templatePath"
+        if (customPath.isNullOrBlank()) {
+            url = url.plus(customPath)
+        }
         if (pathParam.isNotEmpty()) {
             pathParam.forEach {
                 url = url.plus("/$it")
@@ -206,5 +211,33 @@ object TBSSdkApi {
         } else {
             JsonUtil.to(responseStr, object : TypeReference<DistccResponse<MutableList<String>>>() {}).data
         }
+    }
+
+    /**
+     * 获取TBS每日汇总统计
+     */
+    fun queryTbsDaySummary(engineCode: String, queryParam: Map<String, Any>): List<TBSDaySummaryDto> {
+        val responseStr = if (engineCode.contains("disttask")) {
+            // tbs后台接口路径处理
+            tbsCommonRequest(
+                engineCode = "disttask",
+                resourceName = "summary",
+                queryParam = queryParam,
+                customPath = if (engineCode.contains("ue4"))"/groupbyuser/scene/ue4" else null
+            )
+        } else {
+            tbsCommonRequest(
+                engineCode = "distcc",
+                resourceName = "summary",
+                queryParam = queryParam
+            )
+        }
+        val response = JsonUtil.to(responseStr, object : TypeReference<DistccResponse<List<TBSDaySummaryDto>>>() {})
+        if (response.code != 0 || !response.result) {
+            throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "fail to invoke request: "
+                + response.message
+            )
+        }
+        return response.data ?: listOf()
     }
 }
