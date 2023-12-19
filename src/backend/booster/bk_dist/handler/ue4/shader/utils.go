@@ -148,34 +148,7 @@ func checkAndsaveResultFile(rf *dcSDK.FileDesc) error {
 				return err
 			}
 			break
-		// case protocol.CompressLZO:
-		// 	// decompress with lzox1 firstly
-		// 	outdata, err := golzo.Decompress1X(bytes.NewReader(data), int(rf.CompressedSize), 0)
-		// 	if err != nil {
-		// 		blog.Errorf("shader: decompress file %s error: [%s]", resultfilepath, err.Error())
-		// 		return err
-		// 	}
-		// 	outlen := len(string(outdata))
-		// 	blog.Debugf("shader: decompressed file %s with lzo1x, from [%d] to [%d]",
-		// 		resultfilepath, rf.CompressedSize, outlen)
-		// 	if outlen != int(rf.FileSize) {
-		// 		err := fmt.Errorf("shader: decompressed size %d, expected size %d", outlen, rf.FileSize)
-		// 		blog.Errorf("shader: decompress error: [%v]", err)
-		// 		return err
-		// 	}
 
-		// 	err = checkResultFile(resultfilepath, int64(outlen), outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("check file [%s] error: [%s]", resultfilepath, err.Error())
-		// 		return err
-		// 	}
-
-		// 	err = saveToFile(resultfilepath, outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("shader: save file [%s] error: [%v]", resultfilepath, err)
-		// 		return err
-		// 	}
-		// 	break
 		case protocol.CompressLZ4:
 			// decompress with lz4 firstly
 			dst := make([]byte, rf.FileSize)
