@@ -3,6 +3,7 @@ package com.tencent.devops.turbo.job
 import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.util.DateTimeUtils
 import com.tencent.devops.common.util.JsonUtil
+import com.tencent.devops.project.api.service.ServiceProjectResource
 import com.tencent.devops.project.pojo.ProjectVO
 import com.tencent.devops.turbo.dao.repository.TbsDaySummaryRepository
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
@@ -70,9 +71,16 @@ class TBSDaySummaryJob @Autowired constructor(
             val projectIdSet = summaryEntityList.map { it.projectId!! }.toSet()
             val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
             if (notInProjectMapKeySet.isEmpty()) {
-//            val projectVO = client.get(ServiceProjectResource::class.java).get("") // TODO 换成批量
-//            val projectVOMap = listOf<ProjectVO>().associateBy { it.projectId }
-                val resultMap = mapOf<String, ProjectVO>()
+                val resultMap = mutableMapOf<String, ProjectVO>()
+                for (it in notInProjectMapKeySet) {
+                    // TODO 换成批量
+                    val projectVOResult = client.get(ServiceProjectResource::class.java).get(it)
+                    if (projectVOResult.isNotOk() || projectVOResult.data == null) {
+                        logger.error("ServiceProjectResource#get request is not ok! project id: $it")
+                        continue
+                    }
+                    resultMap[it] = projectVOResult.data!!
+                }
                 projectVOMap.putAll(resultMap)
             }
 
@@ -82,7 +90,7 @@ class TBSDaySummaryJob @Autowired constructor(
                 logger.info("turboPlanRepository.findByIdIn result size: ${turboPlanList.size}")
                 if (turboPlanList.isEmpty()) {
                     logger.warn("turboPlanList is empty! continue")
-                    return@forEach
+                    continue
                 }
 
                 turboPlanList.forEach {
@@ -100,7 +108,9 @@ class TBSDaySummaryJob @Autowired constructor(
             }
 
             tbsDaySummaryRepository.saveAll(summaryEntityList)
+            logger.info("save summary entity size: ${summaryEntityList.size}")
         }
+        logger.info("TBS day summary job execution completed!")
     }
 
     /**
