@@ -33,5 +33,5 @@ interface TurboPlanRepository : MongoRepository<TTurboPlanEntity, String> {
     /**
      * 根据方案id集合批量查询
      */
-    fun findByIdIn(planIdSet: List<String?>)
+    fun findByIdIn(planIdSet: List<String?>): List<TTurboPlanEntity>
 }

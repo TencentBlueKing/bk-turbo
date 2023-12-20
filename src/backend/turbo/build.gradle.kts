@@ -1,6 +1,6 @@
 import com.tencent.devops.utils.findPropertyOrEmpty
 plugins {
-	id("com.tencent.devops.boot") version "0.0.6"
+	id("com.tencent.devops.boot") version "0.0.7"
 	id("org.owasp.dependencycheck") version "7.1.0.1"
 }
 
@@ -13,6 +13,10 @@ allprojects {
     apply(plugin = "com.tencent.devops.boot")
 
     val property = project.findPropertyOrEmpty("devops.assemblyMode").trim()
+
+    repositories {
+        maven(url = "https://mirrors.tencent.com/repository/maven/bkdevops_maven")
+    }
 
     configurations.forEach {
         it.exclude(group = "org.slf4j", module = "log4j-over-slf4j")

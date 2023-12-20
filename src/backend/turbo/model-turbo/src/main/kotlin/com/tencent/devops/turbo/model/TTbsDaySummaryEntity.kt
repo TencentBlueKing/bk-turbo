@@ -25,10 +25,22 @@ data class TTbsDaySummaryEntity(
     var projectId: String? = null,
 
     /**
+     * 项目名称
+     */
+    @Field("project_name")
+    var projectName: String? = null,
+
+    /**
      * 方案id
      */
     @Field("plan_id")
     var planId: String?,
+
+    /**
+     * 方案名称
+     */
+    @Field("plan_name")
+    var planName: String? = null,
 
     /**
      * 方案创建人

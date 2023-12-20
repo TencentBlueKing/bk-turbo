@@ -1,7 +1,10 @@
 package com.tencent.devops.turbo.job
 
+import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.util.DateTimeUtils
 import com.tencent.devops.common.util.JsonUtil
+import com.tencent.devops.project.pojo.ProjectVO
+import com.tencent.devops.turbo.dao.repository.TbsDaySummaryRepository
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
 import com.tencent.devops.turbo.dao.repository.TurboPlanRepository
 import com.tencent.devops.turbo.dto.TBSDaySummaryDto
@@ -16,6 +19,8 @@ import java.time.LocalDateTime
 
 @Suppress("SpringJavaAutowiredMembersInspection")
 class TBSDaySummaryJob @Autowired constructor(
+    private val client: Client,
+    private val tbsDaySummaryRepository: TbsDaySummaryRepository,
     private val turboEngineConfigRepository: TurboEngineConfigRepository,
     private val turboPlanRepository: TurboPlanRepository
 ) : Job {
@@ -40,6 +45,8 @@ class TBSDaySummaryJob @Autowired constructor(
             DateTimeUtils.localDate2DateStr(statLocalDate)
         }
 
+        val projectVOMap =  mutableMapOf<String, ProjectVO>()
+
         val engineConfigEntities = turboEngineConfigRepository.findAll()
         engineConfigEntities.forEach { engineConfig ->
             val daySummaryDtoList = TBSSdkApi.queryTbsDaySummary(
@@ -55,14 +62,44 @@ class TBSDaySummaryJob @Autowired constructor(
                 return@forEach
             }
 
+            // 把TBS的接口数据整理成entity
             val summaryEntityList = this.dto2SummaryEntityList(daySummaryList = daySummaryDtoList)
             val planIdEntityMap = summaryEntityList.associateBy { it.planId }
+
+            // 取出项目ID集合用于获取项目组织架构信息
+            val projectIdSet = summaryEntityList.map { it.projectId!! }.toSet()
+            val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
+            if (notInProjectMapKeySet.isEmpty()) {
+//            val projectVO = client.get(ServiceProjectResource::class.java).get("") // TODO 换成批量
+//            val projectVOMap = listOf<ProjectVO>().associateBy { it.projectId }
+                val resultMap = mapOf<String, ProjectVO>()
+                projectVOMap.putAll(resultMap)
+            }
 
             val planIdsList = planIdEntityMap.keys.chunked(PAGE_SIZE)
             for (planIds in planIdsList) {
                 val turboPlanList = turboPlanRepository.findByIdIn(planIds)
+                logger.info("turboPlanRepository.findByIdIn result size: ${turboPlanList.size}")
+                if (turboPlanList.isEmpty()) {
+                    logger.warn("turboPlanList is empty! continue")
+                    return@forEach
+                }
 
+                turboPlanList.forEach {
+                    val summaryEntity = planIdEntityMap[it.id]
+                    summaryEntity?.planCreator = it.createdBy
+                    summaryEntity?.planName = it.planName
+                    summaryEntity?.projectId = it.projectId
+                    summaryEntity?.projectName = projectVOMap[it.projectId]?.projectName
+                    summaryEntity?.bgName = projectVOMap[it.projectId]?.bgName
+                    summaryEntity?.bgId = projectVOMap[it.projectId]?.bgId?.toInt()
+                    summaryEntity?.deptName = projectVOMap[it.projectId]?.deptName
+                    summaryEntity?.deptId = projectVOMap[it.projectId]?.deptId?.toInt()
+                    summaryEntity?.productId = projectVOMap[it.projectId]?.productId
+                }
             }
+
+            tbsDaySummaryRepository.saveAll(summaryEntityList)
         }
     }
 
@@ -104,5 +141,4 @@ class TBSDaySummaryJob @Autowired constructor(
         }
         return summaryEntities
     }
-
 }
