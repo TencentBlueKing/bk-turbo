@@ -70,18 +70,10 @@ class TBSDaySummaryJob @Autowired constructor(
             // 取出项目ID集合用于获取项目组织架构信息
             val projectIdSet = summaryEntityList.map { it.projectId!! }.toSet()
             val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
-            if (notInProjectMapKeySet.isEmpty()) {
-                val resultMap = mutableMapOf<String, ProjectVO>()
-                for (it in notInProjectMapKeySet) {
-                    // TODO 换成批量
-                    val projectVOResult = client.get(ServiceProjectResource::class.java).get(it)
-                    if (projectVOResult.isNotOk() || projectVOResult.data == null) {
-                        logger.error("ServiceProjectResource#get request is not ok! project id: $it")
-                        continue
-                    }
-                    resultMap[it] = projectVOResult.data!!
-                }
-                projectVOMap.putAll(resultMap)
+            // 获取项目信息清单
+            val projectVOList = this.getProjectVOListByProjectIds(notInProjectMapKeySet.toList())
+            if (projectVOList.isNotEmpty()) {
+                projectVOMap.putAll(projectVOList.associateBy { it.projectId })
             }
 
             val planIdsList = planIdEntityMap.keys.chunked(PAGE_SIZE)
@@ -150,5 +142,21 @@ class TBSDaySummaryJob @Autowired constructor(
             summaryEntities.add(entity)
         }
         return summaryEntities
+    }
+
+    /**
+     * 根据项目id获取项目信息
+     */
+    private fun getProjectVOListByProjectIds(projectIds: List<String>): List<ProjectVO> {
+        var list = emptyList<ProjectVO>()
+        if (projectIds.isNotEmpty()) {
+            val result = client.get(ServiceProjectResource::class.java).listByProjectCodeList(projectIds)
+            if (result.isNotOk() || result.data == null) {
+                logger.error("ServiceProjectResource#get request is failed!")
+                return list
+            }
+            list = result.data!!
+        }
+        return list
     }
 }
