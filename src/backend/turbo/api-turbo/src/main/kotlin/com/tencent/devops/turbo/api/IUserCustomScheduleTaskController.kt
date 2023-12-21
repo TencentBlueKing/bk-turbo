@@ -34,7 +34,7 @@ interface IUserCustomScheduleTaskController {
         @ApiParam(value = "编译加速模式信息", required = true)
         @RequestBody
         customScheduleJobModel: CustomScheduleJobModel
-    ): Boolean
+    ): Result<Boolean>
 
     @ApiOperation("触发定时任务执行")
     @GetMapping(
@@ -51,5 +51,5 @@ interface IUserCustomScheduleTaskController {
         @ApiParam(value = "任务名称", required = true)
         @RequestParam(value = "jobName")
         jobName: String
-    ): String?
+    ): Result<String>
 }

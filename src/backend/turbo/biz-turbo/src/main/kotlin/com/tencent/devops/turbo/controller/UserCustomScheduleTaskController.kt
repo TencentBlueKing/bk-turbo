@@ -21,17 +21,17 @@ class UserCustomScheduleTaskController @Autowired constructor(
         user: String,
         projectId: String,
         customScheduleJobModel: CustomScheduleJobModel
-    ): Boolean {
+    ): Result<Boolean> {
 //        if (!turboAuthService.validatePlatformMember(projectId, user)) {
 //            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
 //        }
-        return customScheduleJobService.customScheduledJobAdd(customScheduleJobModel)
+        return Result.success(customScheduleJobService.customScheduledJobAdd(customScheduleJobModel))
     }
 
-    override fun triggerCustomScheduleJob(user: String, projectId: String, jobName: String): String? {
+    override fun triggerCustomScheduleJob(user: String, projectId: String, jobName: String): Result<String> {
         if (!turboAuthService.getAuthResult(projectId, user)) {
             throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
         }
-        return customScheduleJobService.trigger(jobName)
+        return Result.success(customScheduleJobService.trigger(jobName)!!)
     }
 }
