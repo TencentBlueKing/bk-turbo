@@ -238,7 +238,7 @@ func cleanDirOnlyByTime(dir string, t time.Time) {
 		}
 		fullpath = filepath.Join(dir, fi.Name())
 		blog.Infof("booster: ready remove file:%s modify time:%s", fullpath, fi.ModTime())
-		os.Remove(fullpath)
+		os.RemoveAll(fullpath)
 	}
 }
 
