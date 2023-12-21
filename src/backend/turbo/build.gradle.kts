@@ -22,6 +22,7 @@ allprojects {
         it.exclude(group = "org.slf4j", module = "log4j-over-slf4j")
         it.exclude(group = "org.slf4j", module = "slf4j-log4j12")
         it.exclude(group = "org.slf4j", module = "slf4j-nop")
+        it.exclude(group = "org.bouncycastle", module = "bcutil-jdk15on")
         if (project.name.startsWith("boot-")) {
             when (com.tencent.devops.enums.AssemblyMode.ofValueOrDefault(property)) {
                 com.tencent.devops.enums.AssemblyMode.CONSUL -> {
