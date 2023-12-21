@@ -106,6 +106,7 @@ const (
 	FlagLongTCP              = "long_tcp"
 	FlagUseDefaultWorker     = "use_default_worker"
 	FlagDynamicPort          = "dynamic_port"
+	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -446,6 +447,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "dynamic_port",
 			Usage: "controller will listen dynamic port if true",
+		},
+		commandCli.IntFlag{
+			Name:  "clean_tmp_files_day_ago",
+			Usage: "clean tmp files which modify time before this days, default is 1",
 		},
 	}
 )
