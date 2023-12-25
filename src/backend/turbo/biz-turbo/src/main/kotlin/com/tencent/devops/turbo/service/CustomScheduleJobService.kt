@@ -79,6 +79,24 @@ class CustomScheduleJobService @Autowired constructor(
     }
 
     /**
+     *  删除自定义计划任务
+     */
+    fun customScheduledJobDel(jobName: String): Boolean {
+        logger.info("delete job $jobName")
+        val jobKey = JobKey.jobKey(jobName, jobGroup)
+        try {
+            scheduler.deleteJob(jobKey)
+        } catch (e: SchedulerException) {
+            logger.warn("delete $jobName job fail with scheduler exception!")
+            return false
+        } catch (e: Exception) {
+            logger.error("delete $jobName job fail with exception!")
+            return false
+        }
+        return true
+    }
+
+    /**
      * 触发job立即执行
      */
     fun trigger(jobName: String): String {

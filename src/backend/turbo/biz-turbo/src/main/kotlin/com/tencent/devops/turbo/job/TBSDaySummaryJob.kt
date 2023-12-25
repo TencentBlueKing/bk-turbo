@@ -51,12 +51,17 @@ class TBSDaySummaryJob @Autowired constructor(
         val engineConfigEntities = turboEngineConfigRepository.findAll()
         engineConfigEntities.forEach { engineConfig ->
             logger.info("query engineConfig: ${engineConfig.engineCode}")
-            val daySummaryDtoList = TBSSdkApi.queryTbsDaySummary(
-                engineCode = engineConfig.engineCode,
-                queryParam = mapOf(
-                    "day" to statisticsDateStr
+            val daySummaryDtoList = try {
+                TBSSdkApi.queryTbsDaySummary(
+                    engineCode = engineConfig.engineCode,
+                    queryParam = mapOf(
+                        "day" to statisticsDateStr
+                    )
                 )
-            )
+            } catch (e: Exception) {
+                logger.error("queryTbsDaySummary error: ${e.message}")
+                return@forEach
+            }
 
             logger.info("daySummaryDtoList size: ${daySummaryDtoList.size}")
             if (daySummaryDtoList.isEmpty()) {
