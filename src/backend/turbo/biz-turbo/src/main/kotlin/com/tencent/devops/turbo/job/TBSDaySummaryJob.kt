@@ -138,6 +138,7 @@ class TBSDaySummaryJob @Autowired constructor(
                 planId = stringArr[0]
                 engineCode = if (stringArr[1] == "cc") "disttask-cc" else if (stringArr[1] == "ue4") "disttask-ue4"
                     else stringArr[1]
+                logger.info("planIdAndEngineCode: $planIdAndEngineCode, engineCode: $engineCode")
             } else {
                 planId = planIdAndEngineCode
                 engineCode = "distcc"
