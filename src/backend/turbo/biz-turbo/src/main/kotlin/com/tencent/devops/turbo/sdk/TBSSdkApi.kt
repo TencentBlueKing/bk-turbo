@@ -131,7 +131,7 @@ object TBSSdkApi {
         val templatePath =
             properties.urlTemplate!!.replace("{engine}", engineCode).replace("{resource_type}", resourceName)
         var url = "${properties.rootPath}/$templatePath"
-        if (customPath.isNullOrBlank()) {
+        if (!customPath.isNullOrBlank()) {
             url = url.plus(customPath)
         }
         if (pathParam.isNotEmpty()) {
