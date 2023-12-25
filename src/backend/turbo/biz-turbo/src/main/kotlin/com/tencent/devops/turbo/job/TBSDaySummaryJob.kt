@@ -74,22 +74,20 @@ class TBSDaySummaryJob @Autowired constructor(
 
             // 把TBS的接口数据整理成entity
             val summaryEntityList = this.dto2SummaryEntityList(daySummaryList = daySummaryDtoList)
-            val planIdEntityMap = summaryEntityList.associateBy { it.planId }
+            val summaryListList = summaryEntityList.chunked(PAGE_SIZE)
+            for (summaryList in summaryListList) {
 
-            val planIdsList = planIdEntityMap.keys.chunked(PAGE_SIZE)
-            for (planIds in planIdsList) {
-                val turboPlanList = turboPlanRepository.findByIdIn(planIds)
-                logger.info("turboPlanRepository.findByIdIn result size: ${turboPlanList.size}")
-                if (turboPlanList.isEmpty()) {
-                    logger.warn("turboPlanList is empty! continue")
-                    continue
-                }
+                // 根据planId批量获取方案信息
+                val planIds = summaryList.map { it.planId }.toSet()
+                val turboPlanList = turboPlanRepository.findByIdIn(planIds.toList())
+                val planEntityMap = turboPlanList.associateBy { it.id }
 
-                turboPlanList.forEach {
-                    val summaryEntity = planIdEntityMap[it.id]
-                    summaryEntity?.planCreator = it.createdBy
-                    summaryEntity?.planName = it.planName
-                    summaryEntity?.projectId = it.projectId
+                // 赋值plan信息和项目id
+                for (summaryEntity in summaryList) {
+                    val planEntity = planEntityMap[summaryEntity.planId]
+                    summaryEntity.planCreator = planEntity?.createdBy
+                    summaryEntity.planName = planEntity?.planName
+                    summaryEntity.projectId = planEntity?.projectId
                 }
 
                 // 取出项目ID集合用于获取项目组织架构信息
@@ -101,14 +99,14 @@ class TBSDaySummaryJob @Autowired constructor(
                 if (projectVOList.isNotEmpty()) {
                     projectVOMap.putAll(projectVOList.associateBy { it.projectId })
                 }
-                turboPlanList.forEach {
-                    val summaryEntity = planIdEntityMap[it.id]
-                    summaryEntity?.projectName = projectVOMap[it.projectId]?.projectName
-                    summaryEntity?.bgName = projectVOMap[it.projectId]?.bgName
-                    summaryEntity?.bgId = projectVOMap[it.projectId]?.bgId?.toInt()
-                    summaryEntity?.deptName = projectVOMap[it.projectId]?.deptName
-                    summaryEntity?.deptId = projectVOMap[it.projectId]?.deptId?.toInt()
-                    summaryEntity?.productId = projectVOMap[it.projectId]?.productId
+
+                for (it in summaryList) {
+                    it.projectName = projectVOMap[it.projectId]?.projectName
+                    it.bgName = projectVOMap[it.projectId]?.bgName
+                    it.bgId = projectVOMap[it.projectId]?.bgId?.toInt()
+                    it.deptName = projectVOMap[it.projectId]?.deptName
+                    it.deptId = projectVOMap[it.projectId]?.deptId?.toInt()
+                    it.productId = projectVOMap[it.projectId]?.productId
                 }
             }
 
