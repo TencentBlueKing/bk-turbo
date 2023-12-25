@@ -147,6 +147,7 @@ object TBSSdkApi {
             )
             url = url.trimEnd('&')
         }
+        logger.info(">>>request url: $url")
         val request = when (method) {
             HttpMethod.GET.name -> {
                 buildGet(url, headers)
@@ -227,7 +228,7 @@ object TBSSdkApi {
             )
         } else {
             tbsCommonRequest(
-                engineCode = "distcc",
+                engineCode = engineCode,
                 resourceName = "summary",
                 queryParam = queryParam
             )
