@@ -168,7 +168,6 @@ class TBSDaySummaryJob @Autowired constructor(
                 return list
             }
             list = result.data!!
-            logger.info(">>> ProjectVOs ${JsonUtil.toJson(list)}")
         }
         return list
     }
