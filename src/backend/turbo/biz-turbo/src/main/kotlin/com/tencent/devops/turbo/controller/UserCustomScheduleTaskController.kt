@@ -1,5 +1,6 @@
 package com.tencent.devops.turbo.controller
 
+import com.tencent.devops.api.pojo.Response
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
 import com.tencent.devops.common.util.constants.NO_ADMIN_MEMBER_MESSAGE
@@ -21,17 +22,17 @@ class UserCustomScheduleTaskController @Autowired constructor(
         user: String,
         projectId: String,
         customScheduleJobModel: CustomScheduleJobModel
-    ): Result<Boolean> {
+    ): Response<Boolean> {
 //        if (!turboAuthService.validatePlatformMember(projectId, user)) {
 //            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
 //        }
-        return Result.success(customScheduleJobService.customScheduledJobAdd(customScheduleJobModel))
+        return Response.success(customScheduleJobService.customScheduledJobAdd(customScheduleJobModel))
     }
 
-    override fun triggerCustomScheduleJob(user: String, projectId: String, jobName: String): Result<String> {
+    override fun triggerCustomScheduleJob(user: String, projectId: String, jobName: String): Response<String> {
         if (!turboAuthService.getAuthResult(projectId, user)) {
             throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
         }
-        return Result.success(customScheduleJobService.trigger(jobName)!!)
+        return Response.success(customScheduleJobService.trigger(jobName))
     }
 }
