@@ -76,20 +76,6 @@ class TBSDaySummaryJob @Autowired constructor(
             val summaryEntityList = this.dto2SummaryEntityList(daySummaryList = daySummaryDtoList)
             val planIdEntityMap = summaryEntityList.associateBy { it.planId }
 
-            // 取出项目ID集合用于获取项目组织架构信息
-            val projectIdSet = try {
-                summaryEntityList.map { it.projectId!! }.toSet()
-            } catch (e: Exception) {
-                logger.warn("summaryEntityList.map { it.projectId!! } error: ${e.message}")
-                emptySet()
-            }
-            val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
-            // 获取项目信息清单
-            val projectVOList = this.getProjectVOListByProjectIds(notInProjectMapKeySet.toList())
-            if (projectVOList.isNotEmpty()) {
-                projectVOMap.putAll(projectVOList.associateBy { it.projectId })
-            }
-
             val planIdsList = planIdEntityMap.keys.chunked(PAGE_SIZE)
             for (planIds in planIdsList) {
                 val turboPlanList = turboPlanRepository.findByIdIn(planIds)
@@ -104,6 +90,19 @@ class TBSDaySummaryJob @Autowired constructor(
                     summaryEntity?.planCreator = it.createdBy
                     summaryEntity?.planName = it.planName
                     summaryEntity?.projectId = it.projectId
+                }
+
+                // 取出项目ID集合用于获取项目组织架构信息
+                val projectIdSet = turboPlanList.map { it.projectId }.toSet()
+                val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
+
+                // 获取项目信息清单
+                val projectVOList = this.getProjectVOListByProjectIds(notInProjectMapKeySet.toList())
+                if (projectVOList.isNotEmpty()) {
+                    projectVOMap.putAll(projectVOList.associateBy { it.projectId })
+                }
+                turboPlanList.forEach {
+                    val summaryEntity = planIdEntityMap[it.id]
                     summaryEntity?.projectName = projectVOMap[it.projectId]?.projectName
                     summaryEntity?.bgName = projectVOMap[it.projectId]?.bgName
                     summaryEntity?.bgId = projectVOMap[it.projectId]?.bgId?.toInt()
@@ -138,7 +137,6 @@ class TBSDaySummaryJob @Autowired constructor(
                 planId = stringArr[0]
                 engineCode = if (stringArr[1] == "cc") "disttask-cc" else if (stringArr[1] == "ue4") "disttask-ue4"
                     else stringArr[1]
-                logger.info("planIdAndEngineCode: $planIdAndEngineCode, engineCode: $engineCode")
             } else {
                 planId = planIdAndEngineCode
                 engineCode = "distcc"
