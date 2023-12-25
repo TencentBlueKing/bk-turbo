@@ -80,6 +80,7 @@ class TBSDaySummaryJob @Autowired constructor(
                 // 根据planId批量获取方案信息
                 val planIds = summaryList.map { it.planId }.toSet()
                 val turboPlanList = turboPlanRepository.findByIdIn(planIds.toList())
+                logger.info("turboPlanRepository.findByIdIn result size: ${turboPlanList.size}")
                 val planEntityMap = turboPlanList.associateBy { it.id }
 
                 // 赋值plan信息和项目id
@@ -167,6 +168,7 @@ class TBSDaySummaryJob @Autowired constructor(
                 return list
             }
             list = result.data!!
+            logger.info(">>> ProjectVOs ${JsonUtil.toJson(list)}")
         }
         return list
     }
