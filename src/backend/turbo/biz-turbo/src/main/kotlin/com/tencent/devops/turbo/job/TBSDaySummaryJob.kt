@@ -68,7 +68,12 @@ class TBSDaySummaryJob @Autowired constructor(
             val planIdEntityMap = summaryEntityList.associateBy { it.planId }
 
             // 取出项目ID集合用于获取项目组织架构信息
-            val projectIdSet = summaryEntityList.map { it.projectId!! }.toSet()
+            val projectIdSet = try {
+                summaryEntityList.map { it.projectId!! }.toSet()
+            } catch (e: Exception) {
+                logger.warn("summaryEntityList.map { it.projectId!! } error: ${e.message}")
+                emptySet()
+            }
             val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
             // 获取项目信息清单
             val projectVOList = this.getProjectVOListByProjectIds(notInProjectMapKeySet.toList())
