@@ -233,6 +233,7 @@ object TBSSdkApi {
                 queryParam = queryParam
             )
         }
+        logger.info(">>> $engineCode response: $responseStr")
         val response = JsonUtil.to(responseStr, object : TypeReference<DistccResponse<List<TBSDaySummaryDto>>>() {})
         if (response.code != 0 || !response.result) {
             throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "fail to invoke request: "

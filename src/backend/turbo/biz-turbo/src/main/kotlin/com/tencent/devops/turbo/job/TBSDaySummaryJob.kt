@@ -46,6 +46,9 @@ class TBSDaySummaryJob @Autowired constructor(
             DateTimeUtils.localDate2DateStr(statLocalDate)
         }
 
+        // 清理待统计的数据，防止重复统计
+        tbsDaySummaryRepository.removeAllByDay(statisticsDateStr)
+
         val projectVOMap =  mutableMapOf<String, ProjectVO>()
 
         val engineConfigEntities = turboEngineConfigRepository.findAll()
