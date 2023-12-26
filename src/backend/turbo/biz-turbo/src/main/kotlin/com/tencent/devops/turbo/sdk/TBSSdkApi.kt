@@ -147,7 +147,6 @@ object TBSSdkApi {
             )
             url = url.trimEnd('&')
         }
-        logger.info(">>>request url: $url")
         val request = when (method) {
             HttpMethod.GET.name -> {
                 buildGet(url, headers)

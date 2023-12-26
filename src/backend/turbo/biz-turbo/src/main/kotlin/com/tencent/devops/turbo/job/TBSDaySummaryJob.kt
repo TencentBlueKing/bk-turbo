@@ -96,7 +96,7 @@ class TBSDaySummaryJob @Autowired constructor(
                 val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
 
                 // 获取项目信息清单
-                val projectVOList = this.getProjectVOListByProjectIds(notInProjectMapKeySet.toList())
+                val projectVOList = this.getProjectVOListByProjectIds(projectIds = notInProjectMapKeySet.toList())
                 if (projectVOList.isNotEmpty()) {
                     projectVOMap.putAll(projectVOList.associateBy { it.englishName })
                 }
@@ -107,6 +107,8 @@ class TBSDaySummaryJob @Autowired constructor(
                     it.bgId = projectVOMap[it.projectId]?.bgId?.toInt()
                     it.deptName = projectVOMap[it.projectId]?.deptName
                     it.deptId = projectVOMap[it.projectId]?.deptId?.toInt()
+                    it.centerName = projectVOMap[it.projectId]?.centerName
+                    it.centerId = projectVOMap[it.projectId]?.centerId?.toInt()
                     it.productId = projectVOMap[it.projectId]?.productId
                 }
             }

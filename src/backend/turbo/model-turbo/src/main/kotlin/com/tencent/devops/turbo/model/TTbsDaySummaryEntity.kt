@@ -1,6 +1,7 @@
 package com.tencent.devops.turbo.model
 
 import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import org.springframework.data.mongodb.core.mapping.Field
 import java.time.LocalDateTime
@@ -16,6 +17,7 @@ data class TTbsDaySummaryEntity(
      * 统计数据归属日期
      */
     @Field
+    @Indexed(background = true)
     var day: String?,
 
     /**
@@ -100,6 +102,14 @@ data class TTbsDaySummaryEntity(
     var deptName: String? = null,
     @Field("dept_id")
     var deptId: Int? = null,
+
+    /**
+     * 中心信息
+     */
+    @Field("center_name")
+    var centerName: String? = null,
+    @Field("center_id")
+    var centerId: Int? = null,
 
     /**
      * 项目所属组织架构
