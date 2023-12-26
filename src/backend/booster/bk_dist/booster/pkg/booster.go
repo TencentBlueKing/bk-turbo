@@ -33,6 +33,7 @@ import (
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/handlermap"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
@@ -268,6 +269,7 @@ func (b *Booster) getWorkersEnv() map[string]string {
 	if b.work != nil {
 		requiredEnv[env.KeyExecutorControllerWorkID] = b.workID
 	}
+
 	for k, v := range dcSDK.GetControllerConfigToEnv(b.config.Controller) {
 		requiredEnv[k] = v
 	}
@@ -514,6 +516,9 @@ func (b *Booster) run(pCtx context.Context) (int, error) {
 	// support pump check
 	b.checkPump()
 
+	// support tmp file clean
+	b.cleanTmpFiles()
+
 	// no work commands do not register
 	if b.config.Works.NoWork {
 		return b.runWorks(pCtx, nil, b.runNoWorkCommands)
@@ -545,12 +550,16 @@ func (b *Booster) registerWork() error {
 	}
 
 	blog.Debugf("booster: try to find controller or launch it")
-	pid, err := b.controller.EnsureServer()
+	pid, port, err := b.controller.EnsureServer()
 	if err != nil {
 		blog.Errorf("booster: ensure controller failed: %v", err)
 		return err
 	}
-	blog.Infof("booster: success to connect to controller: %s", b.config.Controller.Target())
+
+	blog.Infof("booster: success to connect to controller: %s, real port[%d]", b.config.Controller.Target(), port)
+	os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
+	blog.Infof("booster: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), port)
+	b.config.Controller.Port = port
 
 	b.work, err = b.controller.Register(dcSDK.ControllerRegisterConfig{
 		BatchMode:        b.config.BatchMode,
@@ -1342,6 +1351,18 @@ func (b *Booster) checkPumpCache(pumpdir string) {
 			cleanDirByTime(pumpdir, limitsize)
 		}
 	}
+}
+
+func (b *Booster) cleanTmpFiles() {
+	env.SetEnv(env.BoosterType, b.config.Type.String())
+	tmpdir := commonUtil.GetHandlerTmpDir(nil)
+	currentTime := time.Now()
+
+	daysAgo := b.config.Works.CleanTmpFilesDayAgo
+	previousTime := currentTime.AddDate(0, 0, -daysAgo)
+
+	blog.Infof("booster: ready clean tmp dir:%s before the time:%s", tmpdir, previousTime)
+	cleanDirOnlyByTime(tmpdir, previousTime)
 }
 
 // get default xcode link path

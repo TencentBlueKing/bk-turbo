@@ -141,7 +141,7 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 		return
 	}
 
-	s.layer.LockTask(tb.ID)
+	s.layer.LockTask(tb.ID, "pick_of_selector")
 	defer s.layer.UnLockTask(tb.ID)
 
 	// for debug

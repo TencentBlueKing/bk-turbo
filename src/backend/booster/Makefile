@@ -5,6 +5,12 @@ BUILDTIME = $(shell date +%Y-%m-%dT%T%z)
 GITHASH=$(shell git rev-parse HEAD)
 VERSION=${GITTAG}-$(shell date +%y.%m.%d)
 
+# for dist tools cross compile
+SUFFIX =
+ifeq ($(shell go env GOOS), windows)
+    SUFFIX = .exe
+endif
+
 LDFLAG=-s -w -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.EncryptionKey=${encryption_key} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ServerCertPwd=${server_cert_pwd} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ClientCertPwd=${client_cert_pwd} \
@@ -75,7 +81,6 @@ BUILDBOOSTER_BIN_PATH=${BIN_PATH}/buildbooster
 
 buildbooster_prepare:
 	mkdir -p ${BUILDBOOSTER_BIN_PATH}
-	if [ -z "${DISABLE_PACKR2}" ]; then cd bk_dist/dashboard/pkg/dashboard && packr2; fi
 
 buildbooster_server:buildbooster_prepare
 	go build -ldflags "${LDFLAG}" -o ${BUILDBOOSTER_BIN_PATH}/bk-buildbooster-server ./server/main.go
@@ -108,45 +113,42 @@ DISTEXECUTOR_BIN_PATH=${BIN_PATH}/bkdist
 
 dist_prepare:
 	mkdir -p ${DISTEXECUTOR_BIN_PATH}
-	go get -u github.com/gobuffalo/packr/v2/packr2
-	export PATH=${GOPATH}/bin:${PATH}
-	if [ -z "${DISABLE_PACKR2}" ]; then cd bk_dist/controller/pkg/dashboard && packr2; fi
 
 dist_executor:dist_prepare
 	# bk-dist-executor
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-executor ./bk_dist/executor/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-executor${SUFFIX} ./bk_dist/executor/main.go
 
 dist_booster:dist_prepare
 	# bk-booster
-	go build -ldflags "${LDFLAG} ${BuildBooster_LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-booster ./bk_dist/booster/main.go
+	go build -ldflags "${LDFLAG} ${BuildBooster_LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-booster${SUFFIX} ./bk_dist/booster/main.go
 
 dist_controller:dist_prepare
 	# bk-dist-controller
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-controller ./bk_dist/controller/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-controller${SUFFIX} ./bk_dist/controller/main.go
 
 dist_worker:dist_prepare
 	# bk-dist-worker
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-worker ./bk_dist/worker/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-worker${SUFFIX} ./bk_dist/worker/main.go
 
 dist_idle_loop:dist_prepare
 	# bk-idle-loop
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-idle-loop ./bk_dist/idleloop/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-idle-loop${SUFFIX} ./bk_dist/idleloop/main.go
 
 dist_monitor:dist_prepare
 	# bk-dist-monitor
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-monitor ./bk_dist/monitor/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-dist-monitor${SUFFIX} ./bk_dist/monitor/main.go
 
 dist_help_tool:dist_prepare
 	# bk-help-tool
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-help-tool ./bk_dist/helptool/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-help-tool${SUFFIX} ./bk_dist/helptool/main.go
 
 dist_ubt_tool:dist_prepare
 	# bk-ubt-tool
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-ubt-tool ./bk_dist/ubttool/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-ubt-tool${SUFFIX} ./bk_dist/ubttool/main.go
 
 dist_shader_tool:dist_prepare
 	# bk-shader-tool
-	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-shader-tool ./bk_dist/shadertool/main.go
+	go build -ldflags "${LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-shader-tool${SUFFIX} ./bk_dist/shadertool/main.go
 
 dist_hook:dist_prepare
 	cd tools/hook_ld_preload && $(MAKE) all && cp bkhook.so ../../${DISTEXECUTOR_BIN_PATH}/

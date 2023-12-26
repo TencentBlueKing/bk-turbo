@@ -10,9 +10,12 @@
 package executor
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -38,12 +41,52 @@ type DistExecutor struct {
 
 // NewDistExecutor return new DistExecutor
 func NewDistExecutor() *DistExecutor {
+	workerid := env.GetEnv(env.KeyExecutorControllerWorkID)
+	if workerid == "" {
+		workerid = dcSDK.EmptyWorkerID
+	}
+
 	return &DistExecutor{
 		bt:     dcTypes.GetBoosterType(env.GetEnv(env.BoosterType)),
-		work:   v1.NewSDK(dcSDK.GetControllerConfigFromEnv()).GetWork(env.GetEnv(env.KeyExecutorControllerWorkID)),
+		work:   v1.NewSDK(dcSDK.GetControllerConfigFromEnv()).GetWork(workerid),
 		taskID: env.GetEnv(env.KeyExecutorTaskID),
 		stats:  &dcSDK.ControllerJobStats{},
 	}
+}
+
+func truncate(f string) {
+	maxSize := int64(200 * 1024 * 1024) // 200MB
+
+	fileInfo, err := os.Stat(f)
+	if err != nil {
+		return
+	}
+
+	if fileInfo.Size() > maxSize {
+		os.Truncate(f, 0)
+	}
+}
+
+func savePipedLog(data string) {
+	logdir := dcUtil.GetGlobalDir()
+	logfile := filepath.Join(logdir, "bk-dist-executor-pipeinput.log")
+
+	// truncate if need
+	truncate(logfile)
+
+	// append data
+	currentTime := time.Now()
+	timeString := currentTime.Format("2006-01-02 15:04:05")
+	logstr := fmt.Sprintf("%s %d]%s\n", timeString, os.Getpid(), data)
+
+	// append to logfile
+	file, err := os.OpenFile(logfile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	file.WriteString(logstr)
 }
 
 // Run main function entry
@@ -59,7 +102,15 @@ func (d *DistExecutor) Run() (int, string, error) {
 
 	// if work not available, means controller is not available
 	// run the origin pure work instead of any handles
-	if d.work.ID() == "" {
+	//if d.work.ID() == "" {
+	//	return runDirect()
+	//}
+	if d.bt == dcTypes.BoosterUnknown {
+		return runDirect()
+	}
+
+	if compileReadFromStdin() {
+		savePipedLog(strings.Join(os.Args, " "))
 		return runDirect()
 	}
 
@@ -67,14 +118,61 @@ func (d *DistExecutor) Run() (int, string, error) {
 	return d.runWork()
 }
 
+func compileReadFromStdin() bool {
+	if len(os.Args) < 2 {
+		return false
+	}
+
+	exe := os.Args[1]
+	if !strings.HasSuffix(exe, "gcc") &&
+		!strings.HasSuffix(exe, "g++") &&
+		!strings.HasSuffix(exe, "clang") &&
+		!strings.HasSuffix(exe, "clang++") {
+		return false
+	}
+
+	for _, v := range os.Args[1:] {
+		if v == "-" {
+			return true
+		}
+	}
+
+	return false
+}
+
 func runDirect() (int, string, error) {
 	if len(os.Args) < 2 {
 		return 0, "", nil
 	}
 
-	sandbox := dcSyscall.Sandbox{}
-	retcode, err := sandbox.ExecCommand(os.Args[1], os.Args[2:]...)
-	return retcode, "", err
+	var cmd *exec.Cmd
+	cmd = exec.Command(os.Args[1], os.Args[2:]...)
+	if cmd.Stdout == nil {
+		cmd.Stdout = os.Stdout
+	}
+	if cmd.Stderr == nil {
+		cmd.Stderr = os.Stderr
+	}
+	if cmd.Stdin == nil {
+		cmd.Stdin = os.Stdin
+	}
+
+	dir, _ := os.Getwd()
+	cmd.Dir = dir
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.Env = os.Environ()
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	err := cmd.Run()
+	stdout, stderr := outBuf.Bytes(), errBuf.Bytes()
+	_, _ = fmt.Fprint(os.Stdout, string(stdout))
+	_, _ = fmt.Fprint(os.Stderr, string(stderr))
+	exitCode := cmd.ProcessState.ExitCode()
+	return exitCode, "", err
 }
 
 func (d *DistExecutor) runWork() (int, string, error) {
@@ -84,13 +182,6 @@ func (d *DistExecutor) runWork() (int, string, error) {
 		blog.Errorf("executor: not enough args to execute")
 		return 0, "", fmt.Errorf("not enough args to execute")
 	}
-
-	// ignore argv[0], it's itself
-	// _, _, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "")
-	// if err != nil {
-	// 	blog.Errorf("executor: execute failed, error: %v, exit code: -1", err)
-	// 	return -1, err
-	// }
 
 	retcode, retmsg, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "")
 	if err != nil || retcode != 0 {
@@ -170,6 +261,7 @@ func (d *DistExecutor) sysSignalHandler() {
 	select {
 	case sig := <-interrupt:
 		blog.Warnf("executor-command: get system signal %s, going to exit", sig.String())
+		blog.CloseLogs()
 
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {

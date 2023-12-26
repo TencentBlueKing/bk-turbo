@@ -123,6 +123,15 @@ func (cf *TaskCLFilter) RemoteRetryTimes() int {
 	return 0
 }
 
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (cf *TaskCLFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	if cf.clhandle != nil {
+		return cf.clhandle.OnRemoteFail(cf.cldArgs)
+	}
+
+	return nil, nil
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (cf *TaskCLFilter) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	if cf.clhandle != nil {

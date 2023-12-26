@@ -88,7 +88,7 @@ func (c *cleaner) check() {
 func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	c.layer.LockTask(taskID)
+	c.layer.LockTask(taskID, "clean_of_cleaner")
 	defer c.layer.UnLockTask(taskID)
 
 	tb, err := c.layer.GetTaskBasic(taskID)

@@ -98,9 +98,18 @@ func (u *UE4Shader) PreLockWeight(command []string) int32 {
 	return 1
 }
 
+func (u *UE4Shader) isNewShader() bool {
+	return u.sandbox.Env.GetEnv(env.KeyExecutorNewShader) != ""
+}
+
 // PreExecute 预处理
 func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
-	blog.Debugf("shader: ready pre execute with command[%v]", command)
+	blog.Infof("shader: ready pre execute with command[%v]", command)
+
+	// to support ue 5.3 macos
+	if u.isNewShader() {
+		return u.PreExecuteNew(command)
+	}
 
 	if len(command) < 6 {
 		return nil, fmt.Errorf("shader: invalid command")
@@ -108,7 +117,6 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	filedir, _ := filepath.Abs(command[1])
 	inputFile := ""
-	//outputFile := ""
 
 	params := []string{"\"\""}
 	for _, v := range command[2:] {
@@ -180,6 +188,94 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	}, nil
 }
 
+func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, error) {
+	blog.Debugf("shader: ready pre execute new with command[%v]", command)
+
+	if len(command) < 6 {
+		return nil, fmt.Errorf("shader: invalid command")
+	}
+
+	// 注意：command[1]的路径后面可能有/，这个不能去掉，否则shader会编译失败
+	filedir := ""
+	if !filepath.IsAbs(command[1]) {
+		filedir, _ = filepath.Abs(command[1])
+	} else {
+		filedir = command[1]
+	}
+	inputFile := ""
+
+	params := []string{filedir}
+	for _, v := range command[2:] {
+		blog.Debugf("shader: handle with argv [%s]", v)
+		if strings.HasSuffix(v, ".in") {
+			if !filepath.IsAbs(v) {
+				inputFile = filepath.Join(filedir, v)
+			}
+		} else if strings.HasSuffix(v, ".out") {
+			if !filepath.IsAbs(v) {
+				u.outputRealFile = filepath.Join(filedir, v)
+				u.outputTempFile = filepath.Join(filedir, "bktemp_"+v)
+			}
+			params = append(params, "bktemp_"+v)
+			continue
+		}
+
+		params = append(params, v)
+	}
+	blog.Infof("shader: ready pre execute new with params[%v]", params)
+
+	info := dcFile.Stat(inputFile)
+	existed, fileSize, modifyTime, fileMode := info.Batch()
+	if !existed {
+		return nil, fmt.Errorf("shader: input file %s not exist with error:%v", inputFile, info.Error())
+	}
+
+	inputfiles := []dcSDK.FileDesc{{
+		FilePath:           inputFile,
+		Compresstype:       protocol.CompressLZ4,
+		FileSize:           fileSize,
+		Lastmodifytime:     modifyTime,
+		Md5:                "",
+		Filemode:           fileMode,
+		Targetrelativepath: filedir,
+	}}
+
+	exeName := filepath.Base(command[0])
+	// add exe file into Inputfiles with size 0
+	value := u.sandbox.Env.GetEnv(env.KeyExecutorToolchainPathMap)
+	if value != "" {
+		toolmap, err := dcSDK.ResolveToolchainEnvValue(value)
+		if err == nil && len(toolmap) > 0 {
+			if v, ok := toolmap[exeName]; ok {
+				blog.Debugf("shader: found exe[%s] relative path[%s]", exeName, v)
+				inputfiles = append(inputfiles, dcSDK.FileDesc{
+					FilePath:           exeName,
+					Compresstype:       protocol.CompressLZ4,
+					FileSize:           -1,
+					Lastmodifytime:     modifyTime,
+					Md5:                "",
+					Targetrelativepath: v,
+				})
+			}
+		}
+	}
+
+	return &dcSDK.BKDistCommand{
+		Commands: []dcSDK.BKCommand{
+			{
+				WorkDir:         filedir,
+				ExePath:         "",
+				ExeName:         exeName,
+				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
+				Params:          params,
+				Inputfiles:      inputfiles,
+				ResultFiles:     []string{u.outputTempFile},
+			},
+		},
+		CustomSave: true,
+	}, nil
+}
+
 // NeedRemoteResource check whether this command need remote resource
 func (u *UE4Shader) NeedRemoteResource(command []string) bool {
 	return true
@@ -188,6 +284,11 @@ func (u *UE4Shader) NeedRemoteResource(command []string) bool {
 // RemoteRetryTimes will return the remote retry times
 func (u *UE4Shader) RemoteRetryTimes() int {
 	return 1
+}
+
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (u *UE4Shader) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	return nil, nil
 }
 
 // PostLockWeight decide post-execute lock weight, default 1

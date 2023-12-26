@@ -11,6 +11,7 @@ package disttask
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
@@ -64,6 +65,9 @@ type MySQL interface {
 	PutWorkStats(stats *TableWorkStats) error
 	UpdateWorkStats(id int, stats map[string]interface{}) error
 	DeleteWorkStats(id int) error
+
+	SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error)
+	SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*SummaryResultByUser, int64, error)
 }
 
 // NewMySQL get new mysql instance with connected orm operator.
@@ -128,6 +132,7 @@ func (m *mysql) GetDB() *gorm.DB {
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListTask(opts commonMySQL.ListOptions) ([]*TableTask, int64, error) {
 	defer timeMetricRecord("list_task")()
+	defer logSlowFunc(time.Now().Unix(), "ListTask", 2)
 
 	var tl []*TableTask
 	db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
@@ -153,6 +158,7 @@ func (m *mysql) ListTask(opts commonMySQL.ListOptions) ([]*TableTask, int64, err
 // GetTask get task.
 func (m *mysql) GetTask(taskID string) (*TableTask, error) {
 	defer timeMetricRecord("get_task")()
+	defer logSlowFunc(time.Now().Unix(), "GetTask", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -174,6 +180,7 @@ func (m *mysql) GetTask(taskID string) (*TableTask, error) {
 // PutTask put task with full fields.
 func (m *mysql) PutTask(task *TableTask) error {
 	defer timeMetricRecord("put_task")()
+	defer logSlowFunc(time.Now().Unix(), "PutTask", 2)
 
 	if err := m.db.Model(&TableTask{}).Save(task).Error; err != nil {
 		blog.Errorf("engine(%s) mysql put task(%s) failed: %v", EngineName, task.TaskID, err)
@@ -185,6 +192,7 @@ func (m *mysql) PutTask(task *TableTask) error {
 // UpdateTask update task with given fields.
 func (m *mysql) UpdateTask(taskID string, task map[string]interface{}) error {
 	defer timeMetricRecord("update_task")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateTask", 2)
 
 	task["disabled"] = false
 
@@ -199,6 +207,7 @@ func (m *mysql) UpdateTask(taskID string, task map[string]interface{}) error {
 // DeleteTask delete task from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteTask(taskID string) error {
 	defer timeMetricRecord("delete_task")()
+	defer logSlowFunc(time.Now().Unix(), "DeleteTask", 2)
 
 	if err := m.db.Model(&TableTask{}).Where("task_id = ?", taskID).
 		Update("disabled", true).Error; err != nil {
@@ -214,6 +223,7 @@ func (m *mysql) DeleteTask(taskID string) error {
 // TODO: consider to use mysql "join" command to do this
 func (m *mysql) ListProject(opts commonMySQL.ListOptions) ([]*CombinedProject, int64, error) {
 	defer timeMetricRecord("list_project")()
+	defer logSlowFunc(time.Now().Unix(), "ListProject", 2)
 
 	var settingProjectList []*TableProjectSetting
 	db := opts.AddWhere(m.db.Model(&TableProjectSetting{})).Where("disabled = ?", false)
@@ -272,6 +282,7 @@ func (m *mysql) ListProject(opts commonMySQL.ListOptions) ([]*CombinedProject, i
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListProjectInfo(opts commonMySQL.ListOptions) ([]*TableProjectInfo, int64, error) {
 	defer timeMetricRecord("list_project_info")()
+	defer logSlowFunc(time.Now().Unix(), "ListProjectInfo", 2)
 
 	var pl []*TableProjectInfo
 	db := opts.AddWhere(m.db.Model(&TableProjectInfo{})).Where("disabled = ?", false)
@@ -297,6 +308,7 @@ func (m *mysql) ListProjectInfo(opts commonMySQL.ListOptions) ([]*TableProjectIn
 // GetProjectInfo get project info.
 func (m *mysql) GetProjectInfo(projectID string) (*TableProjectInfo, error) {
 	defer timeMetricRecord("get_project_info")()
+	defer logSlowFunc(time.Now().Unix(), "GetProjectInfo", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -319,6 +331,7 @@ func (m *mysql) GetProjectInfo(projectID string) (*TableProjectInfo, error) {
 // PutProjectInfo put project info with full fields.
 func (m *mysql) PutProjectInfo(projectInfo *TableProjectInfo) error {
 	defer timeMetricRecord("put_project_info")()
+	defer logSlowFunc(time.Now().Unix(), "PutProjectInfo", 2)
 
 	if err := m.db.Model(&TableProjectInfo{}).Save(projectInfo).Error; err != nil {
 		blog.Errorf("engine(%s) mysql put project info(%s) failed: %v", EngineName, projectInfo.ProjectID, err)
@@ -330,6 +343,7 @@ func (m *mysql) PutProjectInfo(projectInfo *TableProjectInfo) error {
 // UpdateProjectInfo update project info with given fields.
 func (m *mysql) UpdateProjectInfo(projectID string, projectInfo map[string]interface{}) error {
 	defer timeMetricRecord("update_project_info")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateProjectInfo", 2)
 
 	projectInfo["disabled"] = false
 
@@ -345,6 +359,7 @@ func (m *mysql) UpdateProjectInfo(projectID string, projectInfo map[string]inter
 // DeleteProjectInfo delete project info from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteProjectInfo(projectID string) error {
 	defer timeMetricRecord("delete_project_info")()
+	defer logSlowFunc(time.Now().Unix(), "DeleteProjectInfo", 2)
 
 	if err := m.db.Model(&TableProjectInfo{}).Where("project_id = ?", projectID).
 		Update("disabled", true).Error; err != nil {
@@ -357,6 +372,7 @@ func (m *mysql) DeleteProjectInfo(projectID string) error {
 // AddProjectInfoStats add project info stats with given delta data, will lock the row and update some data.
 func (m *mysql) AddProjectInfoStats(projectID string, delta DeltaInfoStats) error {
 	defer timeMetricRecord("add_project_info_stats")()
+	defer logSlowFunc(time.Now().Unix(), "AddProjectInfoStats", 2)
 
 	tx := m.db.Begin()
 
@@ -396,6 +412,7 @@ type DeltaInfoStats struct {
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListProjectSetting(opts commonMySQL.ListOptions) ([]*TableProjectSetting, int64, error) {
 	defer timeMetricRecord("list_project_setting")()
+	defer logSlowFunc(time.Now().Unix(), "ListProjectSetting", 2)
 
 	var pl []*TableProjectSetting
 	db := opts.AddWhere(m.db.Model(&TableProjectSetting{})).Where("disabled = ?", false)
@@ -421,6 +438,7 @@ func (m *mysql) ListProjectSetting(opts commonMySQL.ListOptions) ([]*TableProjec
 // GetProjectSetting get project setting.
 func (m *mysql) GetProjectSetting(projectID string) (*TableProjectSetting, error) {
 	defer timeMetricRecord("get_project_setting")()
+	defer logSlowFunc(time.Now().Unix(), "GetProjectSetting", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -443,6 +461,7 @@ func (m *mysql) GetProjectSetting(projectID string) (*TableProjectSetting, error
 // PutProjectSetting put project setting with full fields.
 func (m *mysql) PutProjectSetting(projectSetting *TableProjectSetting) error {
 	defer timeMetricRecord("put_project_setting")()
+	defer logSlowFunc(time.Now().Unix(), "PutProjectSetting", 2)
 
 	if err := m.db.Model(&TableProjectSetting{}).Save(projectSetting).Error; err != nil {
 		blog.Errorf("engine(%s) mysql put project setting(%s) failed: %v",
@@ -455,6 +474,7 @@ func (m *mysql) PutProjectSetting(projectSetting *TableProjectSetting) error {
 // UpdateProjectSetting update project setting with given fields.
 func (m *mysql) UpdateProjectSetting(projectID string, projectSetting map[string]interface{}) error {
 	defer timeMetricRecord("update_project_setting")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateProjectSetting", 2)
 
 	projectSetting["disabled"] = false
 
@@ -471,6 +491,7 @@ func (m *mysql) UpdateProjectSetting(projectID string, projectSetting map[string
 // DeleteProjectSetting delete project setting from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteProjectSetting(projectID string) error {
 	defer timeMetricRecord("delete_project_setting")()
+	defer logSlowFunc(time.Now().Unix(), "DeleteProjectSetting", 2)
 
 	if err := m.db.Model(&TableProjectSetting{}).Where("project_id = ?", projectID).
 		Update("disabled", true).Error; err != nil {
@@ -485,6 +506,7 @@ func (m *mysql) CreateOrUpdateProjectSetting(
 	projectSetting *TableProjectSetting,
 	projectSettingRaw map[string]interface{}) error {
 	defer timeMetricRecord("create_or_update_project_setting")()
+	defer logSlowFunc(time.Now().Unix(), "CreateOrUpdateProjectSetting", 2)
 
 	projectID, _ := projectSettingRaw["project_id"]
 	projectSettingRaw["disabled"] = false
@@ -507,6 +529,7 @@ func (m *mysql) CreateOrUpdateProjectSetting(
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListWhitelist(opts commonMySQL.ListOptions) ([]*TableWhitelist, int64, error) {
 	defer timeMetricRecord("list_whitelist")()
+	defer logSlowFunc(time.Now().Unix(), "timeMetricRecord", 2)
 
 	var wll []*TableWhitelist
 	db := opts.AddWhere(m.db.Model(&TableWhitelist{})).Where("disabled = ?", false)
@@ -532,6 +555,7 @@ func (m *mysql) ListWhitelist(opts commonMySQL.ListOptions) ([]*TableWhitelist, 
 // GetWhitelist get whitelist.
 func (m *mysql) GetWhitelist(key engine.WhiteListKey) (*TableWhitelist, error) {
 	defer timeMetricRecord("get_whitelist")()
+	defer logSlowFunc(time.Now().Unix(), "GetWhitelist", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(-1)
@@ -555,6 +579,7 @@ func (m *mysql) GetWhitelist(key engine.WhiteListKey) (*TableWhitelist, error) {
 // PutWhitelist put whitelist with full fields.
 func (m *mysql) PutWhitelist(wll []*TableWhitelist) error {
 	defer timeMetricRecord("put_whitelist")()
+	defer logSlowFunc(time.Now().Unix(), "PutWhitelist", 2)
 
 	tx := m.db.Begin()
 	for _, wl := range wll {
@@ -571,6 +596,7 @@ func (m *mysql) PutWhitelist(wll []*TableWhitelist) error {
 // UpdateWhitelist update whitelist with given fields.
 func (m *mysql) UpdateWhitelist(key engine.WhiteListKey, wll []map[string]interface{}) error {
 	defer timeMetricRecord("update_whitelist")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateWhitelist", 2)
 
 	tx := m.db.Begin()
 	for _, wl := range wll {
@@ -589,6 +615,7 @@ func (m *mysql) UpdateWhitelist(key engine.WhiteListKey, wll []map[string]interf
 // DeleteWhitelist delete whitelist from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteWhitelist(keys []*engine.WhiteListKey) error {
 	defer timeMetricRecord("delete_whitelist")()
+	defer logSlowFunc(time.Now().Unix(), "DeleteWhitelist", 2)
 
 	tx := m.db.Begin()
 	for _, key := range keys {
@@ -608,6 +635,7 @@ func (m *mysql) DeleteWhitelist(keys []*engine.WhiteListKey) error {
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListWorker(opts commonMySQL.ListOptions) ([]*TableWorker, int64, error) {
 	defer timeMetricRecord("list_worker")()
+	defer logSlowFunc(time.Now().Unix(), "ListWorker", 2)
 
 	var gl []*TableWorker
 	db := opts.AddWhere(m.db.Model(&TableWorker{})).Where("disabled = ?", false)
@@ -633,6 +661,7 @@ func (m *mysql) ListWorker(opts commonMySQL.ListOptions) ([]*TableWorker, int64,
 // GetWorker get worker.
 func (m *mysql) GetWorker(version, scene string) (*TableWorker, error) {
 	defer timeMetricRecord("get_worker")()
+	defer logSlowFunc(time.Now().Unix(), "GetWorker", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -656,6 +685,7 @@ func (m *mysql) GetWorker(version, scene string) (*TableWorker, error) {
 // PutWorker put worker with full fields.
 func (m *mysql) PutWorker(worker *TableWorker) error {
 	defer timeMetricRecord("put_worker")()
+	defer logSlowFunc(time.Now().Unix(), "PutWorker", 2)
 
 	if err := m.db.Model(&TableWorker{}).Save(worker).Error; err != nil {
 		blog.Errorf("engine(%s) mysql put worker(%s) failed: %v", EngineName, worker.WorkerVersion, err)
@@ -667,6 +697,7 @@ func (m *mysql) PutWorker(worker *TableWorker) error {
 // UpdateWorker update worker with given fields.
 func (m *mysql) UpdateWorker(version, scene string, worker map[string]interface{}) error {
 	defer timeMetricRecord("update_worker")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateWorker", 2)
 
 	worker["disabled"] = false
 
@@ -682,6 +713,7 @@ func (m *mysql) UpdateWorker(version, scene string, worker map[string]interface{
 // DeleteWorker delete worker from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteWorker(version, scene string) error {
 	defer timeMetricRecord("delete_worker")()
+	defer logSlowFunc(time.Now().Unix(), "DeleteWorker", 2)
 
 	if err := m.db.Model(&TableWorker{}).Where("worker_version = ?", version).
 		Where("scene = ?", scene).Update("disabled", true).Error; err != nil {
@@ -701,6 +733,7 @@ type CombinedProject struct {
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListWorkStats(opts commonMySQL.ListOptions) ([]*TableWorkStats, int64, error) {
 	defer timeMetricRecord("list_work_stats")()
+	defer logSlowFunc(time.Now().Unix(), "ListWorkStats", 2)
 
 	var tl []*TableWorkStats
 	db := opts.AddWhere(m.db.Model(&TableWorkStats{})).Where("disabled = ?", false)
@@ -726,6 +759,7 @@ func (m *mysql) ListWorkStats(opts commonMySQL.ListOptions) ([]*TableWorkStats, 
 // GetWorkStats get work stats.
 func (m *mysql) GetWorkStats(id int) (*TableWorkStats, error) {
 	defer timeMetricRecord("get_work_stats")()
+	defer logSlowFunc(time.Now().Unix(), "GetWorkStats", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -748,6 +782,7 @@ func (m *mysql) GetWorkStats(id int) (*TableWorkStats, error) {
 // PutWorkStats put work stats with full fields.
 func (m *mysql) PutWorkStats(stats *TableWorkStats) error {
 	defer timeMetricRecord("put_work_stats")()
+	defer logSlowFunc(time.Now().Unix(), "PutWorkStats", 2)
 
 	if err := m.db.Model(&TableWorkStats{}).Save(stats).Error; err != nil {
 		blog.Errorf("engine(%s) mysql put work stats(%d) failed: %v", EngineName, stats.ID, err)
@@ -759,6 +794,7 @@ func (m *mysql) PutWorkStats(stats *TableWorkStats) error {
 // UpdateWorkStats update work stats with given fields.
 func (m *mysql) UpdateWorkStats(id int, stats map[string]interface{}) error {
 	defer timeMetricRecord("update_work_stats")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateWorkStats", 2)
 
 	stats["disabled"] = false
 
@@ -773,6 +809,7 @@ func (m *mysql) UpdateWorkStats(id int, stats map[string]interface{}) error {
 // DeleteWorkStats delete work stats from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteWorkStats(id int) error {
 	defer timeMetricRecord("delete_task")()
+	defer logSlowFunc(time.Now().Unix(), "DeleteWorkStats", 2)
 
 	if err := m.db.Model(&TableWorkStats{}).Where("id = ?", id).
 		Update("disabled", true).Error; err != nil {
@@ -782,6 +819,86 @@ func (m *mysql) DeleteWorkStats(id int) error {
 	return nil
 }
 
+// SummaryTaskRecords summary task records.
+func (m *mysql) SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error) {
+	defer timeMetricRecord("summary_task_records")()
+	defer logSlowFunc(time.Now().Unix(), "summary_task_records", 2)
+
+	var tl []*SummaryResult
+	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
+	db := m.db.Table("task_records").Where("disabled = ?", false)
+
+	var length int64
+	// if err := db.Count(&length).Error; err != nil {
+	// 	blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+	// 	return nil, 0, err
+	// }
+
+	db = opts.AddSelector(db)
+	db = opts.AddWhere(db)
+	db = opts.AddGroup(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	return tl, length, nil
+}
+
+// SummaryTaskRecordsByUser summary task records group by user.
+func (m *mysql) SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*SummaryResultByUser, int64, error) {
+	defer timeMetricRecord("summary_task_records")()
+	defer logSlowFunc(time.Now().Unix(), "summary_task_records", 2)
+
+	var tl []*SummaryResultByUser
+	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
+	db := m.db.Table("task_records").Where("disabled = ?", false)
+
+	var length int64
+	// if err := db.Count(&length).Error; err != nil {
+	// 	blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+	// 	return nil, 0, err
+	// }
+
+	db = opts.AddSelector(db)
+	db = opts.AddWhere(db)
+	db = opts.AddGroup(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	return tl, length, nil
+}
+
+// SummaryResult generate summary data
+type SummaryResult struct {
+	Day               string  `json:"day"`
+	ProjectID         string  `json:"project_id"`
+	TotalTime         float64 `json:"total_time"`
+	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
+	TotalRecordNumber int     `json:"total_record_number"`
+}
+
+// SummaryResultByUser generate summary data group by user
+type SummaryResultByUser struct {
+	Day               string  `json:"day"`
+	ProjectID         string  `json:"project_id"`
+	User              string  `json:"user"`
+	TotalTime         float64 `json:"total_time"`
+	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
+	TotalRecordNumber int     `json:"total_record_number"`
+}
+
 func timeMetricRecord(operation string) func() {
 	return selfMetric.TimeMetricRecord(fmt.Sprintf("%s_%s", EngineName, operation))
+}
+
+func logSlowFunc(start int64, funcname string, threshold int64) {
+	now := time.Now().Unix()
+	if now-start > threshold {
+		blog.Warnf("engine(%s) mysql func(%s) too long %d seconds", EngineName, funcname, now-start)
+	}
 }

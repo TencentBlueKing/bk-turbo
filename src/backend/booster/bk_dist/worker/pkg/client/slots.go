@@ -17,6 +17,13 @@ import (
 	"github.com/shirou/gopsutil/mem"
 )
 
+const (
+	largeRequest  = 100 * 1024 * 1024
+	largeLocked   = 1024 * 1024 * 1024
+	leastFree     = 2 * 1024 * 1024 * 1024
+	maxMemPercent = 85.0
+)
+
 // by tming to limit send file memory
 func newSlot(ctx context.Context, setSlots int64) *slot {
 
@@ -155,10 +162,39 @@ func (lr *slot) handleLock(ctx context.Context) {
 	}
 }
 
+func (lr *slot) hasEnoughtSlots(pairChan chanPair) bool {
+	// 如果已经锁定的内存超过了largeLocked，再次申请内存时，需要关注当前系统内存情况
+	if lr.occupiedSlots > largeLocked {
+		v, err := mem.VirtualMemory()
+		if err == nil {
+			if v.Available < leastFree ||
+				v.Available < uint64(pairChan.weight) ||
+				v.UsedPercent > maxMemPercent {
+				blog.Infof("send slot: request size:%d,locked size:%d,Available:%d,UsedPercent:%f",
+					pairChan.weight,
+					lr.occupiedSlots,
+					v.Available,
+					v.UsedPercent)
+				return false
+			}
+		}
+	}
+
+	if lr.occupiedSlots+pairChan.weight < lr.totalSlots {
+		return true
+	}
+
+	if pairChan.weight < lr.totalSlots && lr.occupiedSlots+pairChan.weight > lr.totalSlots {
+		return false
+	}
+
+	return lr.occupiedSlots < lr.totalSlots
+}
+
 func (lr *slot) getSlot(pairChan chanPair) {
 	// blog.Infof("send slot: before get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
 
-	if lr.occupiedSlots < lr.totalSlots {
+	if lr.hasEnoughtSlots(pairChan) {
 		lr.occupiedSlots += pairChan.weight
 		pairChan.result <- struct{}{}
 	} else {
@@ -176,15 +212,24 @@ func (lr *slot) putSlot(pairChan chanPair) {
 		lr.occupiedSlots = 0
 	}
 
-	for lr.occupiedSlots < lr.totalSlots && lr.waitingList.Len() > 0 {
+	// for lr.hasEnoughtSlots(pairChan) && lr.waitingList.Len() > 0 {
+	for lr.waitingList.Len() > 0 {
 		e := lr.waitingList.Front()
 		if e != nil {
 			tempchan := e.Value.(chanPair)
-			lr.occupiedSlots += tempchan.weight
+			if lr.hasEnoughtSlots(tempchan) {
+				lr.occupiedSlots += tempchan.weight
 
-			// awake this task
-			tempchan.result <- struct{}{}
+				// awake this task
+				tempchan.result <- struct{}{}
 
+				// delete this element
+				lr.waitingList.Remove(e)
+			} else {
+				break
+			}
+		} else {
+			blog.Errorf("send slot: found nil request!!")
 			// delete this element
 			lr.waitingList.Remove(e)
 		}

@@ -12,8 +12,8 @@ tools/hook_ld_preload/hook_lib/*.d
 tools/hook_ld_preload/json/*.d
 tools/hook_ld_preload/*.so
 bk_dist/dashboard/pkg/dashboard/packrd/packed-packr.go
-go.sum
 .temp
 build.yml
 .codecc
 .idea
+.envrc

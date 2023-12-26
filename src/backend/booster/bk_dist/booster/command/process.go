@@ -236,6 +236,17 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		remoteRetryTimes = c.Int(FlagRemoteRetryTimes)
 	}
 
+	withDynamicPort := c.Bool(FlagDynamicPort)
+	// bazel 暂时不支持动态端口，没办法解决参数变化的问题
+	if c.Bool(FlagBazel) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus) || c.Bool(FlagBazelNoLauncher) {
+		withDynamicPort = false
+	}
+
+	cleanTmpFilesDayAgo := 1
+	if c.IsSet(FlagCleanTmpFilesDayAgo) && c.Int(FlagCleanTmpFilesDayAgo) >= 0 {
+		cleanTmpFilesDayAgo = c.Int(FlagCleanTmpFilesDayAgo)
+	}
+
 	// generate a new booster.
 	cmdConfig := dcType.BoosterConfig{
 		Type:      dcType.GetBoosterType(bt),
@@ -271,6 +282,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			Bazel:                c.Bool(FlagBazel),
 			BazelPlus:            c.Bool(FlagBazelPlus),
 			Bazel4Plus:           c.Bool(FlagBazel4Plus),
+			BazelNoLauncher:      c.Bool(FlagBazelNoLauncher),
 			Launcher:             c.Bool(FlagLauncher) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus),
 			AdditionFiles:        c.StringSlice(FlagAdditionFile),
 			WorkerList:           c.StringSlice(FlagWorkerList),
@@ -301,6 +313,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			NoWork:               c.Bool(FlagNoWork),
 			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),
 			IdleKeepSecs:         c.Int(FlagIdleKeepSecs),
+			CleanTmpFilesDayAgo:  cleanTmpFilesDayAgo,
 		},
 
 		Transport: dcType.BoosterTransport{
@@ -319,7 +332,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			Scheme:  ControllerScheme,
 			IP:      controllerIP,
 			Port:    ControllerPort,
-			Timeout: 5 * time.Second,
+			Timeout: 10 * time.Second,
 			LogDir:  getLogDir(c.String(FlagLogDir)),
 			LogVerbosity: func() int {
 				// debug模式下, --v=3
@@ -346,6 +359,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			EnableLink:          c.Bool(FlagEnableLink),
 			EnableLib:           c.Bool(FlagEnableLib),
 			LongTCP:             c.Bool(FlagLongTCP),
+			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
+			DynamicPort:         withDynamicPort,
 		},
 	}
 

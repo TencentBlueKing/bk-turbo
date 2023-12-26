@@ -259,6 +259,15 @@ func (u *UE4) RemoteRetryTimes() int {
 	return 0
 }
 
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (u *UE4) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	if u.innerhandler != nil {
+		return u.innerhandler.OnRemoteFail(command)
+	}
+
+	return nil, nil
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (u *UE4) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	if u.innerhandler != nil {

@@ -14,10 +14,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/pkg"
@@ -53,10 +51,12 @@ func sysSignalHandler(cancel context.CancelFunc, handle *pkg.UBTTool) {
 
 	select {
 	case sig := <-interrupt:
-		blog.Warnf("helptool: get system signal %s, going to exit", sig.String())
+		blog.Warnf("ubttool: get system signal %s, going to exit", sig.String())
 
 		// cancel handle's context and make sure that task is released.
 		cancel()
+
+		blog.CloseLogs()
 
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {
@@ -77,20 +77,8 @@ func newCustomProcess(c *commandCli.Context) *pkg.UBTTool {
 		ActionChainFile: c.String(FlagActionJSONFile),
 		ToolChainFile:   c.String(FlagToolChainJSONFile),
 		MostDepentFirst: c.Bool(FlagMostDependFirst),
-	}, sdk.ControllerConfig{
-		NoLocal: false,
-		Scheme:  ControllerScheme,
-		IP:      ControllerIP,
-		Port:    ControllerPort,
-		Timeout: 5 * time.Second,
-		LogDir:  getLogDir(c.String(FlagLogDir)),
-		LogVerbosity: func() int {
-			// debug模式下, --v=3
-			if c.String(FlagLog) == dcUtil.PrintDebug.String() {
-				return 3
-			}
-			return 0
-		}(),
+		LogLevel:        c.String(FlagLog),
+		LogDir:          getLogDir(FlagLogDir),
 	})
 }
 

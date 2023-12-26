@@ -503,7 +503,8 @@ func (rm *resourceManager) isFinishDeploying(resourceID, user string) bool {
 
 	switch info.Status {
 	case ServiceStatusRunning, ServiceStatusFailed:
-		blog.Infof("crm: check isFinishDeploying resource(%s) user(%s) finish deploying", resourceID, user)
+		blog.Infof("crm: check isFinishDeploying resource(%s) user(%s) finish deploying with status:%s",
+			resourceID, user, info.Status.String())
 		return true
 	default:
 		return false
@@ -695,7 +696,23 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		return nil, ErrorManagerNotRunning
 	}
 
+	var t1start, t1end int64
+	var t2start, t2end int64
+	var t3start, t3end int64
+	defer func() {
+		d1 := t1end - t1start
+		d2 := t2end - t2start
+		d3 := t3end - t3start
+		if d1 > 2 || d2 > 2 || d3 > 2 {
+			blog.Infof("crm: resourceID(%s) user(%s) too long spent %d seconds to getServerRealName,"+
+				"%d to GetServerStatus,%d to freshDeployingStatus",
+				resourceID, user, d1, d2, d3)
+		}
+	}()
+
+	t1start = time.Now().Unix()
 	targetID, err := rm.getServerRealName(resourceID)
+	t1end = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("crm: get service info for resource(%s) user(%s), get server real name failed: %v",
 			resourceID, user, err)
@@ -705,7 +722,10 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		blog.Errorf("crm: get service info for resource(%s) user(%s), get handlerMap nil", resourceID, user)
 		return nil, fmt.Errorf("handlerMap nil")
 	}
+
+	t2start = time.Now().Unix()
 	info, err := rm.operator.GetServerStatus(rm.conf.BcsClusterID, rm.handlerMap[user].GetNamespace(), targetID)
+	t2end = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("crm: get service info for resource(%s) target(%s) user(%s) namespace(%s) failed: %v",
 			resourceID, targetID, user, rm.handlerMap[user].GetNamespace(), err)
@@ -719,7 +739,10 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		terminated = true
 	}
 
+	t3start = time.Now().Unix()
 	rm.freshDeployingStatus(resourceID, user, info.CurrentInstances, terminated)
+	t3end = time.Now().Unix()
+
 	return info, nil
 }
 

@@ -20,14 +20,15 @@ import (
 
 // define const vars
 const (
-	FlagLog           = "log"
-	FlagLogDir        = "log_dir"
-	FlagToolDir       = "tool_dir"
-	FlagJobDir        = "job_dir"
-	FlagJobJSONPrefix = "job_json_prefix"
-	FlagJobStartIndex = "job_start_index"
-	FlagCommitSuicide = "commit_suicide"
-	FlagPort          = "port"
+	FlagLog             = "log"
+	FlagLogDir          = "log_dir"
+	FlagToolDir         = "tool_dir"
+	FlagJobDir          = "job_dir"
+	FlagJobJSONPrefix   = "job_json_prefix"
+	FlagJobStartIndex   = "job_start_index"
+	FlagCommitSuicide   = "commit_suicide"
+	FlagPort            = "port"
+	FlagProcessInfoFile = "process_info_file"
 )
 
 // Run main entrance
@@ -82,6 +83,10 @@ func GetApp(ct ClientType) *commandCli.App {
 		commandCli.IntFlag{
 			Name:  "port",
 			Usage: "port to listen",
+		},
+		commandCli.StringFlag{
+			Name:  "process_info_file",
+			Usage: "full path of this process info",
 		},
 	}
 

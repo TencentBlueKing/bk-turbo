@@ -90,7 +90,7 @@ type DirectResourceConfig struct {
 	MysqlTableOption string `json:"direct_resource_mysql_table_option" value:"" usage:"mysql table option"`
 }
 
-//InstanceType define type of an instance
+// InstanceType define type of an instance
 type InstanceType struct {
 	Platform             string  `json:"platform"`
 	Group                string  `json:"group"`
@@ -106,6 +106,7 @@ type InstanceType struct {
 type ContainerResourceConfig struct {
 	Enable                     bool           `json:"crm_enable"`
 	Operator                   string         `json:"crm_operator"`
+	KubeConfigPath             string         `json:"crm_kubeconfig_path"`
 	BcsAPIToken                string         `json:"crm_bcs_api_token"`
 	BcsAPIAddress              string         `json:"crm_bcs_api_address"`
 	BcsNamespace               string         `json:"crm_bcs_namespace"`

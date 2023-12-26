@@ -522,8 +522,9 @@ var (
 		"/Fp":         true, // Preprocesses the specified include file.
 		"/Yu":         true, // Uses a precompiled header file during build.
 		"/Zm":         true, // Specifies the precompiled header memory allocation limit.
-		"/external:W": true, //specify compiler diagnostic behavior for certain header files
-		"-external:W": true, //specify compiler diagnostic behavior for certain header files
+		"/external:W": true, // specify compiler diagnostic behavior for certain header files
+		"-external:W": true, // specify compiler diagnostic behavior for certain header files
+		"@":           true, // such as @"..\XXX\XXX.rsp"
 	}
 )
 
@@ -600,6 +601,7 @@ type ccArgs struct {
 	outputFile          string
 	args                []string
 	specifiedSourceType bool
+	includeRspFiles     []string
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
@@ -680,6 +682,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 				seenOptionC = true
 				continue
 			}
+		} else if strings.HasPrefix(arg, "@") {
+			r.includeRspFiles = append(r.includeRspFiles, arg[1:])
 		}
 
 		// if this is not start with /, then it maybe a file.
@@ -923,56 +927,52 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 		fp = filepath.Join(dir, fp)
 	}
 
-	f, err := os.Create(fp)
-	if err != nil {
-		if !filepath.IsAbs(fp) && dir != "" {
-			newfp, _ := filepath.Abs(filepath.Join(dir, fp))
-			f, err = os.Create(newfp)
-			if err != nil {
-				blog.Errorf("cl: create file %s or %s error: [%s]", fp, newfp, err.Error())
-				return err
-			}
-		} else {
-			blog.Errorf("cl: create file %s error: [%s]", fp, err.Error())
-			return err
-		}
-	}
-	defer func() {
-		_ = f.Close()
-	}()
+	// f, err := os.Create(fp)
+	// if err != nil {
+	// 	if !filepath.IsAbs(fp) && dir != "" {
+	// 		newfp, _ := filepath.Abs(filepath.Join(dir, fp))
+	// 		f, err = os.Create(newfp)
+	// 		if err != nil {
+	// 			blog.Errorf("cl: create file %s or %s error: [%s]", fp, newfp, err.Error())
+	// 			return err
+	// 		}
+	// 	} else {
+	// 		blog.Errorf("cl: create file %s error: [%s]", fp, err.Error())
+	// 		return err
+	// 	}
+	// }
+	// defer func() {
+	// 	_ = f.Close()
+	// }()
 
 	if rf.CompressedSize > 0 {
 		switch rf.Compresstype {
 		case protocol.CompressNone:
 			// allocTime = time.Now().Local().UnixNano()
 			// compressTime = allocTime
-			_, err := f.Write(data)
+
+			f, err := os.Create(fp)
+			if err != nil {
+				if !filepath.IsAbs(fp) && dir != "" {
+					newfp, _ := filepath.Abs(filepath.Join(dir, fp))
+					f, err = os.Create(newfp)
+					if err != nil {
+						blog.Errorf("cl: create file %s or %s error: [%s]", fp, newfp, err.Error())
+						return err
+					}
+				} else {
+					blog.Errorf("cl: create file %s error: [%s]", fp, err.Error())
+					return err
+				}
+			}
+			defer f.Close()
+
+			_, err = f.Write(data)
 			if err != nil {
 				blog.Errorf("save file [%s] error: [%s]", fp, err.Error())
 				return err
 			}
 			break
-		// case protocol.CompressLZO:
-		// 	// decompress with lzox1 firstly
-		// 	outdata, err := golzo.Decompress1X(bytes.NewReader(data), int(rf.CompressedSize), 0)
-		// 	if err != nil {
-		// 		blog.Errorf("cl: decompress file %s error: [%s]", fp, err.Error())
-		// 		return err
-		// 	}
-		// 	outlen := len(string(outdata))
-		// 	blog.Debugf("cl: decompressed file %s with lzo1x, from [%d] to [%d]", fp, rf.CompressedSize, outlen)
-		// 	if outlen != int(rf.FileSize) {
-		// 		err := fmt.Errorf("cl: decompressed size %d, expected size %d", outlen, rf.FileSize)
-		// 		blog.Errorf("cl: decompress error: [%v]", err)
-		// 		return err
-		// 	}
-
-		// 	_, err = f.Write(outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("cl: save file [%s] error: [%v]", fp, err)
-		// 		return err
-		// 	}
-		// 	break
 		case protocol.CompressLZ4:
 			// decompress with lz4 firstly
 			dst := make([]byte, rf.FileSize)
@@ -998,6 +998,22 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 				blog.Errorf("cl: decompress error: [%v]", err)
 				return err
 			}
+
+			f, err := os.Create(fp)
+			if err != nil {
+				if !filepath.IsAbs(fp) && dir != "" {
+					newfp, _ := filepath.Abs(filepath.Join(dir, fp))
+					f, err = os.Create(newfp)
+					if err != nil {
+						blog.Errorf("cl: create file %s or %s error: [%s]", fp, newfp, err.Error())
+						return err
+					}
+				} else {
+					blog.Errorf("cl: create file %s error: [%s]", fp, err.Error())
+					return err
+				}
+			}
+			defer f.Close()
 
 			_, err = f.Write(outdata)
 			if err != nil {

@@ -64,19 +64,19 @@ var (
 )
 
 // NewShaderTool get a new ShaderTool
-func NewShaderTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *ShaderTool {
-	blog.Debugf("ShaderTool: new helptool with config:%+v", config)
+func NewShaderTool(flagsparam *common.Flags) *ShaderTool {
+	blog.Debugf("ShaderTool: new helptool with flags:%+v", *flagsparam)
 
 	return &ShaderTool{
 		flags: flagsparam,
 		// controller:     v1.NewSDK(config),
-		controllerconfig: config,
-		actionlist:       list.New(),
-		finishednumber:   0,
-		runningnumber:    0,
-		maxjobs:          0,
-		actionchan:       nil,
-		resourcestatus:   common.ResourceInit,
+		// controllerconfig: config,
+		actionlist:     list.New(),
+		finishednumber: 0,
+		runningnumber:  0,
+		maxjobs:        0,
+		actionchan:     nil,
+		resourcestatus: common.ResourceInit,
 		// removelist:     []string{},
 	}
 }
@@ -86,7 +86,7 @@ type ShaderTool struct {
 	flags *common.Flags
 	pCtx  context.Context
 
-	controllerconfig dcSDK.ControllerConfig
+	controllerconfig *dcSDK.ControllerConfig
 	controller       dcSDK.ControllerSDK
 	booster          *pkg.Booster
 	executor         *Executor
@@ -165,6 +165,40 @@ func (h *ShaderTool) run(pCtx context.Context) (int, error) {
 	return 0, nil
 }
 
+func (h *ShaderTool) getControllerConfig() dcSDK.ControllerConfig {
+	if h.controllerconfig != nil {
+		return *h.controllerconfig
+	}
+
+	h.controllerconfig = &dcSDK.ControllerConfig{
+		NoLocal: false,
+		Scheme:  common.ControllerScheme,
+		IP:      common.ControllerIP,
+		Port:    common.ControllerPort,
+		Timeout: 5 * time.Second,
+		LogDir:  h.flags.LogDir,
+		LogVerbosity: func() int {
+			// debug模式下, --v=3
+			if h.flags.LogLevel == dcUtil.PrintDebug.String() {
+				return 3
+			}
+			return 0
+		}(),
+		RemainTime:          h.settings.ControllerIdleRunSeconds,
+		NoWait:              h.settings.ControllerNoBatchWait,
+		SendCork:            h.settings.ControllerSendCork,
+		SendFileMemoryLimit: h.settings.ControllerSendFileMemoryLimit,
+		NetErrorLimit:       h.settings.ControllerNetErrorLimit,
+		RemoteRetryTimes:    h.settings.ControllerRemoteRetryTimes,
+		EnableLink:          h.settings.ControllerEnableLink,
+		EnableLib:           h.settings.ControllerEnableLib,
+		LongTCP:             h.settings.ControllerLongTCP,
+		DynamicPort:         h.settings.ControllerDynamicPort,
+	}
+
+	return *h.controllerconfig
+}
+
 func (h *ShaderTool) initsettings() error {
 	var err error
 	h.projectSettingFile, err = h.getProjectSettingFile()
@@ -191,32 +225,31 @@ func (h *ShaderTool) initsettings() error {
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")
 
+	h.controller = v1.NewSDK(h.getControllerConfig())
+
 	return nil
 }
 
 func (h *ShaderTool) launchController() error {
 	if h.controller == nil {
-		h.controllerconfig.RemainTime = h.settings.ControllerIdleRunSeconds
-		h.controllerconfig.NoWait = h.settings.ControllerNoBatchWait
-		h.controllerconfig.SendCork = h.settings.ControllerSendCork
-		h.controllerconfig.SendFileMemoryLimit = h.settings.ControllerSendFileMemoryLimit
-		h.controllerconfig.NetErrorLimit = h.settings.ControllerNetErrorLimit
-		h.controllerconfig.RemoteRetryTimes = h.settings.ControllerRemoteRetryTimes
-		h.controllerconfig.EnableLink = h.settings.ControllerEnableLink
-		h.controllerconfig.EnableLib = h.settings.ControllerEnableLib
-		h.controllerconfig.LongTCP = h.settings.ControllerLongTCP
-		h.controller = v1.NewSDK(h.controllerconfig)
+		h.controller = v1.NewSDK(h.getControllerConfig())
 	}
 
 	var err error
+	var port int
 	for i := 0; i < 4; i++ {
 		blog.Infof("ShaderTool: try launch controller for the [%d] times", i)
-		_, err = h.controller.EnsureServer()
+		_, port, err = h.controller.EnsureServer()
 		if err != nil {
 			blog.Warnf("ShaderTool: ensure controller failed with error: %v for the [%d] times", err, i)
 			continue
 		}
-		blog.Infof("ShaderTool: success to launch controller for the [%d] times", i)
+
+		blog.Infof("ShaderTool: success to launch controller port[%d] for the [%d] times", port, i)
+		h.controllerconfig.Port = port
+		os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
+		blog.Infof("ShaderTool: set env %s=%d", env.GetEnvKey(env.KeyExecutorControllerPort), port)
+
 		return nil
 	}
 	return err
@@ -324,26 +357,8 @@ func (h *ShaderTool) checkQuit(ctx context.Context) error {
 	}
 }
 
-func (h *ShaderTool) server(ctx context.Context) error {
-	blog.Infof("ShaderTool: server")
-
-	h.httpserver = httpserver.NewHTTPServer(uint(h.flags.Port), "127.0.0.1", "")
-	var err error
-
-	h.httphandle, err = NewHTTPHandle(h)
-	if h.httphandle == nil || err != nil {
-		return ErrInitHTTPHandle
-	}
-
-	h.httpserver.RegisterWebServer(PathV1, nil, h.httphandle.GetActions())
-
-	return h.httpserver.ListenAndServe()
-}
-
 // execute actions got from ready queue
 func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
-	// blog.Debugf("ShaderTool: try to run actions")
-
 	if h.actionlist.Len() <= 0 {
 		return nil
 	}
@@ -365,6 +380,11 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 					os.Setenv(k, v)
 				}
 			}
+		}
+
+		if h.controllerconfig.DynamicPort && h.controllerconfig.Port > 0 {
+			os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(h.controllerconfig.Port))
+			blog.Infof("ShaderTool: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), h.controllerconfig.Port)
 		}
 
 		h.executor = NewExecutor()
@@ -389,7 +409,7 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 	}
 
 	// execute actions no more than max jobs
-	blog.Infof("ShaderTool: try to run actions with %d jobs", h.maxjobs)
+	blog.Infof("ShaderTool: try to run actions up to %d jobs", h.maxjobs)
 	h.actionchan = make(chan common.Actionresult, h.maxjobs)
 
 	// execute first batch actions
@@ -702,11 +722,12 @@ func (h *ShaderTool) newBooster() (*pkg.Booster, error) {
 		},
 
 		Controller: sdk.ControllerConfig{
-			NoLocal: false,
-			Scheme:  common.ControllerScheme,
-			IP:      common.ControllerIP,
-			Port:    common.ControllerPort,
-			Timeout: 5 * time.Second,
+			NoLocal:     false,
+			Scheme:      common.ControllerScheme,
+			IP:          common.ControllerIP,
+			Port:        common.ControllerPort,
+			Timeout:     5 * time.Second,
+			DynamicPort: h.settings.ControllerDynamicPort,
 		},
 	}
 
@@ -832,7 +853,7 @@ func (h *ShaderTool) shaders(actions *common.UE4Action) error {
 		h.actionindex++
 		h.actionlist.PushBack(&temp)
 	}
-	blog.Infof("ShaderTool: got total %d shader jobs", h.actionlist.Len())
+	blog.Infof("ShaderTool: got %d shader jobs, total jobs in queue: %d", len(actions.Actions), h.actionlist.Len())
 
 	// awake action execution
 	if h.actionchan != nil {
@@ -891,7 +912,9 @@ func (h *ShaderTool) dealWorkNotFound(retcode int, retmsg string) error {
 	if workerid.NewWorkID != "" {
 		// update local workid with new workid
 		env.SetEnv(env.KeyExecutorControllerWorkID, workerid.NewWorkID)
-		h.executor.Update()
+		if h.executor != nil {
+			h.executor.Update()
+		}
 
 		// set tool chain with new workid
 		h.setToolChain()

@@ -24,7 +24,8 @@ import (
 
 // ControllerSDK describe the controller handler SDK
 type ControllerSDK interface {
-	EnsureServer() (int, error)
+	// support dinamic listen port，return pid,port,error
+	EnsureServer() (int, int, error)
 	Register(config ControllerRegisterConfig) (ControllerWorkSDK, error)
 	GetWork(workID string) ControllerWorkSDK
 	SetConfig(config *CommonControllerConfig) error
@@ -62,6 +63,10 @@ type WorkJob interface {
 const (
 	WorkHeartbeatTick    = 5 * time.Second
 	WorkHeartbeatTimeout = 10 * WorkHeartbeatTick
+)
+
+const (
+	EmptyWorkerID = "EMPTY_0123456789"
 )
 
 // GetControllerConfigFromEnv generate the controller config from environment variables
@@ -110,10 +115,11 @@ func GetControllerConfigToEnv(config ControllerConfig) map[string]string {
 // ControllerConfig describe the config of controller
 type ControllerConfig struct {
 	// 需要传递给executor的信息
-	NoLocal bool
-	Scheme  string
-	IP      string
-	Port    int
+	NoLocal     bool
+	Scheme      string
+	IP          string
+	Port        int
+	DynamicPort bool
 
 	// controller参数
 	Timeout             time.Duration
@@ -137,6 +143,7 @@ type ControllerConfig struct {
 	EnableLink          bool
 	EnableLib           bool
 	LongTCP             bool
+	UseDefaultWorker    bool
 }
 
 // Target return the server ip and port of controller
@@ -198,6 +205,14 @@ type ControllerWorkSettings struct {
 	FilterRules     []FilterRuleItem
 	Degraded        bool
 	GlobalSlots     bool
+}
+
+// ControllerProcessInfo describe the running controller process info
+type ControllerProcessInfo struct {
+	ProcessID  int    `json:"process_id"`
+	ListenPort int    `json:"listen_port"`
+	Success    bool   `json:"success"`
+	Message    string `json:"message"`
 }
 
 // ControllerJobStats describe a single job's stats info

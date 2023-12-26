@@ -13,9 +13,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -110,10 +111,11 @@ const (
 
 // NewOperator get a new operator.
 // TODO: For now, k8s operator do not support to deploy multi instances in one node(all pods with some host port).
-//  So the request_cpu must big enough to occupy whole resource in one node. This should be solved later, and handle
-//  the ports managements.
+//
+//	So the request_cpu must big enough to occupy whole resource in one node. This should be solved later, and handle
+//	the ports managements.
 func NewOperator(conf *config.ContainerResourceConfig) (op.Operator, error) {
-	data, err := ioutil.ReadFile(conf.BcsAppTemplate)
+	data, err := os.ReadFile(conf.BcsAppTemplate)
 	if err != nil {
 		blog.Errorf("get new operator, read template file failed: %v", err)
 		return nil, err
@@ -153,9 +155,12 @@ type clusterClientSet struct {
 
 // GetResource get specific cluster's resources.
 func (o *operator) GetResource(clusterID string) ([]*op.NodeInfo, error) {
+	// BCS 联邦集群
 	if o.conf.BcsClusterType == FederationCluster {
 		return o.getFederationResource(clusterID)
 	}
+
+	// BCS or 原生集群
 	return o.getResource(clusterID)
 }
 
@@ -303,7 +308,7 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 	return
 }
 
-//FederationResourceParam define
+// FederationResourceParam define
 type FederationResourceParam struct {
 	Resources     ResRequests       `json:"resources"`
 	ClusterID     string            `json:"clusterID"` //子集群ID，非联邦集群ID
@@ -311,23 +316,23 @@ type FederationResourceParam struct {
 	NodeSelector  map[string]string `json:"nodeSelector"`
 }
 
-//ResRequests define
+// ResRequests define
 type ResRequests struct {
 	Requests ResRequest `json:"requests"`
 }
 
-//ResRequest define
+// ResRequest define
 type ResRequest struct {
 	CPU    string `json:"cpu"`
 	Memory string `json:"memory"`
 }
 
-//FederationData define
+// FederationData define
 type FederationData struct {
 	Total int `json:"total"`
 }
 
-//FederationResult define
+// FederationResult define
 type FederationResult struct {
 	Code int            `json:"code"`
 	Msg  string         `json:"msg"`
@@ -742,6 +747,47 @@ func (o *operator) getClientSetFromCache(clusterID string) (*clusterClientSet, b
 }
 
 func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
+	// 通过 crm_kubeconfig_path 配置原生 k8s 集群
+	if o.conf.KubeConfigPath != "" {
+		return o.generateNativeClient(clusterID, o.conf.KubeConfigPath)
+	}
+
+	return o.generateBCSClient(clusterID)
+}
+
+// generateNativeClient native cluster
+func (o *operator) generateNativeClient(clusterID, kubeconfigPath string) (*clusterClientSet, error) {
+	c, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		blog.Errorf("k8s-operator: get client set(%s), create new native client set, build config failed: %v", clusterID, err)
+		return nil, err
+	}
+
+	// kubeConfig 配置优化, TLS certificate 等需要在 kubeconfig 配置
+	c.QPS = 1e6
+	c.Burst = 1e6
+
+	clientSet, err := kubernetes.NewForConfig(c)
+	if err != nil {
+		blog.Errorf("k8s-operator: get client set(%s), create new native client set failed: %v", clusterID, err)
+		return nil, err
+	}
+
+	cs := &clusterClientSet{
+		clientSet:   clientSet,
+		timeoutTime: time.Now().Local().Add(1 * time.Minute),
+	}
+	o.cacheLock.Lock()
+	o.clusterClientCache[clusterID] = cs
+	o.cacheLock.Unlock()
+
+	blog.Infof("k8s-operator: get client set, create new native client set for cluster(%s), config host: %s", clusterID, c.Host)
+
+	return cs, nil
+}
+
+// generateBCSClient bcs 客户端
+func (o *operator) generateBCSClient(clusterID string) (*clusterClientSet, error) {
 	address := o.conf.BcsAPIPool.GetAddress()
 	var host string
 	if o.conf.EnableBCSApiGw {
@@ -750,7 +796,7 @@ func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
 		host = fmt.Sprintf(bcsAPIK8SBaseURI, address, clusterID)
 	}
 
-	blog.Infof("k8s-operator: try generate client with host(%s) token(%s)", host, o.conf.BcsAPIToken)
+	blog.Infof("k8s-operator: try generate bcs client with host(%s) token(%s)", host, o.conf.BcsAPIToken)
 	// get client set by real api-server address
 	c := &rest.Config{
 		Host:        host,
@@ -768,11 +814,11 @@ func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
 		},
 	}
 
-	blog.Infof("k8s-operator: get client set, create new client set for cluster(%s), config: %v",
+	blog.Infof("k8s-operator: get client set, create new bcs client set for cluster(%s), config: %v",
 		clusterID, c)
 	clientSet, err := kubernetes.NewForConfig(c)
 	if err != nil {
-		blog.Errorf("k8s-operator: get client set(%s), create new client set failed: %v", clusterID, err)
+		blog.Errorf("k8s-operator: get client set(%s), create new bcs client set failed: %v", clusterID, err)
 		return nil, err
 	}
 

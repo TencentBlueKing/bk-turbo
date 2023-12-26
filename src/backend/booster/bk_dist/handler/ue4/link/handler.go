@@ -124,6 +124,11 @@ func (l *TaskLink) RemoteRetryTimes() int {
 	return 0
 }
 
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (l *TaskLink) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	return nil, nil
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (l *TaskLink) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	return 1
@@ -220,11 +225,12 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	if err == nil {
 		addDir := filepath.Dir(mtpath)
 
-		tempInputs := make([]string, 0, 4)
+		tempInputs := make([]string, 0, 5)
 		tempInputs = append(tempInputs, mtpath)
 		tempInputs = append(tempInputs, filepath.Join(addDir, "midlrtmd.dll"))
 		tempInputs = append(tempInputs, filepath.Join(addDir, "rc.exe"))
 		tempInputs = append(tempInputs, filepath.Join(addDir, "rcdll.dll"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "ServicingCommon.dll"))
 		blog.Debugf("link: found additional files:%v", tempInputs)
 
 		for _, v := range tempInputs {

@@ -30,6 +30,7 @@ const (
 	FlagBazel                = "bazel"
 	FlagBazelPlus            = "bazel_plus"
 	FlagBazel4Plus           = "bazel4_plus"
+	FlagBazelNoLauncher      = "bazel_no_launcher"
 	FlagLauncher             = "launcher"
 	FlagLog                  = "log"
 	FlagLogDir               = "log_dir"
@@ -103,6 +104,9 @@ const (
 	FlagEnableLink           = "enable_link"
 	FlagEnableLib            = "enable_lib"
 	FlagLongTCP              = "long_tcp"
+	FlagUseDefaultWorker     = "use_default_worker"
+	FlagDynamicPort          = "dynamic_port"
+	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -436,6 +440,18 @@ var (
 			Name:  "long_tcp",
 			Usage: "whether connect to worker with long tcp connection",
 		},
+		commandCli.BoolFlag{
+			Name:  "use_default_worker",
+			Usage: "use default worker if worker id is empty",
+		},
+		commandCli.BoolFlag{
+			Name:  "dynamic_port",
+			Usage: "controller will listen dynamic port if true",
+		},
+		commandCli.IntFlag{
+			Name:  "clean_tmp_files_day_ago",
+			Usage: "clean tmp files which modify time before this days, default is 1",
+		},
 	}
 )
 
@@ -470,6 +486,11 @@ func GetApp(ct ClientType) *commandCli.App {
 				Name: "bazel4_plus, bz4p",
 				Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
 					"compilation works with at least bazel 4.0",
+			},
+			commandCli.BoolFlag{
+				Name: "bazel_no_launcher, bz4nl",
+				Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
+					"compilation works with at least bazel 4.0; this will simplify bazel accelerate environment",
 			},
 			commandCli.BoolFlag{
 				Name:  "launcher, lc",

@@ -384,12 +384,15 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 	// 加内存锁
 	var totalsize int64
+	var locksize int64
 	memorylocked := false
 	if r.slot != nil {
 		for _, v := range req.Files {
 			totalsize += v.FileSize
 		}
-		if r.slot.Lock(totalsize) {
+		// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
+		locksize = totalsize * 3
+		if r.slot.Lock(locksize) {
 			memorylocked = true
 			blog.Debugf("remotehandle: succeed to get one memory lock")
 		}
@@ -419,7 +422,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 			blog.Warnf("error: %v", err)
 
 			if memorylocked {
-				r.slot.Unlock(totalsize)
+				r.slot.Unlock(locksize)
 				blog.Debugf("remotehandle: succeed to release one memory lock")
 			}
 
@@ -461,7 +464,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		blog.Warnf("error: %v", err)
 
 		if memorylocked {
-			r.slot.Unlock(totalsize)
+			r.slot.Unlock(locksize)
 			blog.Debugf("remotehandle: succeed to release one memory lock")
 		}
 
@@ -474,7 +477,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	debug.FreeOSMemory() // free memory anyway
 
 	if memorylocked {
-		r.slot.Unlock(totalsize)
+		r.slot.Unlock(locksize)
 		blog.Debugf("remotehandle: succeed to release one memory lock")
 	}
 

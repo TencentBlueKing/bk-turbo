@@ -31,7 +31,7 @@ type TaskBasicLayer interface {
 	GetEngineList() []engine.Engine
 
 	// global lock for task by taskID
-	LockTask(taskID string)
+	LockTask(taskID string, owner string)
 	UnLockTask(taskID string)
 
 	// global lock for project by projectID
@@ -124,8 +124,8 @@ func (tc *taskBasicLayer) GetEngineList() []engine.Engine {
 }
 
 // LockTask get a Write-Lock with taskID.
-func (tc *taskBasicLayer) LockTask(taskID string) {
-	defer blog.V(5).Infof("layer: lock task(%s)", taskID)
+func (tc *taskBasicLayer) LockTask(taskID string, owner string) {
+	defer blog.V(5).Infof("layer: lock task(%s) by owner(%s)", taskID, owner)
 
 	tc.taskLockMapRWLock.RLock()
 	mutex, ok := tc.taskLockMap[taskID]
@@ -133,13 +133,14 @@ func (tc *taskBasicLayer) LockTask(taskID string) {
 	if ok {
 		mutex.Lock()
 		mutex.lastHold = time.Now().Local()
+		mutex.owner = owner
 		return
 	}
 
 	tc.taskLockMapRWLock.Lock()
 	mutex, ok = tc.taskLockMap[taskID]
 	if !ok {
-		blog.Info("layer: create task lock(%s), current lock num(%d)", taskID, len(tc.taskLockMap))
+		blog.Info("layer: create task lock(%s) by owner(%s), current lock num(%d)", taskID, owner, len(tc.taskLockMap))
 		mutex = &lock{
 			createAt: time.Now().Local(),
 		}
@@ -149,6 +150,7 @@ func (tc *taskBasicLayer) LockTask(taskID string) {
 
 	mutex.Lock()
 	mutex.lastHold = time.Now().Local()
+	mutex.owner = owner
 }
 
 // UnLockTask unlock task lock.
@@ -164,10 +166,11 @@ func (tc *taskBasicLayer) UnLockTask(taskID string) {
 	// log a warning when the lock is hold for too long.
 	now := time.Now().Local()
 	if mutex.lastHold.Add(1 * time.Second).Before(now) {
-		blog.Warnf("layer: task(%s) lock hold for too long: %s", taskID, now.Sub(mutex.lastHold).String())
+		blog.Warnf("layer: task(%s) by owner(%s) lock hold for too long: %s", taskID, mutex.owner, now.Sub(mutex.lastHold).String())
 	}
-	blog.V(5).Infof("layer: unlock task(%s)", taskID)
+	blog.V(5).Infof("layer: unlock task(%s) by owner(%s)", taskID, mutex.owner)
 	mutex.Unlock()
+	// mutex.owner = ""
 }
 
 // LockProject get a Write-Lock with projectID.
@@ -244,7 +247,7 @@ func (tc *taskBasicLayer) UpdateTaskBasic(tb *engine.TaskBasic) error {
 // UpdateHeartbeat update a new heartbeat to a task basic with given taskID.
 // Heartbeat info will be updated into layer cache and databases.
 func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) error {
-	tc.LockTask(taskID)
+	tc.LockTask(taskID, "UpdateHeartbeat_of_taskBasicLayer")
 	defer tc.UnLockTask(taskID)
 
 	tb, err := tc.getTaskBasic(taskID)
@@ -508,6 +511,7 @@ type lock struct {
 	sync.Mutex
 	createAt time.Time
 	lastHold time.Time
+	owner    string
 }
 
 func (tc *taskBasicLayer) runLockCleaner() {
@@ -552,7 +556,7 @@ func (tc *taskBasicLayer) runReleasedTaskCleaner() {
 				// task is already in terminated status and released and out of time
 				// just remove it out of layer
 				if tb.Status.ShutDownTime.Add(layerCleanTimeAfterReleased).Before(time.Now().Local()) {
-					tc.LockTask(tb.ID)
+					tc.LockTask(tb.ID, "runReleasedTaskCleaner_of_taskBasicLayer")
 					tc.deleteTB(tb)
 					tc.UnLockTask(tb.ID)
 					num++

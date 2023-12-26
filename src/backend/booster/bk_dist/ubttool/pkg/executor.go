@@ -16,14 +16,15 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
-	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // Executor define dist executor
@@ -45,6 +46,10 @@ type Executor struct {
 
 // NewExecutor return new Executor
 func NewExecutor() *Executor {
+	// for debug by tomtian
+	c := dcSDK.GetControllerConfigFromEnv()
+	blog.Debugf("ubtexecutor: got config [%+v],env:%+v", c, os.Environ())
+
 	return &Executor{
 		bt:     dcTypes.GetBoosterType(env.GetEnv(env.BoosterType)),
 		work:   v1.NewSDK(dcSDK.GetControllerConfigFromEnv()).GetWork(env.GetEnv(env.KeyExecutorControllerWorkID)),
@@ -100,70 +105,65 @@ func (d *Executor) runWork(fullargs []string, workdir string) (int, string, erro
 		return retcode, retmsg, err
 	}
 
+	// https://docs.microsoft.com/en-us/windows/win32/intl/code-page-identifiers
+	// 65001 means utf8, we will try convert gbk to utf8 which is not valid utf8
 	charcode := 0
 	if runtime.GOOS == "windows" {
 		charcode = dcSyscall.GetConsoleCP()
 	}
 
+	// 如果控制台字符集不是utf8，则我们默认为gbk（936），这种情况下，控制台应该可以正确显示中文字符集，无需处理
+	// 如果控制台字符集是utf8（65001），则检查字节流中是否都是合法的utf8字符，如果不是，当做gbk处理，尝试将gbk字符串转为utf8
+
 	if len(r.Stdout) > 0 {
 		d.outputmsg = r.Stdout
 		hasNewline := bytes.HasSuffix(r.Stdout, []byte("\n"))
-		// https://docs.microsoft.com/en-us/windows/win32/intl/code-page-identifiers
-		// 65001 means utf8, we will try convert to gbk which is not utf8
-		if charcode > 0 && charcode != 65001 {
-			// fmt.Printf("get charset code:%d\n", dcSyscall.GetConsoleCP())
-			gbk, err := dcUtil.Utf8ToGbk(r.Stdout)
-			if err == nil {
-				if hasNewline {
-					_, _ = fmt.Fprintf(os.Stdout, "%s", string(gbk))
+
+		output := r.Stdout
+		if charcode == 65001 {
+			isUTF8 := utf8.Valid(r.Stdout)
+			blog.Infof("string [%s] is utf8? %v,charcode:%d", string(r.Stdout), isUTF8, charcode)
+			if !isUTF8 {
+				// 尝试转为utf8
+				gbk, err1 := simplifiedchinese.GBK.NewDecoder().Bytes(r.Stdout)
+				if err1 != nil {
+					blog.Infof("convert gbk string [%s] to utf8 failed with error:%v", string((r.Stdout)), err1)
 				} else {
-					_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(gbk))
+					output = gbk
 				}
-			} else {
-				if hasNewline {
-					_, _ = fmt.Fprintf(os.Stdout, "%s", string(r.Stdout))
-				} else {
-					_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(r.Stdout))
-				}
-				// _, _ = fmt.Fprintf(os.Stdout, "errro:%v\n", err)
 			}
+		}
+
+		if hasNewline {
+			_, _ = fmt.Fprintf(os.Stdout, "%s", string(output))
 		} else {
-			if hasNewline {
-				_, _ = fmt.Fprintf(os.Stdout, "%s", string(r.Stdout))
-			} else {
-				_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(r.Stdout))
-			}
+			_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(output))
 		}
 	}
 
 	if len(r.Stderr) > 0 {
 		d.errormsg = r.Stderr
 		hasNewline := bytes.HasSuffix(r.Stderr, []byte("\n"))
-		// https://docs.microsoft.com/en-us/windows/win32/intl/code-page-identifiers
-		// 65001 means utf8, we will try convert to gbk which is not utf8
-		if charcode > 0 && charcode != 65001 {
-			// fmt.Printf("get charset code:%d\n", dcSyscall.GetConsoleCP())
-			gbk, err := dcUtil.Utf8ToGbk(r.Stderr)
-			if err == nil {
-				if hasNewline {
-					_, _ = fmt.Fprintf(os.Stderr, "%s", string(gbk))
+
+		output := r.Stderr
+		if charcode == 65001 {
+			isUTF8 := utf8.Valid(r.Stderr)
+			blog.Infof("string [%s] is utf8? %v,charcode:%d", string(r.Stderr), isUTF8, charcode)
+			if !isUTF8 {
+				// 尝试转为utf8
+				gbk, err1 := simplifiedchinese.GBK.NewDecoder().Bytes(r.Stderr)
+				if err1 != nil {
+					blog.Infof("convert gbk string [%s] to utf8 failed with error:%v", string((r.Stderr)), err1)
 				} else {
-					_, _ = fmt.Fprintf(os.Stderr, "%s\n", string(gbk))
+					output = gbk
 				}
-			} else {
-				if hasNewline {
-					_, _ = fmt.Fprintf(os.Stderr, "%s", string(r.Stderr))
-				} else {
-					_, _ = fmt.Fprintf(os.Stderr, "%s\n", string(r.Stderr))
-				}
-				// _, _ = fmt.Fprint(os.Stderr, "errro:%v\n", err)
 			}
+		}
+
+		if hasNewline {
+			_, _ = fmt.Fprintf(os.Stderr, "%s", string(output))
 		} else {
-			if hasNewline {
-				_, _ = fmt.Fprintf(os.Stderr, "%s", string(r.Stderr))
-			} else {
-				_, _ = fmt.Fprintf(os.Stderr, "%s\n", string(r.Stderr))
-			}
+			_, _ = fmt.Fprintf(os.Stderr, "%s\n", string(output))
 		}
 	}
 

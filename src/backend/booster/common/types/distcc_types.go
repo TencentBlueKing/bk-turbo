@@ -224,6 +224,8 @@ const (
 	ServerErrDeleteWorkerFailed
 	ServerErrListWorkStatsFailed
 	ServerErrListVersionFailed
+	ServerErrSummaryFailed
+	ServerErrSummaryByUserFailed
 )
 
 var serverErrCode = map[ServerErrCode]string{
@@ -255,6 +257,8 @@ var serverErrCode = map[ServerErrCode]string{
 	ServerErrUpdateWorkerFailed:    "update worker failed",
 	ServerErrDeleteWorkerFailed:    "delete worker failed",
 	ServerErrListWorkStatsFailed:   "list work stats failed",
+	ServerErrSummaryFailed:         "summary failed",
+	ServerErrSummaryByUserFailed:   "summary by user failed",
 }
 
 // String return the string of ServerErrCode

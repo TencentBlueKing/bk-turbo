@@ -74,6 +74,7 @@ func newResource(hl []*dcProtocol.Host) *resource {
 		usageMap:      usageMap,
 		lockChan:      make(lockWorkerChan, 1000),
 		unlockChan:    make(lockWorkerChan, 1000),
+		emptyChan:     make(chan bool, 1000),
 		worker:        wl,
 
 		waitingList: list.New(),
@@ -93,6 +94,9 @@ type resource struct {
 
 	lockChan   lockWorkerChan
 	unlockChan lockWorkerChan
+
+	// trigger when worker change to empty
+	emptyChan chan bool
 
 	handling bool
 
@@ -237,6 +241,10 @@ func (wr *resource) disableWorker(host *dcProtocol.Host) {
 		}
 	}
 
+	if wr.totalSlots <= 0 {
+		wr.emptyChan <- true
+	}
+
 	blog.Infof("remote slot: total slot:%d after disable host:%v", wr.totalSlots, *host)
 	return
 }
@@ -274,6 +282,10 @@ func (wr *resource) workerDead(w *worker) {
 		}
 	}
 
+	if wr.totalSlots <= 0 {
+		wr.emptyChan <- true
+	}
+
 	blog.Infof("remote slot: total slot:%d after host is dead:%v", wr.totalSlots, w.host)
 	return
 }
@@ -296,6 +308,10 @@ func (wr *resource) disableAllWorker() {
 	for _, v := range wr.usageMap {
 		v.limit = 0
 		blog.Infof("remote slot: usage map:%v after disable all host", *v)
+	}
+
+	if wr.totalSlots <= 0 {
+		wr.emptyChan <- true
 	}
 
 	blog.Infof("remote slot: total slot:%d after disable all host", wr.totalSlots)
@@ -543,6 +559,8 @@ func (wr *resource) handleLock(ctx context.Context) {
 			wr.putSlot(msg)
 		case msg := <-wr.lockChan:
 			wr.getSlot(msg)
+		case <-wr.emptyChan:
+			wr.onSlotEmpty()
 		}
 	}
 }
@@ -570,6 +588,11 @@ func (wr *resource) isIdle(set *usageWorkerSet) bool {
 }
 
 func (wr *resource) getSlot(msg lockWorkerMessage) {
+	if wr.totalSlots <= 0 {
+		msg.result <- nil
+		return
+	}
+
 	satisfied := false
 	usage := msg.jobUsage
 	if wr.occupiedSlots < wr.totalSlots || wr.totalSlots <= 0 {
@@ -603,12 +626,8 @@ func (wr *resource) putSlot(msg lockWorkerMessage) {
 
 	// check whether other waiting is satisfied now
 	if wr.waitingList.Len() > 0 {
-		// index := 0
 		for e := wr.waitingList.Front(); e != nil; e = e.Next() {
-			// if index%2 == 0 {
 			msg := e.Value.(*lockWorkerMessage)
-			// usage := e.Value.(dcSDK.JobUsage)
-			// set := wr.getUsageSet(usage)
 			set := wr.getUsageSet(msg.jobUsage)
 			if wr.isIdle(set) {
 				set.occupied++
@@ -616,18 +635,22 @@ func (wr *resource) putSlot(msg lockWorkerMessage) {
 
 				msg.result <- wr.occupyWorkerSlots(msg.largeFile, []*dcProtocol.Host{})
 
-				// chanElement := e.Next()
-				// chanElement.Value.(chan *dcProtocol.Host) <- wr.occupyWorkerSlots()
-
-				// delete this element
 				wr.waitingList.Remove(e)
-				// wr.waitingList.Remove(chanElement)
 
 				break
 			}
-			// }
-			// index++
 		}
+	}
+}
+
+func (wr *resource) onSlotEmpty() {
+	blog.Infof("remote slot: on slot empty: occupy:%d,total:%d,waiting:%d", wr.occupiedSlots, wr.totalSlots, wr.waitingList.Len())
+
+	for wr.waitingList.Len() > 0 {
+		e := wr.waitingList.Front()
+		msg := e.Value.(*lockWorkerMessage)
+		msg.result <- nil
+		wr.waitingList.Remove(e)
 	}
 }
 

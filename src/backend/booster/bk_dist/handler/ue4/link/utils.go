@@ -297,7 +297,7 @@ func scanArgs(args []string, workdir string) (*libArgs, error) {
 	r := new(libArgs)
 	outputfilekeys := []string{"/OUT:", "/PDB:", "/PDBSTRIPPED:", "/MAP:",
 		"/TSAWARE:", "/PROFILE:", "/WINMDFILE:", "/IMPLIB:"}
-	inputfilekeys := []string{"/MANIFESTINPUT:", "/DEF:", "/PGD:", "/SOURCELINK:"}
+	inputfilekeys := []string{"/MANIFESTINPUT:", "/DEF:", "/PGD:", "/SOURCELINK:", "/NATVIS:"}
 	libpathkey := "/LIBPATH:"
 	libpaths := make([]string, 0, 0)
 	libfiles := make([]string, 0, 0)
@@ -495,11 +495,11 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 	}
 
 	creatTime1 := time.Now().Local().UnixNano()
-	f, err := os.Create(fp)
-	if err != nil {
-		blog.Errorf("link: create file %s error: [%s]", fp, err.Error())
-		return err
-	}
+	// f, err := os.Create(fp)
+	// if err != nil {
+	// 	blog.Errorf("link: create file %s error: [%s]", fp, err.Error())
+	// 	return err
+	// }
 	creatTime2 := time.Now().Local().UnixNano()
 
 	startTime := time.Now().Local().UnixNano()
@@ -518,7 +518,7 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 			(compressTime-allocTime)/1000/1000,
 			(endTime-compressTime)/1000/1000)
 
-		_ = f.Close()
+		// _ = f.Close()
 	}()
 
 	if rf.CompressedSize > 0 {
@@ -526,7 +526,15 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 		case protocol.CompressNone:
 			allocTime = time.Now().Local().UnixNano()
 			compressTime = allocTime
-			_, err := f.Write(data)
+
+			f, err := os.Create(fp)
+			if err != nil {
+				blog.Errorf("link: create file %s error: [%s]", fp, err.Error())
+				return err
+			}
+			defer f.Close()
+
+			_, err = f.Write(data)
 			if err != nil {
 				blog.Errorf("save file [%s] error: [%s]", fp, err.Error())
 				return err
@@ -557,6 +565,13 @@ func saveResultFile(rf *dcSDK.FileDesc) error {
 				blog.Errorf("link: decompress error: [%v]", err)
 				return err
 			}
+
+			f, err := os.Create(fp)
+			if err != nil {
+				blog.Errorf("link: create file %s error: [%s]", fp, err.Error())
+				return err
+			}
+			defer f.Close()
 
 			_, err = f.Write(outdata)
 			if err != nil {

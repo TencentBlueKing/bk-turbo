@@ -106,11 +106,13 @@ type TaskCL struct {
 	responseFile     string
 	sourcedependfile string
 	pumpHeadFile     string
+	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
 
 	// forcedepend 是我们主动导出依赖文件，showinclude 是编译命令已经指定了导出依赖文件
 	forcedepend          bool
 	pumpremote           bool
 	needcopypumpheadfile bool
+	pumpremotefailed     bool
 
 	// how to save result file
 	customSave bool
@@ -252,6 +254,20 @@ func (cl *TaskCL) NeedRemoteResource(command []string) bool {
 // RemoteRetryTimes will return the remote retry times
 func (cl *TaskCL) RemoteRetryTimes() int {
 	return 0
+}
+
+// TODO : OnRemoteFail give chance to try other way if failed to remote execute
+func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	blog.Infof("cl: start OnRemoteFail for: %v", command)
+
+	if cl.pumpremote {
+		blog.Infof("cl: set pumpremotefailed to true now")
+		cl.pumpremotefailed = true
+		cl.needcopypumpheadfile = true
+		cl.pumpremote = false
+		return cl.preExecute(command)
+	}
+	return nil, nil
 }
 
 // LocalLockWeight decide local-execute lock weight, default 1
@@ -481,6 +497,17 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			l, _ = filepath.Abs(filepath.Join(workdir, l))
 		}
 		includes = append(includes, formatFilePath(l))
+	}
+
+	// copy includeRspFiles
+	if len(cl.includeRspFiles) > 0 {
+		for _, l := range cl.includeRspFiles {
+			blog.Infof("cl: ready add rsp file: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, formatFilePath(l))
+		}
 	}
 
 	blog.Infof("cl: copy pump head got %d uniq include file from file: %s", len(includes), cl.sourcedependfile)
@@ -762,7 +789,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if dcPump.SupportPump(cl.sandbox.Env) {
+	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) {
 		if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
 			req, err, notifyerr := cl.trypump(command)
 			if err != nil {
@@ -1051,6 +1078,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 	cl.inputFile = scannedData.inputFile
 	cl.outputFile = scannedData.outputFile
 	cl.rewriteCrossArgs = cl.scannedArgs
+	cl.includeRspFiles = scannedData.includeRspFiles
 
 	// handle the pch options
 	finalArgs := cl.scanPchFile(cl.scannedArgs)

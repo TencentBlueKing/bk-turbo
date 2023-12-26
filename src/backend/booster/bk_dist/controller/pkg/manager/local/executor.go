@@ -177,6 +177,39 @@ func (e *executor) remoteTryTimes() int {
 	return 1
 }
 
+func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
+	blog.Infof("executor: try to execute onRemoteFail from pid(%d)", e.req.Pid)
+	// defer e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	// dcSDK.StatsTimeNow(&e.stats.PreWorkEnterTime)
+	// defer dcSDK.StatsTimeNow(&e.stats.PreWorkLeaveTime)
+	// e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	if e.handler.PreExecuteNeedLock(e.req.Commands) {
+		weight := e.handler.PreLockWeight(e.req.Commands)
+		blog.Infof("executor: try to execute onRemoteFail from pid(%d) lockweight(%d)", e.req.Pid, weight)
+		if !e.lock(dcSDK.JobUsageLocalPre, weight) {
+			return nil, types.ErrSlotsLockFailed
+		}
+		// dcSDK.StatsTimeNow(&e.stats.PreWorkLockTime)
+		// defer dcSDK.StatsTimeNow(&e.stats.PreWorkUnlockTime)
+		defer e.unlock(dcSDK.JobUsageLocalPre, weight)
+		// e.mgr.work.Basic().UpdateJobStats(e.stats)
+	}
+
+	// dcSDK.StatsTimeNow(&e.stats.PreWorkStartTime)
+	// e.mgr.work.Basic().UpdateJobStats(e.stats)
+	r, err := e.handler.OnRemoteFail(e.req.Commands)
+	// dcSDK.StatsTimeNow(&e.stats.PreWorkEndTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// e.stats.PreWorkSuccess = true
+	blog.Infof("executor: success to execute onRemoteFail from pid(%d)", e.req.Pid)
+	return r, nil
+}
+
 func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	blog.Infof("executor: try to execute post-task from pid(%d)", e.req.Pid)
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
@@ -238,7 +271,7 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		locallockweight = e.handler.LocalLockWeight(e.req.Commands)
 	}
 	if !e.lock(dcSDK.JobUsageLocalExe, locallockweight) {
-		blog.Infof("executor:failed to lock with local job usage(%s) weight %d", dcSDK.JobUsageLocalExe, locallockweight)
+		blog.Errorf("executor:failed to lock with local job usage(%s) weight %d", dcSDK.JobUsageLocalExe, locallockweight)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: -1,
