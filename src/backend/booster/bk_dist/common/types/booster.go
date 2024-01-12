@@ -127,6 +127,8 @@ type BoosterWorks struct {
 
 	IdleKeepSecs int
 
+	CleanTmpFilesDayAgo int
+
 	EnableLink bool
 	EnableLib  bool
 }

@@ -31,6 +31,10 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 )
 
+var (
+	DefaultForceLocalCppFileKeys = make([]string, 0, 0)
+)
+
 // TaskCC 定义了c/c++编译的描述处理对象
 type TaskCC struct {
 	tag     string
@@ -63,14 +67,20 @@ type TaskCC struct {
 	supportDirectives bool
 
 	pchFileDesc *dcSDK.FileDesc
+
+	ForceLocalCppFileKeys []string
 }
 
 // NewTaskCC get a new task-cc handler
 func NewTaskCC() (handler.Handler, error) {
+	key := make([]string, len(DefaultForceLocalCppFileKeys))
+	copy(key, DefaultForceLocalCppFileKeys)
+
 	return &TaskCC{
-		tag:         util.RandomString(5),
-		sandbox:     &dcSyscall.Sandbox{},
-		tmpFileList: make([]string, 0, 10),
+		tag:                   util.RandomString(5),
+		sandbox:               &dcSyscall.Sandbox{},
+		tmpFileList:           make([]string, 0, 10),
+		ForceLocalCppFileKeys: key,
 	}, nil
 }
 
@@ -181,6 +191,29 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		return nil, err
 	}
 	cc.ensuredArgs = args
+
+	// obtain force key set by booster
+	forcekeystr := cc.sandbox.Env.GetEnv(env.KeyExecutorForceLocalKeys)
+	if forcekeystr != "" {
+		blog.Infof("cc: got force local key string: %s", forcekeystr)
+		forcekeylist := strings.Split(forcekeystr, env.CommonBKEnvSepKey)
+		if len(forcekeylist) > 0 {
+			cc.ForceLocalCppFileKeys = append(cc.ForceLocalCppFileKeys, forcekeylist...)
+			blog.Infof("cc: ForceLocalCppFileKeys: %v", cc.ForceLocalCppFileKeys)
+		}
+	}
+
+	for _, v := range args {
+		if strings.HasSuffix(v, ".cpp") || strings.HasSuffix(v, ".c") {
+			for _, v1 := range cc.ForceLocalCppFileKeys {
+				if v1 != "" && strings.Contains(v, v1) {
+					blog.Warnf("cc: pre execute found %s is in force local list, do not deal now", v)
+					return nil, fmt.Errorf("arg %s is in force local cpp list", v)
+				}
+			}
+			break
+		}
+	}
 
 	if err = cc.preBuild(args); err != nil {
 		blog.Warnf("cc: [%s] pre execute pre-build %v: %v", cc.tag, args, err)

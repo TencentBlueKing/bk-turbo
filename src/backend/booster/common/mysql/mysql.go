@@ -26,6 +26,8 @@ type ListOptions struct {
 	lessThan    map[string]interface{}
 	like        map[string]interface{}
 	in          map[string]interface{}
+	rawWhere    []string
+	group       []string
 }
 
 // NewListOptions get a new, empty ListOptions.
@@ -74,6 +76,11 @@ func (lo *ListOptions) Select(selector []string) {
 	lo.selector = selector
 }
 
+// Group decide the group by keys.
+func (lo *ListOptions) Group(group []string) {
+	lo.group = group
+}
+
 // Order describe the order columns.
 func (lo *ListOptions) Order(order []string) {
 	lo.order = order
@@ -109,6 +116,11 @@ func (lo *ListOptions) In(key string, value interface{}) {
 	lo.in[key] = value
 }
 
+// RawWhere set raw where conditions.
+func (lo *ListOptions) RawWhere(r []string) {
+	lo.rawWhere = r
+}
+
 // AddWhere receive a database operator and register all the compare conditions into it with 'WHERE'.
 func (lo *ListOptions) AddWhere(db *gorm.DB) *gorm.DB {
 	for k, v := range lo.equal {
@@ -125,6 +137,9 @@ func (lo *ListOptions) AddWhere(db *gorm.DB) *gorm.DB {
 	}
 	for k, v := range lo.in {
 		db = db.Where(k+" in (?)", v)
+	}
+	for _, r := range lo.rawWhere {
+		db = db.Where(r)
 	}
 	return db
 }
@@ -155,6 +170,15 @@ func (lo *ListOptions) AddOrder(db *gorm.DB) *gorm.DB {
 		db = db.Order(o)
 	}
 	return db
+}
+
+// AddGroup add group by columns.
+func (lo *ListOptions) AddGroup(db *gorm.DB) *gorm.DB {
+	if lo.group == nil || len(lo.group) == 0 {
+		return db
+	}
+
+	return db.Group(strings.Join(lo.group, ","))
 }
 
 const (

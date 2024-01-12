@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -368,6 +369,72 @@ func DeleteGcc(req *restful.Request, resp *restful.Response) {
 	}
 
 	api.ReturnRest(&api.RestResponse{Resp: resp})
+}
+
+// Summary handle the http request for summary cpu used info.
+func Summary(req *restful.Request, resp *restful.Response) {
+	opts, err := getSummaryOptions(req)
+	if err != nil {
+		blog.Errorf("summary get options failed: %v", err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrInvalidParam, Message: err.Error()})
+		return
+	}
+
+	wsList, length, err := defaultMySQL.SummaryTaskRecords(opts)
+	if err != nil {
+		blog.Errorf("summary failed with opts(%v) error: %v", opts, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrSummaryFailed,
+			Message: err.Error()})
+		return
+	}
+
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: wsList, Extra: map[string]interface{}{"length": length}})
+}
+
+func validTimeString(s string) (time.Time, error) {
+	layout := "2006-01-02"
+	return time.Parse(layout, s)
+}
+
+func getSummaryOptions(req *restful.Request) (commonMySQL.ListOptions, error) {
+	opts := commonMySQL.NewListOptions()
+
+	value := req.Request.URL.Query()
+
+	day := value.Get(api.QueryDate)
+	t, err := validTimeString(day)
+	if err != nil {
+		blog.Warnf("get summary option failed %v", err)
+		return opts, err
+	}
+
+	// set start time
+	opts.Gt("create_time", t.Unix())
+
+	// raw where
+	opts.RawWhere([]string{"end_time > start_time"})
+
+	// set end time
+	opts.Lt("create_time", t.Unix()+3600*24)
+	opts.Lt("end_time-start_time", 6*3600)
+
+	// set selectors
+	selectors := []string{
+		fmt.Sprintf("\"%s\" as %s", day, api.QueryDate),
+		api.QueryProjectIDKey,
+		"sum((end_time-start_time)) as total_time",
+		"sum((end_time-start_time)*cpu_total) as total_time_with_cpu",
+		"count(1) as total_record_number",
+	}
+	opts.Select(selectors)
+
+	// set groups
+	groups := []string{
+		api.QueryProjectIDKey,
+	}
+	opts.Group(groups)
+
+	return opts, nil
 }
 
 func getListOptions(req *restful.Request, resource string) (commonMySQL.ListOptions, error) {
