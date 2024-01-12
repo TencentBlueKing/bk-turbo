@@ -325,8 +325,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		//inherit the instance model if exist
 		cpuPerInstance, memPerInstance, cpuPerInstanceOffset, memPerInstanceOffset := nip.getNodeInstance(key)
 		newBlock.AvailableInstance += NodeInfo.figureAvailableInstanceFromFree(
-			cpuPerInstance-cpuPerInstanceOffset,
-			memPerInstance-memPerInstanceOffset,
+			cpuPerInstance,
+			memPerInstance,
 			nip.diskPerInstance,
 		)
 		newBlock.CPUPerInstance = cpuPerInstance

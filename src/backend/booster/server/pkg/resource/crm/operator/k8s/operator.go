@@ -234,6 +234,20 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 		dl, _ := node.Labels[disableLabel]
 		disabled := dl == "true"
 
+		//通过offset矫正集群中的资源
+		memTotal := float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024
+		cpuTotal := float64(node.Status.Capacity.Cpu().Value())
+		memUsed := float64(allocatedResource.Memory().Value()) / 1024 / 1024
+		cpuUsed := float64(allocatedResource.Cpu().Value())
+		for _, ist := range o.conf.InstanceType {
+			if ist.Group == node.Labels[o.cityLabelKey] && ist.Platform == node.Labels[o.platformLabelKey] {
+				cpuTotal = cpuTotal / (ist.CPUPerInstance - ist.CPUPerInstanceOffset) * ist.CPUPerInstance
+				cpuUsed = cpuUsed / (ist.CPUPerInstance - ist.CPUPerInstanceOffset) * ist.CPUPerInstance
+				memTotal = memTotal / (ist.MemPerInstance - ist.MemPerInstanceOffset) * ist.MemPerInstance
+				memUsed = memUsed / (ist.MemPerInstance - ist.MemPerInstanceOffset) * ist.MemPerInstance
+				break
+			}
+		}
 		// use city-label-key value and platform-label-key to overwrite the city and platform
 		node.Labels[op.AttributeKeyCity], _ = node.Labels[o.cityLabelKey]
 		node.Labels[op.AttributeKeyPlatform], _ = node.Labels[o.platformLabelKey]
@@ -241,11 +255,11 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 			IP:         ip,
 			Hostname:   node.Name,
 			DiskTotal:  float64(node.Status.Capacity.StorageEphemeral().Value()),
-			MemTotal:   float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024,
-			CPUTotal:   float64(node.Status.Capacity.Cpu().Value()),
+			MemTotal:   memTotal,
+			CPUTotal:   cpuTotal,
 			DiskUsed:   float64(allocatedResource.StorageEphemeral().Value()),
-			MemUsed:    float64(allocatedResource.Memory().Value()) / 1024 / 1024,
-			CPUUsed:    float64(allocatedResource.Cpu().Value()),
+			MemUsed:    memUsed,
+			CPUUsed:    cpuUsed,
 			Attributes: node.Labels,
 
 			Disabled: disabled,
@@ -409,13 +423,12 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			return nodeInfoList, err
 		}
 		totalIst := float64(result.Data.Total)
-		varCPU, varMem := getCPUAndMemIst(ist)
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			DiskLeft: totalIst,
-			CPULeft:  totalIst * varCPU,
-			MemLeft:  totalIst * varMem,
+			CPULeft:  totalIst * ist.CPUPerInstance,
+			MemLeft:  totalIst * ist.MemPerInstance,
 			Attributes: map[string]string{
 				op.AttributeKeyPlatform: ist.Platform,
 				op.AttributeKeyCity:     ist.Group,
