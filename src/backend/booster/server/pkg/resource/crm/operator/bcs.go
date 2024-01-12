@@ -163,7 +163,7 @@ func NewNodeInfoPool(conf *config.ContainerResourceConfig) *NodeInfoPool {
 		if istItem.CPUPerInstanceOffset > 0.0 && istItem.CPUPerInstanceOffset < istItem.CPUPerInstance {
 			newBlock.CPUPerInstanceOffset = istItem.CPUPerInstanceOffset
 		}
-		if istItem.MemPerInstanceOffset > 0.0 && istItem.CPUPerInstanceOffset < istItem.MemPerInstance {
+		if istItem.MemPerInstanceOffset > 0.0 && istItem.MemPerInstanceOffset < istItem.MemPerInstance {
 			newBlock.MemPerInstanceOffset = istItem.MemPerInstanceOffset
 		}
 		nip.nodeBlockMap[key] = &newBlock
