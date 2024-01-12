@@ -234,17 +234,28 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 		dl, _ := node.Labels[disableLabel]
 		disabled := dl == "true"
 
-		//通过offset矫正集群中的资源
 		memTotal := float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024
 		cpuTotal := float64(node.Status.Capacity.Cpu().Value())
 		memUsed := float64(allocatedResource.Memory().Value()) / 1024 / 1024
 		cpuUsed := float64(allocatedResource.Cpu().Value())
+		diskUsed := float64(allocatedResource.StorageEphemeral().Value())
+		diskTotal := float64(node.Status.Capacity.StorageEphemeral().Value())
 		for _, ist := range o.conf.InstanceType {
 			if ist.Group == node.Labels[o.cityLabelKey] && ist.Platform == node.Labels[o.platformLabelKey] {
-				cpuTotal = cpuTotal / (ist.CPUPerInstance - ist.CPUPerInstanceOffset) * ist.CPUPerInstance
-				cpuUsed = cpuUsed / (ist.CPUPerInstance - ist.CPUPerInstanceOffset) * ist.CPUPerInstance
-				memTotal = memTotal / (ist.MemPerInstance - ist.MemPerInstanceOffset) * ist.MemPerInstance
-				memUsed = memUsed / (ist.MemPerInstance - ist.MemPerInstanceOffset) * ist.MemPerInstance
+				if ist.CPUPerInstanceOffset > 0.0 || ist.MemPerInstanceOffset > 0.0 {
+					//通过offset计算实际可用的instance数量，并矫正cpu和内存总量
+					n := op.NodeInfo{
+						MemTotal:  memTotal,
+						CPUTotal:  cpuTotal,
+						MemUsed:   memUsed,
+						CPUUsed:   cpuUsed,
+						DiskTotal: diskTotal,
+						DiskUsed:  diskUsed,
+					}
+					availableNum := n.FigureAvailableInstanceFromFree(ist.CPUPerInstance-ist.CPUPerInstanceOffset, ist.MemPerInstance-ist.MemPerInstanceOffset, 1)
+					cpuTotal = cpuUsed + float64(availableNum)*ist.CPUPerInstance
+					memTotal = memUsed + float64(availableNum)*ist.MemPerInstance
+				}
 				break
 			}
 		}
@@ -254,15 +265,14 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:         ip,
 			Hostname:   node.Name,
-			DiskTotal:  float64(node.Status.Capacity.StorageEphemeral().Value()),
+			DiskTotal:  diskTotal,
 			MemTotal:   memTotal,
 			CPUTotal:   cpuTotal,
-			DiskUsed:   float64(allocatedResource.StorageEphemeral().Value()),
+			DiskUsed:   diskUsed,
 			MemUsed:    memUsed,
 			CPUUsed:    cpuUsed,
 			Attributes: node.Labels,
-
-			Disabled: disabled,
+			Disabled:   disabled,
 		})
 	}
 

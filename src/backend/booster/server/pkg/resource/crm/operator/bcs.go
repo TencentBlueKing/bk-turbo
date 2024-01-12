@@ -104,7 +104,7 @@ type NodeInfo struct {
 	Disabled bool
 }
 
-func (ni *NodeInfo) figureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
+func (ni *NodeInfo) FigureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
 	if cpuPerInstance == 0 || memPerInstance == 0 || diskPerInstance == 0 {
 		return 0
 	}
@@ -324,7 +324,7 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		newBlock.CPULeft += NodeInfo.CPULeft
 		//inherit the instance model if exist
 		cpuPerInstance, memPerInstance, cpuPerInstanceOffset, memPerInstanceOffset := nip.getNodeInstance(key)
-		newBlock.AvailableInstance += NodeInfo.figureAvailableInstanceFromFree(
+		newBlock.AvailableInstance += NodeInfo.FigureAvailableInstanceFromFree(
 			cpuPerInstance,
 			memPerInstance,
 			nip.diskPerInstance,
