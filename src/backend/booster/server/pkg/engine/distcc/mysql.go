@@ -49,6 +49,8 @@ type MySQL interface {
 	PutGcc(gcc *TableGcc) error
 	UpdateGcc(gccVersion string, gcc map[string]interface{}) error
 	DeleteGcc(gccVersion string) error
+
+	SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error)
 }
 
 // NewMySQL get new mysql instance with connected orm operator.
@@ -670,10 +672,45 @@ func (m *mysql) DeleteGcc(gccVersion string) error {
 	return nil
 }
 
+// SummaryTaskRecords summary task records.
+func (m *mysql) SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error) {
+	defer timeMetricRecord("summary_task_records")()
+
+	var tl []*SummaryResult
+	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
+	db := m.db.Table("task_records").Where("disabled = ?", false)
+
+	var length int64
+	// if err := db.Count(&length).Error; err != nil {
+	// 	blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+	// 	return nil, 0, err
+	// }
+
+	db = opts.AddSelector(db)
+	db = opts.AddWhere(db)
+	db = opts.AddGroup(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	return tl, length, nil
+}
+
 // CombinedProject generate project_settings and project_records
 type CombinedProject struct {
 	*TableProjectSetting
 	*TableProjectInfo
+}
+
+// SummaryResult generate summary data
+type SummaryResult struct {
+	Day               string  `json:"day"`
+	ProjectID         string  `json:"project_id"`
+	TotalTime         float64 `json:"total_time"`
+	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
+	TotalRecordNumber int     `json:"total_record_number"`
 }
 
 func timeMetricRecord(operation string) func() {

@@ -107,6 +107,7 @@ const (
 	FlagUseDefaultWorker     = "use_default_worker"
 	FlagDynamicPort          = "dynamic_port"
 	FlagWorkerOfferSlot      = "worker_offer_slot"
+	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -451,6 +452,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "worker_offer_slot",
 			Usage: "controller will get remote slot by worker offer",
+		},
+		commandCli.IntFlag{
+			Name:  "clean_tmp_files_day_ago",
+			Usage: "clean tmp files which modify time before this days, default is 1",
 		},
 	}
 )

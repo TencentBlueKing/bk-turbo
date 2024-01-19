@@ -113,6 +113,7 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
 		return nil
 	})
+	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkReceiveEndTime)
 
 	if ret.Err != nil {
 		r.recordStats.RemoteWorkFatal = true
@@ -128,7 +129,7 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 	r.updateJobStatsFunc()
 	// decode data to result
 	data, err := decodeCommonDispatchRspLongTCP(ret.Data, savefile, r.sandbox)
-	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkReceiveEndTime)
+	// dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkReceiveEndTime)
 	r.recordStatsFromDispatchResp(data, server)
 
 	if err != nil {

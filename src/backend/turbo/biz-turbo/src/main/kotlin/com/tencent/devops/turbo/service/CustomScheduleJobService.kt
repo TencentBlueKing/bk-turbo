@@ -9,14 +9,17 @@ import org.quartz.JobBuilder
 import org.quartz.JobDataMap
 import org.quartz.JobKey
 import org.quartz.Scheduler
+import org.quartz.SchedulerException
 import org.quartz.TriggerBuilder
 import org.quartz.TriggerKey
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.scheduling.quartz.SchedulerFactoryBean
 import org.springframework.stereotype.Service
 
 @Service
 class CustomScheduleJobService @Autowired constructor(
+    private val schedulerFactoryBean: SchedulerFactoryBean,
     private val scheduler: Scheduler
 ) {
     companion object {
@@ -61,7 +64,7 @@ class CustomScheduleJobService @Autowired constructor(
         val triggerKey = TriggerKey.triggerKey(triggerName, triggerGroup)
         try {
             scheduler.scheduleJob(jobDetail, trigger)
-        } catch (e: Exception) {
+        } catch (e: SchedulerException) {
             logger.warn("schedule $triggerName job fail with scheduler exception!")
             trigger = trigger.triggerBuilder.withIdentity(triggerKey).withSchedule(
                 CronScheduleBuilder.cronSchedule(cronExpression)
@@ -76,15 +79,34 @@ class CustomScheduleJobService @Autowired constructor(
     }
 
     /**
+     *  删除自定义计划任务
+     */
+    fun customScheduledJobDel(jobName: String): Boolean {
+        logger.info("delete job $jobName")
+        val jobKey = JobKey.jobKey(jobName, jobGroup)
+        try {
+            scheduler.deleteJob(jobKey)
+        } catch (e: SchedulerException) {
+            logger.warn("delete $jobName job fail with scheduler exception!")
+            return false
+        } catch (e: Exception) {
+            logger.error("delete $jobName job fail with exception!")
+            return false
+        }
+        return true
+    }
+
+    /**
      * 触发job立即执行
      */
-    fun trigger(jobName: String): String? {
+    fun trigger(jobName: String): String {
         return try {
+            val defaultScheduler = schedulerFactoryBean.scheduler
             val jobKey = JobKey.jobKey(jobName, jobGroup)
-            scheduler.triggerJob(jobKey)
-            "trigger job [] successfully"
+            defaultScheduler.triggerJob(jobKey)
+            "trigger job [$jobName] successfully"
         } catch (e: Exception) {
-            e.message
+            e.message.toString()
         }
     }
 }

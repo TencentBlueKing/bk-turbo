@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -216,6 +217,28 @@ func cleanDirByTime(dir string, limitsize int64) {
 		blog.Infof("booster: ready remove file:%s", fullpath)
 		os.Remove(fullpath)
 		totalsize -= fi.Size()
+	}
+}
+
+func cleanDirOnlyByTime(dir string, t time.Time) {
+	f, err := os.Open(dir)
+	if err != nil {
+		blog.Warnf("booster: failed to open dir %s with error:%v", dir, err)
+		return
+	}
+	fis, _ := f.Readdir(-1)
+	f.Close()
+	sort.Sort(ByModTime(fis))
+
+	blog.Infof("booster: dir %s time:%s", dir, t)
+	fullpath := ""
+	for _, fi := range fis {
+		if fi.ModTime().After(t) {
+			break
+		}
+		fullpath = filepath.Join(dir, fi.Name())
+		blog.Infof("booster: ready remove file:%s modify time:%s", fullpath, fi.ModTime())
+		os.RemoveAll(fullpath)
 	}
 }
 

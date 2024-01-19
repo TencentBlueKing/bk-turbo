@@ -242,6 +242,11 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		withDynamicPort = false
 	}
 
+	cleanTmpFilesDayAgo := 1
+	if c.IsSet(FlagCleanTmpFilesDayAgo) && c.Int(FlagCleanTmpFilesDayAgo) >= 0 {
+		cleanTmpFilesDayAgo = c.Int(FlagCleanTmpFilesDayAgo)
+	}
+
 	// generate a new booster.
 	cmdConfig := dcType.BoosterConfig{
 		Type:      dcType.GetBoosterType(bt),
@@ -308,6 +313,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			NoWork:               c.Bool(FlagNoWork),
 			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),
 			IdleKeepSecs:         c.Int(FlagIdleKeepSecs),
+			CleanTmpFilesDayAgo:  cleanTmpFilesDayAgo,
 		},
 
 		Transport: dcType.BoosterTransport{
