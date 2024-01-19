@@ -10,6 +10,7 @@
 package disttask
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -522,10 +523,76 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 	}
 
 	if matchDirectResource(queueName) {
+		// TODO : deal with p2p
+		if containsP2P(task.InheritSetting.QueueName) {
+			return de.launchDirectP2PTask(task, tb, queueName)
+		}
 		return de.launchDirectTask(task, tb, queueName)
 	}
 
 	return de.launchCRMTask(task, tb, queueName)
+}
+
+func (de *disttaskEngine) launchDirectP2PTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
+	blog.Infof("engine(%s) ready to launch direct p2p task(%s)", EngineName, tb.ID)
+
+	condition := &resourceCondition{
+		queueName: getQueueNamePure(queueName),
+		leastCPU:  task.InheritSetting.LeastCPU,
+		maxCPU:    task.InheritSetting.RequestCPU,
+	}
+
+	// TODO : resourceSelector 需要改为 p2p 定制的，之前的选择条件不能满足p2p的场景
+	resourceList, err := de.directMgr.GetFreeP2PResource(tb.ID, condition, p2pResourceSelector, nil)
+	// add task into public queue
+	if err == engine.ErrorNoEnoughResources {
+		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
+			de.canGiveToPublicQueue(queueName) {
+			publicQueue.Add(tb)
+		}
+		return err
+	}
+	if err != nil {
+		blog.Errorf("engine(%s) try consuming direct p2p resource, get free resource(%+v) failed: %v",
+			EngineName, condition, err)
+		return err
+	}
+
+	blog.Infof("engine(%s) success to consume resource for direct p2p task(%s)", EngineName, tb.ID)
+
+	// TODO : save worker list to task as succeed
+	workerList := make([]taskWorker, 0, 100)
+	var cpuTotal, memTotal float64 = 0, 0
+	for _, r := range resourceList {
+		message, _ := json.Marshal(r.Base.Labels)
+		workerList = append(workerList, taskWorker{
+			CPU:       r.Resource.CPU,
+			Mem:       r.Resource.Mem,
+			IP:        r.Base.IP,
+			Port:      r.Base.Port,
+			StatsPort: workerDirectStatsPort,
+			Message:   string(message),
+		})
+
+		cpuTotal += r.Resource.CPU
+		memTotal += r.Resource.Mem
+	}
+
+	task.Workers = workerList
+	task.Stats.WorkerCount = len(task.Workers)
+
+	task.Stats.CPUTotal = cpuTotal
+	task.Stats.MemTotal = memTotal
+
+	blog.Infof("direct p2p task(%s) now has workers(%d),CPU(%f),Mem(%f)", task.ID, task.Stats.WorkerCount, cpuTotal, memTotal)
+	if err = de.updateTask(task); err != nil {
+		blog.Errorf("engine(%s) update direct p2p task(%s) failed: %v",
+			EngineName, task.ID, err)
+		return err
+	}
+
+	blog.Infof("engine(%s) success to launch direct p2p task(%s)", EngineName, tb.ID)
+	return nil
 }
 
 func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
@@ -701,6 +768,10 @@ func (de *disttaskEngine) launchDone(taskID string) (bool, error) {
 	}
 
 	if matchDirectResource(task.InheritSetting.QueueName) {
+		// TODO : deal with p2p
+		if containsP2P(task.InheritSetting.QueueName) {
+			return true, nil
+		}
 		return de.launchDirectDone(task)
 	}
 
@@ -903,6 +974,10 @@ func (de *disttaskEngine) releaseTask(taskID string) error {
 	}
 
 	if matchDirectResource(task.InheritSetting.QueueName) {
+		// TODO : deal with p2p
+		if containsP2P(task.InheritSetting.QueueName) {
+			return nil
+		}
 		return de.releaseDirectTask(task)
 	}
 
@@ -1298,6 +1373,10 @@ func matchDirectResource(queueName string) bool {
 	}
 }
 
+func containsP2P(queueName string) bool {
+	return strings.Contains(queueName, "p2p")
+}
+
 func getDirectLaunchCommand(queueName string) string {
 	switch getQueueNameHeader(queueName) {
 	case queueNameHeaderDirectWin:
@@ -1394,6 +1473,52 @@ func resourceSelector(
 		if cpuTotal >= c.maxCPU {
 			break
 		}
+
+		if agent.Base.Cluster != c.queueName {
+			continue
+		}
+
+		if agent.Resource.CPU <= 0 {
+			continue
+		}
+
+		cpuTotal += agent.Resource.CPU
+		r = append(r, agent)
+		blog.Debugf("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
+			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)
+	}
+
+	if cpuTotal < c.leastCPU {
+		return nil, engine.ErrorNoEnoughResources
+	}
+
+	return r, nil
+}
+
+func p2pResourceSelector(
+	freeAgent []*respack.AgentResourceExternal,
+	condition interface{}) ([]*respack.AgentResourceExternal, error) {
+	if freeAgent == nil || len(freeAgent) == 0 {
+		return nil, engine.ErrorNoEnoughResources
+	}
+
+	c, ok := condition.(*resourceCondition)
+	if !ok {
+		blog.Errorf("engine(%s) get resource condition type error", EngineName)
+		return nil, engine.ErrorInnerEngineError
+	}
+
+	blog.Infof("engine(%s) ready take free resource with condition [%+v] queue[%s], len(free)[%d]",
+		EngineName, condition, c.queueName, len(freeAgent))
+
+	var cpuTotal float64 = 0
+	r := make([]*respack.AgentResourceExternal, 0, 100)
+	for _, agent := range freeAgent {
+		blog.Debugf("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
+			"current cpu(%.2f) with queue(%s)",
+			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.queueName)
+
+		// TODO : 返回全部可用列表，后续看怎么优化
 
 		if agent.Base.Cluster != c.queueName {
 			continue

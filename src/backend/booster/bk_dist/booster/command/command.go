@@ -106,6 +106,7 @@ const (
 	FlagLongTCP              = "long_tcp"
 	FlagUseDefaultWorker     = "use_default_worker"
 	FlagDynamicPort          = "dynamic_port"
+	FlagWorkerOfferSlot      = "worker_offer_slot"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -446,6 +447,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "dynamic_port",
 			Usage: "controller will listen dynamic port if true",
+		},
+		commandCli.BoolFlag{
+			Name:  "worker_offer_slot",
+			Usage: "controller will get remote slot by worker offer",
 		},
 	}
 )

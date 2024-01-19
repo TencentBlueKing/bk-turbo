@@ -781,6 +781,16 @@ func (cl *TaskCL) isPumpActionNumSatisfied() (bool, error) {
 	return int32(curbatchsize) > minnum, nil
 }
 
+func (cl *TaskCL) workerSupportAbsPath() bool {
+	v := cl.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
 func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("cl: start pre execute for: %v", command)
 
@@ -789,7 +799,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) {
+	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) && cl.workerSupportAbsPath() {
 		if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
 			req, err, notifyerr := cl.trypump(command)
 			if err != nil {

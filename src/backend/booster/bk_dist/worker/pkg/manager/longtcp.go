@@ -88,6 +88,10 @@ func (o *tcpManager) onRemoteTaskLongTCP(
 		return err
 	}
 
+	if o.conf.OfferSlot {
+		go o.onTaskReceived(s.IP())
+	}
+
 	curcmd := buffedcmd{
 		client:       nil,
 		head:         head,
@@ -162,6 +166,10 @@ func (o *tcpManager) onSendFileCmdLongTCP(
 	}
 
 	debug.FreeOSMemory() // free memory anyway
+
+	if o.conf.OfferSlot {
+		go o.onFileReceived(s.IP())
+	}
 
 	handler := pbcmd.GetHandler(head.GetCmdtype())
 	if handler == nil {

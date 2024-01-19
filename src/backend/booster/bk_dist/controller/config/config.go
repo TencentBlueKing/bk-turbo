@@ -55,6 +55,8 @@ type ServerConfig struct {
 	UseDefaultWorker bool `json:"use_default_worker" value:"true" usage:"if true, controller will use first worker available"`
 
 	DynamicPort bool `json:"dynamic_port" value:"false" usage:"if true, controller will listen dynamic port"`
+
+	WorkerOfferSlot bool `json:"worker_offer_slot" value:"false" usage:"if true, controller will get remote slot by worker offer"`
 }
 
 // CertConfig  configuration of Cert

@@ -48,6 +48,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/denisbrodbeck/machineid v1.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/frankban/quicktest v1.13.1 // indirect
 	github.com/go-logr/logr v0.4.0 // indirect

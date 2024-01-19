@@ -45,6 +45,13 @@ type HandleWithUser interface {
 	ExecuteCommand(ip string, resBatchID string, cmd *Command) error
 	// 返回资源id关联的command列表
 	ListCommands(resBatchID string) ([]*CommandResultInfo, error)
+
+	// p2p资源不是独占的，逻辑不一样
+	GetFreeP2PResource(
+		resBatchID string,
+		condition interface{},
+		callbackSelector CallBackSelector,
+		callback4UsedRes CallBack4Command) ([]*AgentResourceExternal, error)
 }
 
 // CmdType : cmd type

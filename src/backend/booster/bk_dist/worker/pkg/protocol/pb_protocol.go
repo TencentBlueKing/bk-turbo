@@ -1086,3 +1086,104 @@ func ReceiveUnknown(client *TCPClient,
 
 	return nil
 }
+
+// ReceiveBKQuerySlot to receive pb command body for query slot
+func ReceiveBKQuerySlot(client *TCPClient,
+	head *protocol.PBHead) (*protocol.PBBodyQuerySlotReq, error) {
+	blog.Debugf("receive send file body now")
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 || buflen > 0 {
+		err := fmt.Errorf("get invalid body length %d, buf len %d", bodylen, buflen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with err:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodyQuerySlotReq{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+	} else {
+		blog.Debugf("succeed to decode pbbody")
+	}
+
+	return &body, nil
+}
+
+// EncodeBKQuerySlotRsp encode time to Messages
+func EncodeBKQuerySlotRsp(availableslotnum int32, refused int32, message string) ([]protocol.Message, error) {
+	blog.Debugf("encode query slot request to message now")
+
+	// encode body and file to message
+	pbbody := protocol.PBBodyQuerySlotRsp{
+		Availableslotnum: &availableslotnum,
+		Refused:          &refused,
+		Message:          &message,
+	}
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody for error: %v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Infof("encode body to size %d", bodylen)
+
+	// encode head
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_QUERYSLOTRSP
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with err:%v", err)
+		return nil, err
+	}
+	blog.Infof("encode head to size %d", pbhead.XXX_Size())
+
+	headtokendata, err := formatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with err:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}

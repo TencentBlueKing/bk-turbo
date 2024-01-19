@@ -144,6 +144,7 @@ type ControllerConfig struct {
 	EnableLib           bool
 	LongTCP             bool
 	UseDefaultWorker    bool
+	WorkerOfferSlot     bool
 }
 
 // Target return the server ip and port of controller

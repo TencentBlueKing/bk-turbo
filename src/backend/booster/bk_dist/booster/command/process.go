@@ -355,6 +355,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			LongTCP:             c.Bool(FlagLongTCP),
 			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
 			DynamicPort:         withDynamicPort,
+			WorkerOfferSlot:     c.Bool(FlagWorkerOfferSlot),
 		},
 	}
 

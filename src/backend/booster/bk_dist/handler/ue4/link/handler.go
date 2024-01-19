@@ -12,6 +12,7 @@ package link
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -163,8 +164,23 @@ func (l *TaskLink) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (l *TaskLink) workerSupportAbsPath() bool {
+	v := l.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
 func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("link: start pre execute for: %v", command)
+
+	if !l.workerSupportAbsPath() {
+		blog.Infof("link: remote worker do not support absolute path")
+		return nil, fmt.Errorf("remote worker do not support absolute path")
+	}
 
 	l.originArgs = command
 	responseFile, args, err := ensureCompiler(command)

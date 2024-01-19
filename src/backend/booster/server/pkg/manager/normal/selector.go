@@ -11,6 +11,7 @@ package normal
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -40,6 +41,7 @@ type selector struct {
 	layer         TaskBasicLayer
 	queueInfoList []engine.QueueBriefInfo
 	queueChanMap  map[engine.QueueBriefInfo]chan bool
+	queueLock     sync.RWMutex
 	mgr           *manager
 }
 
@@ -59,6 +61,7 @@ func (s *selector) start() {
 		s.queueChanMap[info] = c
 	}
 
+	s.queueLock.Lock()
 	// start pickers
 	for _, info := range s.queueInfoList {
 		for k, v := range s.queueChanMap {
@@ -68,6 +71,7 @@ func (s *selector) start() {
 			}
 		}
 	}
+	s.queueLock.Unlock()
 
 	for {
 		select {
@@ -80,13 +84,39 @@ func (s *selector) start() {
 
 func (s *selector) OnTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatusType) error {
 	blog.Infof("selector: ready notify to task(%s) engine(%s) queue(%s)", tb.ID, tb.Client.EngineName, tb.Client.QueueName)
+
+	isNewQueue := true
 	for k, v := range s.queueChanMap {
 		if k.QueueName == tb.Client.QueueName && k.EngineName == tb.Client.EngineName {
 			blog.Infof("selector: send notify to task(%s) engine(%s) queue(%s)", tb.ID, tb.Client.EngineName, tb.Client.QueueName)
 			v <- true
+			isNewQueue = false
 			break
 		}
 	}
+
+	if isNewQueue {
+		// add to queue with lock
+		info := engine.QueueBriefInfo{
+			QueueName:  tb.Client.QueueName,
+			EngineName: tb.Client.EngineName,
+		}
+		c := make(chan bool, 100)
+
+		s.queueLock.Lock()
+		s.queueChanMap[info] = c
+		s.queueLock.Unlock()
+
+		// start this go routine
+		blog.Infof("selector: ready start picker for new engine(%s) queue(%s)", tb.Client.EngineName, tb.Client.QueueName)
+		go s.picker(info, c)
+
+		// sleep and notify
+		// it may be fail to notify here, but the picker timer will recover this
+		time.Sleep(1 * time.Second)
+		c <- true
+	}
+
 	return nil
 }
 

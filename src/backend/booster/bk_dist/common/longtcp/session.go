@@ -717,6 +717,10 @@ func (s *Session) Size() int64 {
 	return atomic.LoadInt64(&s.requestNum)
 }
 
+func (s *Session) IP() string {
+	return s.ip
+}
+
 // ----------------------------------------------------
 // 用于客户端的session pool
 type ClientSessionPool struct {

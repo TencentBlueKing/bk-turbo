@@ -560,3 +560,81 @@ func (r *CommonRemoteHandler) ExecuteCheckCache(
 
 	return result, nil
 }
+
+// ExecuteQuerySlot obtain available slot from remote worker
+// timeout参数单独设置，这个地方比较特殊
+// TODO : 返回 tcp connection，方便业务在需要时关闭该连接
+func (r *CommonRemoteHandler) ExecuteQuerySlot(
+	server *dcProtocol.Host,
+	req *dcSDK.BKQuerySlot,
+	c chan *dcSDK.BKQuerySlotResult,
+	timeout int) (*net.TCPConn, error) {
+	blog.Debugf("start query slot to worker %s", server)
+
+	// record the exit status.
+	t := time.Now().Local()
+	client := NewTCPClient(timeout)
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
+		blog.Warnf("query slot error: %v", err)
+		return nil, err
+	}
+	d := time.Now().Sub(t)
+	if d > 200*time.Millisecond {
+		blog.Debugf("TCP Connect to long to server(%s): %s", server.Server, d.String())
+	}
+
+	messages, err := encodeQuerySlotReq(req)
+	if err != nil {
+		blog.Warnf("query slot error: %v", err)
+		_ = client.Close()
+		return nil, err
+	}
+
+	err = sendMessages(client, messages)
+	if err != nil {
+		blog.Warnf("query slot error: %v", err)
+		_ = client.Close()
+		return nil, err
+	}
+
+	blog.Debugf("query slot success sent to worker %s", server)
+
+	// receive result
+	go func() error {
+		for {
+			data, err := receiveQuerySlotRsp(client)
+			dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
+
+			if err != nil {
+				blog.Warnf("query slot error: %v", err)
+				c <- &dcSDK.BKQuerySlotResult{
+					Host:             server,
+					Priority:         req.Priority,
+					AvailableSlotNum: -1,
+					Refused:          0,
+					Message:          err.Error(),
+				}
+				return err
+			}
+
+			result, err := decodeQuerySlotRsp(data)
+			if err != nil {
+				blog.Warnf("query slot error: %v", err)
+				c <- &dcSDK.BKQuerySlotResult{
+					Host:             server,
+					Priority:         req.Priority,
+					AvailableSlotNum: -1,
+					Refused:          0,
+					Message:          err.Error(),
+				}
+				return err
+			}
+
+			result.Host = server
+			result.Priority = req.Priority
+			c <- result
+		}
+	}()
+
+	return client.conn, nil
+}

@@ -78,6 +78,7 @@ type ApplyParameters struct {
 	ControllerEnableLink          bool              `json:"controller_enable_link" value:"false" usage:"if true, controller will enable dist link"`
 	ControllerEnableLib           bool              `json:"controller_enable_lib" value:"false" usage:"if true, controller will enable dist lib"`
 	ControllerLongTCP             bool              `json:"controller_long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
+	ControllerWorkerOfferSlot     bool              `json:"controller_worker_offer_slot" value:"false" usage:"if true, controller will get slot by worker offer"`
 	LimitPerWorker                int               `json:"limit_per_worker"`
 	MaxLocalTotalJobs             int               `json:"max_Local_total_jobs"`
 	MaxLocalPreJobs               int               `json:"max_Local_pre_jobs"`

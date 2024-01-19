@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denisbrodbeck/machineid"
+
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -31,6 +33,8 @@ import (
 	"github.com/shirou/gopsutil/process"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
+
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 )
 
 // define vars
@@ -89,6 +93,27 @@ func GetIPAddress() (addrList []string) {
 		}
 	}
 	return addrList
+}
+
+// IsLocalIP check whether ip is local
+func IsLocalIP(ip net.IP) bool {
+	if classA.Contains(ip) {
+		return true
+	}
+	if classA1.Contains(ip) {
+		return true
+	}
+	if classAa.Contains(ip) {
+		return true
+	}
+	if classB.Contains(ip) {
+		return true
+	}
+	if classC.Contains(ip) {
+		return true
+	}
+
+	return false
 }
 
 // GetHomeDir get home dir by system env
@@ -420,4 +445,20 @@ func QuoteSpacePath(s string) string {
 	}
 
 	return "\"" + s + "\""
+}
+
+func UniqID() string {
+	id, err := machineid.ID()
+	if err == nil {
+		return id
+	}
+
+	ips := GetIPAddress()
+	if len(ips) > 0 {
+		return ips[0]
+	}
+
+	return fmt.Sprintf("uniq_%s_%d",
+		commonUtil.RandomString(5),
+		time.Now().Local().UnixNano())
 }

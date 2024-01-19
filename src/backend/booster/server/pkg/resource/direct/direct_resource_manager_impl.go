@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
@@ -287,6 +289,37 @@ func (d *directResourceManager) getFreeResource(
 	return res, nil
 }
 
+func (d *directResourceManager) getFreeP2PResource(
+	userID string, resBatchID string, condition interface{},
+	callbackSelector CallBackSelector, callBack4Command CallBack4Command) ([]*AgentResourceExternal, error) {
+	blog.Infof("drm: getFreeP2PResource with userID[%s] resBatchID[%s] condition[%+v]",
+		userID, resBatchID, condition)
+
+	d.resourceLock.Lock()
+	defer d.resourceLock.Unlock()
+
+	allfreeres, err := d.getAllFreeResource(userID)
+	if err != nil {
+		blog.Errorf("drm: failed to getAllFreeResource with userID(%s) for [%v]", userID, err)
+		return nil, err
+	}
+
+	res, err := callbackSelector(allfreeres, condition)
+	if err != nil {
+		blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
+		return nil, err
+	}
+
+	if res == nil {
+		err := fmt.Errorf("failed to get enought resource for user[%s]", userID)
+		return nil, err
+	}
+
+	blog.Infof("drm: getFreeP2PResource with userID[%s] resBatchID[%s] condition[%+v] res[%+v]",
+		userID, resBatchID, condition, res)
+	return res, nil
+}
+
 // releaseResource : 通知agent释放worker；清除占用记录；清除回调记录
 func (d *directResourceManager) releaseResource(userID string, resBatchID string) error {
 	blog.Infof("drm: releaseResource with userID[%s] resBatchID[%s]", userID, resBatchID)
@@ -505,8 +538,27 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 	return ress, nil
 }
 
-func (d *directResourceManager) onResourceReport(resource *ReportAgentResource) error {
-	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s]...", resource.Base.Cluster, resource.Base.IP)
+func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, remoteip string) error {
+	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s] remote ip[%s]...", resource.Base.Cluster, resource.Base.IP, remoteip)
+
+	specifiedIPByUser := false
+	if v, ok := resource.Base.Labels[commonTypes.LabelKeyP2PSpecifiedIP]; ok {
+		blog.Infof("drm: onResourceReport specified ip value is:%s", v)
+		b, err := strconv.ParseBool(v)
+		if err == nil && b {
+			specifiedIPByUser = true
+		}
+	}
+
+	if !specifiedIPByUser && remoteip != "" && remoteip != resource.Base.IP {
+		blog.Infof("drm: ready update cluster[%s] ip[%s] with remote ip[%s]", resource.Base.Cluster, resource.Base.IP, remoteip)
+		resource.Base.IP = remoteip
+	}
+
+	if v, ok := resource.Base.Labels[commonTypes.LabelKeyMode]; ok && v == "p2p" {
+		return d.onP2PResourceReport(resource)
+	}
+
 	d.resourceLock.Lock()
 
 	if !d.isMaster {
@@ -581,6 +633,35 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource) 
 			}
 		}
 	}
+
+	return nil
+}
+
+func (d *directResourceManager) onP2PResourceReport(resource *ReportAgentResource) error {
+	blog.Infof("drm: onP2PResourceReport with cluster[%s] ip[%s]...", resource.Base.Cluster, resource.Base.IP)
+	d.resourceLock.Lock()
+
+	if !d.isMaster {
+		blog.Errorf("drm: not master now while received cluster[%s] ip[%s] agent report",
+			resource.Base.Cluster, resource.Base.IP)
+		d.resourceLock.Unlock()
+		return errors.New("drm: not master now,do nothing")
+	}
+
+	oneagentres := &oneagentResource{
+		Agent:  resource.AgentInfo,
+		Update: time.Now().Unix(),
+	}
+
+	// record the metric data
+	go recordResource(oneagentres)
+
+	// // 更新到map中
+	d.resource[resource.Base.IP] = oneagentres
+	d.resourceLock.Unlock()
+
+	// 记录到数据库中
+	go d.mysql.PutAgentResource(d.getAgentResourceRecord(oneagentres))
 
 	return nil
 }
@@ -1006,6 +1087,18 @@ func (h *handleWithUser) GetFreeResource(
 	callBack4Command CallBack4Command) ([]*AgentResourceExternal, error) {
 	if h.mgr != nil {
 		return h.mgr.getFreeResource(h.userID, resBatchID, condition, callbackSelector, callBack4Command)
+	}
+
+	return nil, nil
+}
+
+func (h *handleWithUser) GetFreeP2PResource(
+	resBatchID string,
+	condition interface{},
+	callbackSelector CallBackSelector,
+	callBack4Command CallBack4Command) ([]*AgentResourceExternal, error) {
+	if h.mgr != nil {
+		return h.mgr.getFreeP2PResource(h.userID, resBatchID, condition, callbackSelector, callBack4Command)
 	}
 
 	return nil, nil

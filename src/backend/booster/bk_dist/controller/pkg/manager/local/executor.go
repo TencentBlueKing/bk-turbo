@@ -11,6 +11,7 @@ package local
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -30,7 +31,10 @@ const (
 	retryAndSuccessLimit = 3
 )
 
-func newExecutor(mgr *Mgr, req *types.LocalTaskExecuteRequest, globalWork *types.Work) (*executor, error) {
+func newExecutor(mgr *Mgr,
+	req *types.LocalTaskExecuteRequest,
+	globalWork *types.Work,
+	supportAbsPath bool) (*executor, error) {
 	environ := env.NewSandbox(req.Environments)
 	bt := dcType.GetBoosterType(environ.GetEnv(env.BoosterType))
 	hdl, err := handlermap.GetHandler(bt)
@@ -55,6 +59,9 @@ func newExecutor(mgr *Mgr, req *types.LocalTaskExecuteRequest, globalWork *types
 
 		environments = append(environments, req.Environments[i])
 	}
+
+	newenv := fmt.Sprintf("%s=%s", env.GetEnvKey(env.KeyWorkerSupportAbsPath), strconv.FormatBool(supportAbsPath))
+	environments = append(environments, newenv)
 
 	e.sandbox = &dcSyscall.Sandbox{
 		Dir:    e.req.Dir,

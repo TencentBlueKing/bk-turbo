@@ -53,6 +53,7 @@ func GetHandlerTmpDir(sandBox *dcSyscall.Sandbox) string {
 		fullTmpDir := path.Join(baseTmpDir, protocol.BKDistDir, types.GetBoosterType(bt).String())
 		if !dcFile.Stat(fullTmpDir).Exist() {
 			if err := os.MkdirAll(fullTmpDir, os.ModePerm); err != nil {
+				blog.Warnf("common util: create tmp dir failed with error:%v", err)
 				return ""
 			}
 		}
