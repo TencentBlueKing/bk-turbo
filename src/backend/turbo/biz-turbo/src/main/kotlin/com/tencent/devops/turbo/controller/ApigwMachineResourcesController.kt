@@ -12,7 +12,11 @@ class ApigwMachineResourcesController @Autowired constructor(
     private val machineResourcesService: MachineResourcesService
 ) : IApigwMachineResourcesController{
 
-    override fun getSummary(startDate: String?, endDate: String?): Response<List<MachineResourcesStatVO>> {
+    override fun getSummary(
+        appCode: String,
+        startDate: String?,
+        endDate: String?
+    ): Response<List<MachineResourcesStatVO>> {
         return Response.success(machineResourcesService.querySummary(startDate, endDate))
     }
 }

@@ -18,6 +18,9 @@ interface IApigwMachineResourcesController {
     @ApiOperation("获取使用服务器资源统计")
     @GetMapping("/getSummary")
     fun getSummary(
+        @ApiParam("应用code")
+        @RequestParam("appCode")
+        appCode: String,
         @ApiParam("日期类型")
         @RequestParam("startDate")
         startDate: String?,
