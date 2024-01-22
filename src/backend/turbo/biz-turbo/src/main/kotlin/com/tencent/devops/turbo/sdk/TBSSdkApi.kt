@@ -223,6 +223,8 @@ object TBSSdkApi {
                 engineCode = "disttask",
                 resourceName = "summary",
                 queryParam = queryParam,
+                // disttask的统计数据涵盖cc和ue4,因此disttask+distcc就是全量统计
+                // 该groupbyuser接口的统计信息不包含cc,只是为了方便查看ue的用户维度数据，是disttask的子集
                 customPath = if (engineCode.contains("ue4"))"/groupbyuser/scene/ue4" else null
             )
         } else {
