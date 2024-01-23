@@ -52,6 +52,7 @@ const (
 
 const (
 	queueNameHeaderSymbol = "://"
+	queueNameSep          = "<|>"
 
 	workerMacLauncherName = "start.sh"
 	workerWinLauncherName = "start.bat"
@@ -522,19 +523,32 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 		return nil
 	}
 
-	if matchDirectResource(queueName) {
-		// TODO : deal with p2p
-		if containsP2P(task.InheritSetting.QueueName) {
-			return de.launchDirectP2PTask(task, tb, queueName)
+	// TODO : 支持 queueName 为复合内容，比如 WIN://p2p_shenzhen_buildbooster<|>K8S_WIN://shenzhen
+	// 表示支持  WIN://p2p_shenzhen_buildbooster 和 K8S_WIN://shenzhen 两种类型的资源的获取
+	realqueuenames := strings.Split(queueName, queueNameSep)
+	for _, q := range realqueuenames {
+		if matchDirectResource(q) {
+			// deal with p2p
+			if containsP2P(q) {
+				err = de.launchDirectP2PTask(task, tb, q)
+			} else {
+				err = de.launchDirectTask(task, tb, q)
+			}
+		} else {
+			blog.Infof("engine(%s) try launch crm task(%s) with queue:%s", EngineName, tb.ID, q)
+			err = de.launchCRMTask(task, tb, q)
 		}
-		return de.launchDirectTask(task, tb, queueName)
+
+		if err == nil {
+			return err
+		}
 	}
 
-	return de.launchCRMTask(task, tb, queueName)
+	return err
 }
 
 func (de *disttaskEngine) launchDirectP2PTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
-	blog.Infof("engine(%s) ready to launch direct p2p task(%s)", EngineName, tb.ID)
+	blog.Infof("engine(%s) ready to launch direct p2p task(%s) with queue:%s", EngineName, tb.ID, queueName)
 
 	condition := &resourceCondition{
 		queueName: getQueueNamePure(queueName),
@@ -1514,7 +1528,7 @@ func p2pResourceSelector(
 	var cpuTotal float64 = 0
 	r := make([]*respack.AgentResourceExternal, 0, 100)
 	for _, agent := range freeAgent {
-		blog.Debugf("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
+		blog.Infof("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
 			"current cpu(%.2f) with queue(%s)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.queueName)
 

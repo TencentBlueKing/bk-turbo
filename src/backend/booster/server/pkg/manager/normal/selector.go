@@ -73,11 +73,16 @@ func (s *selector) start() {
 	}
 	s.queueLock.Unlock()
 
+	ticker := time.NewTicker(selectorCheckNewQueueTime)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-s.ctx.Done():
 			blog.Warnf("select shutdown")
 			return
+		case <-ticker.C:
+			s.checkNewQueue()
 		}
 	}
 }
@@ -96,26 +101,32 @@ func (s *selector) OnTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatu
 	}
 
 	if isNewQueue {
-		// add to queue with lock
-		info := engine.QueueBriefInfo{
-			QueueName:  tb.Client.QueueName,
-			EngineName: tb.Client.EngineName,
-		}
-		c := make(chan bool, 100)
-
-		s.queueLock.Lock()
-		s.queueChanMap[info] = c
-		s.queueLock.Unlock()
-
-		// start this go routine
-		blog.Infof("selector: ready start picker for new engine(%s) queue(%s)", tb.Client.EngineName, tb.Client.QueueName)
-		go s.picker(info, c)
-
-		// sleep and notify
-		// it may be fail to notify here, but the picker timer will recover this
-		time.Sleep(1 * time.Second)
-		c <- true
+		s.onNewQueue(tb.Client.QueueName, tb.Client.EngineName)
 	}
+
+	return nil
+}
+
+func (s *selector) onNewQueue(queueName string, engineName engine.TypeName) error {
+	// add to queue with lock
+	info := engine.QueueBriefInfo{
+		QueueName:  queueName,
+		EngineName: engineName,
+	}
+	c := make(chan bool, 100)
+
+	s.queueLock.Lock()
+	s.queueChanMap[info] = c
+	s.queueLock.Unlock()
+
+	// start this go routine
+	blog.Infof("selector: ready start picker for new engine(%s) queue(%s)", engineName, queueName)
+	go s.picker(info, c)
+
+	// sleep and notify
+	// it may be fail to notify here, but the picker timer will recover this
+	time.Sleep(1 * time.Second)
+	c <- true
 
 	return nil
 }
@@ -210,4 +221,31 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 
 	// notify next step immediately
 	s.mgr.onTaskStatus(tb, engine.TaskStatusStarting)
+}
+
+// 用于定时检查新的queue的任务，主要是server重启或者主从切换时
+// 如果是server运行期间的新的queue任务，会通过OnTaskStatus直接触发
+func (s *selector) checkNewQueue() {
+	blog.Debugf("selector: do check for checking new queue task")
+	taskList, err := s.layer.ListTaskBasic(false, engine.TaskStatusStaging)
+	if err != nil {
+		blog.Errorf("selector: doing check, list task failed: %v", err)
+		return
+	}
+
+	for _, tb := range taskList {
+		isNewQueue := true
+		for k := range s.queueChanMap {
+			if k.QueueName == tb.Client.QueueName && k.EngineName == tb.Client.EngineName {
+				isNewQueue = false
+				break
+			}
+		}
+
+		if isNewQueue {
+			s.onNewQueue(tb.Client.QueueName, tb.Client.EngineName)
+		}
+	}
+
+	return
 }
