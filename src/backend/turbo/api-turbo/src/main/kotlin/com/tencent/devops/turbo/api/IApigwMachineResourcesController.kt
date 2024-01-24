@@ -20,7 +20,7 @@ interface IApigwMachineResourcesController {
     @GetMapping("/getSummary", produces = [MediaType.APPLICATION_JSON_VALUE])
     fun getSummary(
         @ApiParam("应用code")
-        @RequestParam("app_Code")
+        @RequestParam("app_code", required = true)
         appCode: String,
         @ApiParam("日期类型")
         @RequestParam("startDate")
