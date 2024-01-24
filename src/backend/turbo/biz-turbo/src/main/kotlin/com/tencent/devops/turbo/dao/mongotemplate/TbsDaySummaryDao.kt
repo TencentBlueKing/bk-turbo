@@ -17,10 +17,17 @@ class TbsDaySummaryDao @Autowired constructor(
         private val logger = LoggerFactory.getLogger(this::class.java)
         private const val COLLECTION_NAME = "t_tbs_day_summary_entity"
     }
+
     /**
      * 根据日期查询机器资源统计
      */
-    fun findByDay(startDate: String, endDate: String, filterPlanIdNin: Set<String>): List<TTbsDaySummaryEntity> {
+    fun findByDay(
+        startDate: String,
+        endDate: String,
+        filterPlanIdNin: Set<String>,
+        pageNum: Int,
+        pageSize: Int
+    ): List<TTbsDaySummaryEntity> {
         logger.info("findByDay startDate: $startDate, endDate: $endDate, filterPlanIdNin: $filterPlanIdNin")
 
         val criteria = Criteria.where("day").gte(startDate).lte(endDate)
@@ -45,7 +52,11 @@ class TbsDaySummaryDao @Autowired constructor(
             .first("bg_id").`as`("bg_id")
             .first("dept_id").`as`("dept_id")
             .first("center_id").`as`("center_id")
-        val aggregation = Aggregation.newAggregation(match, sort, group)
+
+        val skip = Aggregation.skip((pageNum * pageSize).toLong())
+        val limit = Aggregation.limit(pageSize.toLong())
+
+        val aggregation = Aggregation.newAggregation(match, sort, group, skip, limit)
         return mongoTemplate.aggregate(aggregation, COLLECTION_NAME, TTbsDaySummaryEntity::class.java).mappedResults
     }
 }

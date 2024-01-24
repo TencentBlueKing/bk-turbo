@@ -1,6 +1,7 @@
 package com.tencent.devops.turbo.api
 
 import com.tencent.devops.api.pojo.Response
+import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.turbo.vo.apiwg.MachineResourcesStatVO
 import io.swagger.annotations.Api
 import io.swagger.annotations.ApiOperation
@@ -22,11 +23,17 @@ interface IApigwMachineResourcesController {
         @ApiParam("应用code")
         @RequestParam("app_code", required = true)
         appCode: String,
-        @ApiParam("日期类型")
+        @ApiParam("起始统计日期")
         @RequestParam("startDate")
         startDate: String?,
-        @ApiParam("日期类型")
+        @ApiParam("截止统计日期")
         @RequestParam("endDate")
-        endDate: String?
-    ): Response<List<MachineResourcesStatVO>>
+        endDate: String?,
+        @ApiParam(value = "页数")
+        @RequestParam(value = "pageNum")
+        pageNum: Int?,
+        @ApiParam(value = "每页多少条")
+        @RequestParam("pageSize")
+        pageSize: Int?,
+    ): Response<Page<MachineResourcesStatVO>>
 }

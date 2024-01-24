@@ -7,12 +7,10 @@ import org.aspectj.lang.annotation.Aspect
 import org.aspectj.lang.annotation.Before
 import org.aspectj.lang.reflect.MethodSignature
 import org.slf4j.LoggerFactory
-import org.springframework.context.annotation.EnableAspectJAutoProxy
 import org.springframework.stereotype.Component
 
 @Aspect
 @Component
-@EnableAspectJAutoProxy
 class ApiAspect {
 
     companion object {
@@ -26,6 +24,14 @@ class ApiAspect {
 
         val parameterNames = (joinPoint.signature as MethodSignature).parameterNames
         val parameterValues = joinPoint.args
+
+        parameterNames.forEachIndexed { idx, it ->
+            logger.info("name[$it], value[${parameterValues[idx]} ]")
+        }
+
+        parameterValues.forEach {
+            logger.info("参数值[$it]")
+        }
 
         var appCode: String? = null
         for (index in parameterValues.indices) {

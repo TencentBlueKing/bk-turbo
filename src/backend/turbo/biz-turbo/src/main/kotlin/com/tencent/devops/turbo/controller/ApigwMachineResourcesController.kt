@@ -1,6 +1,7 @@
 package com.tencent.devops.turbo.controller
 
 import com.tencent.devops.api.pojo.Response
+import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.turbo.api.IApigwMachineResourcesController
 import com.tencent.devops.turbo.service.MachineResourcesService
 import com.tencent.devops.turbo.vo.apiwg.MachineResourcesStatVO
@@ -15,8 +16,10 @@ class ApigwMachineResourcesController @Autowired constructor(
     override fun getSummary(
         appCode: String,
         startDate: String?,
-        endDate: String?
-    ): Response<List<MachineResourcesStatVO>> {
-        return Response.success(machineResourcesService.querySummary(startDate, endDate))
+        endDate: String?,
+        pageNum: Int?,
+        pageSize: Int?
+    ): Response<Page<MachineResourcesStatVO>> {
+        return Response.success(machineResourcesService.querySummary(startDate, endDate, pageNum, pageSize))
     }
 }
