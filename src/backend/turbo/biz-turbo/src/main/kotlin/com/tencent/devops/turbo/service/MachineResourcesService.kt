@@ -43,7 +43,7 @@ class MachineResourcesService @Autowired constructor(
             endDate = endDate ?: today.withDayOfMonth(1).minusDays(1).toString(),
             filterPlanIdNin = filterPlanIds,
             pageNum = page,
-            pageSize = pageSize ?: 100
+            pageSize = pageSizeNum
         )
         logger.info("summaryEntityList size: ${summaryEntityList.size}")
 

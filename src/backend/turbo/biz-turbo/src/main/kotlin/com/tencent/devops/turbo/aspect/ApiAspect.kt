@@ -26,11 +26,7 @@ class ApiAspect {
         val parameterValues = joinPoint.args
 
         parameterNames.forEachIndexed { idx, it ->
-            logger.info("name[$it], value[${parameterValues[idx]} ]")
-        }
-
-        parameterValues.forEach {
-            logger.info("参数值[$it]")
+            logger.info("name[$it], value[${parameterValues[idx]}]")
         }
 
         var appCode: String? = null
