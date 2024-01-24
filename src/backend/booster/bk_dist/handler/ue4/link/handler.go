@@ -122,7 +122,7 @@ func (l *TaskLink) NeedRemoteResource(command []string) bool {
 
 // RemoteRetryTimes will return the remote retry times
 func (l *TaskLink) RemoteRetryTimes() int {
-	return 0
+	return 1
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute

@@ -183,7 +183,7 @@ onerror:
 
 // 预估可用slot
 func (o *tcpManager) estimateSlot() error {
-	blog.Infof("[slotmgr] estimateSlot")
+	blog.Debugf("[slotmgr] estimateSlot")
 	o.updateAvailable()
 	availableslotnum := int(currentAvailableCPU) - o.curjobs - bookedSlotNum
 

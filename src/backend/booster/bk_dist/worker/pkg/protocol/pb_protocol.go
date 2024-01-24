@@ -451,7 +451,9 @@ func saveFile(
 	// save as temp file if existed, then change name after saved
 	existed := dcFile.Stat(inputfile).Exist()
 	targetname := inputfile
-	targetbakname := fmt.Sprintf("%s_%d", targetname, time.Now().UnixNano())
+	// only leave one bak file, to avoid disk increase
+	// targetbakname := fmt.Sprintf("%s_%d", targetname, time.Now().UnixNano())
+	targetbakname := fmt.Sprintf("%s.bak", targetname)
 	tempname := fmt.Sprintf("%s_temp", targetbakname)
 	if existed {
 		inputfile = tempname
@@ -468,7 +470,12 @@ func saveFile(
 		_ = f.Close()
 
 		if existed && newfilesaved {
-			blog.Infof("rename existed file %s to %s", targetname, targetbakname)
+			if dcFile.Stat(targetbakname).Exist() {
+				blog.Infof("ready delete old bak file %s", targetbakname)
+				os.Remove(targetbakname)
+			}
+
+			blog.Infof("backup file %s to %s", targetname, targetbakname)
 			err = os.Rename(targetname, targetbakname)
 			if err != nil {
 				blog.Infof("failed to rename existed file %s to %s with error:%v",

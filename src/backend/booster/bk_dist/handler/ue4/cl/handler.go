@@ -253,7 +253,7 @@ func (cl *TaskCL) NeedRemoteResource(command []string) bool {
 
 // RemoteRetryTimes will return the remote retry times
 func (cl *TaskCL) RemoteRetryTimes() int {
-	return 0
+	return 1
 }
 
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute

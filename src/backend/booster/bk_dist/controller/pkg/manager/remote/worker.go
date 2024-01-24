@@ -14,6 +14,7 @@ import (
 
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // Status save worker status
@@ -112,6 +113,7 @@ func (wr *worker) invalid() bool {
 
 func (wr *worker) close() error {
 	if wr.conn != nil {
+		blog.Infof("worker: ready close worker %s now", wr.conn.RemoteAddr().String())
 		err := wr.conn.Close()
 		wr.conn = nil
 		return err
@@ -120,7 +122,9 @@ func (wr *worker) close() error {
 	return nil
 }
 
-func (wr *worker) resetSlot() error {
+func (wr *worker) resetSlot(reason string) error {
+	blog.Infof("worker: ready reset worker %s for [%s]", wr.host.Server, reason)
+
 	wr.close()
 	wr.status = Init
 	wr.priority = dcSDK.PriorityUnKnown

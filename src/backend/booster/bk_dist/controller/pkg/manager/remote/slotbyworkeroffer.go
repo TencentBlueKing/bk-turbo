@@ -132,7 +132,7 @@ func (wo *workerOffer) Reset(hl []*dcProtocol.Host) ([]*dcProtocol.Host, error) 
 
 	// 将老的worker的tcp connection都关掉
 	for _, v := range wo.worker {
-		v.resetSlot()
+		v.resetSlot("reset workers")
 	}
 
 	wl := make([]*worker, 0, len(hl))
@@ -236,7 +236,7 @@ func (wo *workerOffer) DisableWorker(host *dcProtocol.Host) {
 		w.disabled = true
 		invalidjobs = w.totalSlots
 
-		w.resetSlot()
+		w.resetSlot("disable worker")
 
 		break
 	}
@@ -276,7 +276,7 @@ func (wo *workerOffer) WorkerDead(w *worker) {
 		wk.dead = true
 		invalidjobs = wk.totalSlots
 
-		wk.resetSlot()
+		wk.resetSlot("worker dead")
 
 		break
 	}
@@ -307,7 +307,7 @@ func (wo *workerOffer) DisableAllWorker() {
 
 		w.disabled = true
 
-		w.resetSlot()
+		w.resetSlot("disable all workers")
 	}
 
 	wo.validWorkerNum = 0
@@ -537,7 +537,7 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 					blog.Infof("worker offer slot: set host[%+v] to busy", *w.host)
 				} else {
 					// 这个地方可能是网络异常了，置状态为init，后续可以重试
-					w.resetSlot()
+					w.resetSlot("received error")
 				}
 
 				blog.Infof("worker offer slot: got invalid slot result:%+v", *r)
@@ -584,7 +584,7 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 // 选择适当的worker列表和相应的优先级，发送slot请求
 // 触发条件：1. 第一次需要slot时，  2. 定时检查，当有任务排队等待slot时
 func (wo *workerOffer) querySlot() error {
-	blog.Infof("worker offer slot: start query slot")
+	blog.Debugf("worker offer slot: start query slot")
 
 	hightSucceed := 0
 	hightDetecting := 0
@@ -602,7 +602,7 @@ func (wo *workerOffer) querySlot() error {
 		// refused 一段时间后可以重新尝试
 		if w.status == Refused &&
 			time.Now().Unix()-w.lasttime > RefusedRecoverSeconds {
-			w.resetSlot()
+			w.resetSlot("re-check refused worker")
 		}
 
 		if w.invalid() {
@@ -610,6 +610,7 @@ func (wo *workerOffer) querySlot() error {
 		}
 
 		if w.status == Init {
+			blog.Infof("worker offer slot: found init worker %s now", w.host.Server)
 			initWorker = append(initWorker, w)
 			continue
 		}
@@ -663,9 +664,12 @@ func (wo *workerOffer) querySlot() error {
 			v.priority = targetPriority
 			v.status = Detecting
 
+			blog.Infof("worker offer slot: ready query slot worker %s with priority %d now",
+				v.host.Server, targetPriority)
 			c, err := handler.ExecuteQuerySlot(v.host, req, wo.slotChan, SlotTCPTimeoutSeconds)
 			if err == nil {
 				v.status = DetectSucceed
+				blog.Infof("worker offer slot: set worker %s to DetectSucceed", v.host.Server)
 				v.conn = c
 
 				sentSlots += v.host.Jobs
@@ -674,6 +678,7 @@ func (wo *workerOffer) querySlot() error {
 				}
 			} else {
 				v.status = DetectFailed
+				blog.Infof("worker offer slot: set worker %s to DetectFailed", v.host.Server)
 			}
 		}
 	}
@@ -707,15 +712,16 @@ func (wo *workerOffer) jobCheck() error {
 
 // 检查worker发送的slot，避免slot一直闲置
 func (wo *workerOffer) slotCheck() error {
-	if wo.slotList.Len() > 0 {
-		for e := wo.slotList.Front(); e != nil; e = e.Next() {
-			slot := e.Value.(*remoteSlotOffer)
-			if slot.ReceivedTime.Add(MaxSlotIdleIntervalTime).Before(time.Now()) {
-				wo.resetWorkerSlot(slot.Host)
-				wo.slotList.Remove(e)
-			}
-		}
-	}
+	// TODO : 如果远程worker给的offer大于worker的处理能力，则有可能，但看上去不应该直接断开
+	// if wo.slotList.Len() > 0 {
+	// 	for e := wo.slotList.Front(); e != nil; e = e.Next() {
+	// 		slot := e.Value.(*remoteSlotOffer)
+	// 		if slot.ReceivedTime.Add(MaxSlotIdleIntervalTime).Before(time.Now()) {
+	// 			wo.resetWorkerSlot(slot.Host)
+	// 			wo.slotList.Remove(e)
+	// 		}
+	// 	}
+	// }
 	return nil
 }
 
@@ -724,7 +730,7 @@ func (wo *workerOffer) resetWorkerSlot(host *dcProtocol.Host) error {
 	defer wo.workerLock.Unlock()
 	for _, w := range wo.worker {
 		if host.Equal(w.host) {
-			w.resetSlot()
+			w.resetSlot("idle slot too long")
 			break
 		}
 	}
