@@ -11,15 +11,14 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 
 @Api(tags = ["OPENAPI_SERVER_RESOURCES"], description = "服务器资源查询接口")
-@RequestMapping("/machine/resources", consumes = [MediaType.APPLICATION_JSON_VALUE],
-    produces = [MediaType.APPLICATION_JSON_VALUE])
+@RequestMapping("/open/machine/resources")
 interface IApigwMachineResourcesController {
 
     @ApiOperation("获取使用服务器资源统计")
-    @GetMapping("/getSummary")
+    @GetMapping("/getSummary", produces = [MediaType.APPLICATION_JSON_VALUE])
     fun getSummary(
         @ApiParam("应用code")
-        @RequestParam("appCode")
+        @RequestParam("app_Code")
         appCode: String,
         @ApiParam("日期类型")
         @RequestParam("startDate")
