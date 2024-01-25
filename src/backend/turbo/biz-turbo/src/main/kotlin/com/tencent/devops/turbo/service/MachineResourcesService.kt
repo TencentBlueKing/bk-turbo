@@ -30,7 +30,7 @@ class MachineResourcesService @Autowired constructor(
         pageSize: Int?
     ): Page<MachineResourcesStatVO> {
         val page = (pageNum?.takeIf { it - 1 < 0 }?.minus(1)) ?: 0
-        val pageSizeNum = pageSize?.takeIf { it >= 10000 } ?: pageSize ?: 100
+        val pageSizeNum = pageSize?.coerceAtMost(10000) ?: 100
 
         // 获取需要过滤掉的方案id集合
         val baseDataEntity = baseDataRepository.findFirstByParamCode(BASE_EXCLUDED_PLAN_ID_LIST)
