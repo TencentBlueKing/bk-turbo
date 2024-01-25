@@ -29,7 +29,7 @@ class MachineResourcesService @Autowired constructor(
         pageNum: Int?,
         pageSize: Int?
     ): Page<MachineResourcesStatVO> {
-        val page = (pageNum?.takeIf { it - 1 < 0 }?.minus(1)) ?: 0
+        val page = pageNum?.takeIf { it > 0 }?.let { it - 1 } ?: 0
         val pageSizeNum = pageSize?.coerceAtMost(10000) ?: 100
 
         // 获取需要过滤掉的方案id集合
