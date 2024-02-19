@@ -5,4 +5,5 @@ dependencies {
     api("io.github.openfeign:feign-jaxrs")
     api("io.github.openfeign:feign-okhttp")
     api("io.github.openfeign:feign-jackson")
+    api("com.google.guava:guava")
 }

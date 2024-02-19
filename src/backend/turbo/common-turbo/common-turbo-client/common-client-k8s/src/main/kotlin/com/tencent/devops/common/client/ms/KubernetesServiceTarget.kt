@@ -10,12 +10,13 @@
  *
  * Terms of the MIT License:
  * ---------------------------------------------------
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,
- * modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+ * Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
  * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
@@ -27,6 +28,7 @@
 package com.tencent.devops.common.client.ms
 
 import com.tencent.devops.common.api.exception.ClientException
+import org.apache.commons.lang3.RandomUtils
 import org.slf4j.LoggerFactory
 import org.springframework.cloud.client.ServiceInstance
 import org.springframework.cloud.kubernetes.client.discovery.KubernetesInformerDiscoveryClient
@@ -47,40 +49,21 @@ class KubernetesServiceTarget<T> constructor(
     }
 
     override fun choose(serviceName: String): ServiceInstance {
-        val instances = discoveryClient.getInstances(serviceName)
-                ?: throw ClientException(
-                     "找不到任何有效的[$serviceName]服务提供者"
+        val serviceInstanceList: List<ServiceInstance> = usedInstance.getIfPresent(serviceName) ?: emptyList()
+
+        if (serviceInstanceList.isEmpty()) {
+            val currentInstanceList = discoveryClient.getInstances(serviceName)
+            if (currentInstanceList.isEmpty()) {
+                logger.error("Unable to find any valid [$serviceName] service provider")
+                throw ClientException(
+                     "Unable to find any valid [$serviceName] service provider"
                 )
-        if (instances.isEmpty()) {
-            throw ClientException(
-                 "找不到任何有效的[$serviceName]服务提供者"
-            )
-        }
-
-        val matchTagInstances = ArrayList<ServiceInstance>()
-
-        instances.forEach { serviceInstance ->
-            if (!usedInstance.contains(serviceInstance.url())) {
-                // logger.info("service instance url: ${serviceInstance.url()}")
-                matchTagInstances.add(serviceInstance)
             }
+            serviceInstanceList.toMutableList().addAll(currentInstanceList)
+            usedInstance.put(serviceName, serviceInstanceList)
         }
 
-        // 如果为空，则将之前用过的实例重新加入选择
-        if (matchTagInstances.isEmpty() && usedInstance.isNotEmpty()) {
-            matchTagInstances.addAll(usedInstance.values)
-        }
-
-        if (matchTagInstances.isEmpty()) {
-            throw ClientException(
-                 "找不到任何有效的[$serviceName]服务提供者"
-            )
-        } else if (matchTagInstances.size > 1) {
-            matchTagInstances.shuffle()
-        }
-
-        usedInstance[matchTagInstances[0].url()] = matchTagInstances[0]
-        return matchTagInstances[0]
+        return serviceInstanceList[RandomUtils.nextInt(0, serviceInstanceList.size)]
     }
 
 }

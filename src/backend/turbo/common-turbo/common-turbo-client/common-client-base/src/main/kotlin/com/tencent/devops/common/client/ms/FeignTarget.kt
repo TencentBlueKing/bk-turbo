@@ -26,18 +26,25 @@
 
 package com.tencent.devops.common.client.ms
 
+import com.google.common.cache.Cache
+import com.google.common.cache.CacheBuilder
 import feign.Request
 import feign.RequestTemplate
 import feign.Target
 import org.springframework.cloud.client.ServiceInstance
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 abstract class FeignTarget<T>(
     protected open val serviceName: String,
     protected open val type: Class<T>,
     protected open val commonUrlPrefix: String,
-    protected val usedInstance: ConcurrentHashMap<String, ServiceInstance> =
-        ConcurrentHashMap<String, ServiceInstance>()
+    // key: serviceName, value: List<ServiceInstance>
+    protected val usedInstance: Cache<String, List<ServiceInstance>> = CacheBuilder.newBuilder()
+        .maximumSize(1000)
+        .expireAfterWrite(3, TimeUnit.SECONDS)
+        .build<String, List<ServiceInstance>>()
 ) : Target<T> {
 
     override fun apply(input: RequestTemplate?): Request {
