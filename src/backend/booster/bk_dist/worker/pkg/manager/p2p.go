@@ -90,8 +90,8 @@ func (o *tcpManager) checkP2PConf() error {
 			o.conf.P2PGroupLabel = commonTypes.LabelValueModeP2P + "_" + o.conf.P2PGroupLabel
 		}
 
-		agent.Total.CPU = totalSpecifiedCPU
-		agent.Total.Mem = totalSpecifiedMemory
+		agent.Total.CPU = totalSlotCPU
+		agent.Total.Mem = totalSlotMemory
 
 		if o.conf.RestartThresholdSecs <= 0 {
 			o.conf.RestartThresholdSecs = defaultRestartThresholdSecs
@@ -202,9 +202,9 @@ func (o *tcpManager) initHttpClient() error {
 func (o *tcpManager) reportResource() error {
 	blog.Infof("[p2p] ReportResource for group[%s] ip[%s]...", o.conf.P2PGroupLabel, o.conf.LocalConfig.LocalIP)
 
-	o.updateAvailable()
-	agent.Free.CPU = currentAvailableCPU
-	agent.Free.Mem = currentAvailableMemory
+	// o.updateAvailable()
+	agent.Free.CPU = currentAvailableSlotCPU
+	agent.Free.Mem = currentAvailableSlotMemory
 
 	var reportobj = types.ReportAgentResource{
 		AgentInfo: *agent,

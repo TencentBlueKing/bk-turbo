@@ -23,10 +23,10 @@ import (
 
 // define const vars for http client
 const (
-	// TCPBUFFERLEN = 10240
+// TCPBUFFERLEN = 10240
 
-	DEFAULTTIMEOUTSECS        = 300
-	DEFAULTREADALLTIMEOUTSECS = 600
+// DEFAULTTIMEOUTSECS        = 300
+// DEFAULTREADALLTIMEOUTSECS = 600
 )
 
 // TCPClient wrapper net.TCPConn
@@ -38,7 +38,7 @@ type TCPClient struct {
 // NewTCPClient return new TCPClient
 func NewTCPClient(timeout int) *TCPClient {
 	if timeout <= 0 {
-		timeout = DEFAULTTIMEOUTSECS
+		timeout = DefaultLongTCPTimeoutSeconds
 	}
 
 	return &TCPClient{
@@ -56,7 +56,7 @@ func NewTCPClientWithConn(conn *net.TCPConn) *TCPClient {
 
 	return &TCPClient{
 		conn:    conn,
-		timeout: DEFAULTTIMEOUTSECS,
+		timeout: DefaultLongTCPTimeoutSeconds,
 	}
 }
 
@@ -130,10 +130,10 @@ func (c *TCPClient) WriteData(data []byte) error {
 		return fmt.Errorf("input data is nil")
 	}
 
-	if err := c.setIOTimeout(c.timeout); err != nil {
-		blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", c.ConnDesc(), err.Error())
-		return err
-	}
+	// if err := c.setIOTimeout(c.timeout); err != nil {
+	// 	blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", c.ConnDesc(), err.Error())
+	// 	return err
+	// }
 
 	writelen := 0
 	expectlen := len(data)

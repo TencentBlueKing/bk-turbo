@@ -138,6 +138,7 @@ type ControllerConfig struct {
 	ResIdleSecsForFree  int
 	SendCork            bool
 	SendFileMemoryLimit int64
+	SendMemoryCache     bool
 	NetErrorLimit       int
 	RemoteRetryTimes    int
 	EnableLink          bool

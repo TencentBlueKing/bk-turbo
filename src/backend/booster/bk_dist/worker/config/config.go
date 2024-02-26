@@ -52,8 +52,11 @@ type WorkerConfig struct {
 	P2PGroupLabel string `json:"p2p_group_label" value:"" usage:"p2p group label to report"`
 
 	// 资源使用配置
-	MaxCPUPercent    int `json:"max_cpu_percent" value:"80" usage:"[0~100], max cpu percent ,-1 means total cpu num - 1"`
-	MaxMemoryPercent int `json:"max_memory_percent" value:"80" usage:"max memory percent "`
+	MaxExecuteCPUPercent    int `json:"max_execute_cpu_percent" value:"80" usage:"[0~100], max execute cpu percent ,-1 means total cpu num - 1"`
+	MaxExecuteMemoryPercent int `json:"max_execute_memory_percent" value:"80" usage:"max execute memory percent "`
+
+	MaxSlotCPUPercent    int `json:"max_slot_cpu_percent" value:"80" usage:"[0~100], max slot cpu percent ,-1 means total cpu num - 1"`
+	MaxSlotMemoryPercent int `json:"max_slot_memory_percent" value:"80" usage:"max slot memory percent "`
 
 	// 是否支持绝对路径
 	SupportAbsPath bool `json:"support_abs_Path" value:"true" usage:"whether support absolute path"`

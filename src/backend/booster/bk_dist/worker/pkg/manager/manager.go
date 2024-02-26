@@ -226,9 +226,10 @@ func (o *tcpManager) init() error {
 		blog.Errorf("init resource conf failed with error:%v", err)
 		return err
 	}
+	go o.resourceTimer()
 
-	if o.maxjobs > int(totalSpecifiedCPU) {
-		o.maxjobs = int(totalSpecifiedCPU)
+	if o.maxjobs > int(totalExecuteCPU) {
+		o.maxjobs = int(totalExecuteCPU)
 		blog.Infof("change max job %d for resource limit", o.maxjobs)
 	}
 
@@ -729,7 +730,7 @@ func (o *tcpManager) obtainChance() bool {
 			// new resource check
 			if !o.resourceAvailable() {
 				blog.Infof("ignore for current available p2p CPU:%f, current available memory:%f",
-					currentAvailableCPU, currentAvailableMemory)
+					currentAvailableExecuteCPU, currentAvailableExecuteMemory)
 				return false
 			}
 

@@ -158,3 +158,8 @@ type BKQuerySlotResult struct {
 	Refused          int32            `json:"refused"`
 	Message          string           `json:"message"`
 }
+
+// BKSlotRspAck
+type BKSlotRspAck struct {
+	Consumeslotnum int32 `json:"consume_slot_num"`
+}

@@ -1097,7 +1097,7 @@ func ReceiveUnknown(client *TCPClient,
 // ReceiveBKQuerySlot to receive pb command body for query slot
 func ReceiveBKQuerySlot(client *TCPClient,
 	head *protocol.PBHead) (*protocol.PBBodyQuerySlotReq, error) {
-	blog.Debugf("receive send file body now")
+	blog.Debugf("receive query slot body now")
 
 	bodylen := head.GetBodylen()
 	buflen := head.GetBuflen()
@@ -1193,4 +1193,37 @@ func EncodeBKQuerySlotRsp(availableslotnum int32, refused int32, message string)
 	}
 
 	return messages, nil
+}
+
+// ReceiveBKSlotRspAck to receive pb command body for slot offer ack
+func ReceiveBKSlotRspAck(client *TCPClient,
+	head *protocol.PBHead) (*protocol.PBBodySlotRspAck, error) {
+	blog.Debugf("receive slot response ack body now")
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 || buflen > 0 {
+		err := fmt.Errorf("get invalid body length %d, buf len %d", bodylen, buflen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with err:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodySlotRspAck{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+	} else {
+		blog.Debugf("succeed to decode pbbody")
+	}
+
+	return &body, nil
 }

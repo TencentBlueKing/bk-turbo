@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	estimateSlotIntervalTime = 500 * time.Millisecond
-	clientCheckIntervalTime  = 60 * time.Second
+	estimateSlotIntervalTime = 50 * time.Millisecond
+	clientCheckIntervalTime  = 15 * time.Second
 	slotCheckIntervalTime    = 10 * time.Second
 
 	maxClient = 3
@@ -68,11 +68,24 @@ type client struct {
 	valid    bool
 }
 
+func (c *client) equal(other *client) bool {
+	return c.tcpclient.RemoteAddr() == other.tcpclient.RemoteAddr()
+}
+
+func (c *client) string() string {
+	if c.tcpclient != nil {
+		return c.tcpclient.RemoteAddr()
+	}
+
+	return ""
+}
+
 type slot struct {
-	c       *client
-	num     int
-	time    time.Time
-	timeout bool
+	c         *client
+	num       int
+	time      time.Time
+	timeout   bool
+	needclean bool
 }
 
 func notifySlot() {
@@ -174,7 +187,7 @@ func (o *tcpManager) dealQuerySlotCmd(tcpclient *protocol.TCPClient, head *dcPro
 	return nil
 
 onerror:
-	o.sendSlotResponse(tcpclient, -1, 1, err.Error())
+	o.sendSlotOffer(tcpclient, -1, 1, err.Error())
 	time.Sleep(60 * time.Second)
 	tcpclient.Close()
 	blog.Warnf("[slotmgr] deal query slot request failed with error:%v", err)
@@ -184,26 +197,34 @@ onerror:
 // 预估可用slot
 func (o *tcpManager) estimateSlot() error {
 	blog.Debugf("[slotmgr] estimateSlot")
-	o.updateAvailable()
-	availableslotnum := int(currentAvailableCPU) - o.curjobs - bookedSlotNum
+
+	// 总可用任务数 - （运行中任务 + 预订的任务 + 等待运行的任务）
+	availableslotnum := int(currentAvailableSlotCPU) - o.curjobs - bookedSlotNum - len(o.buffedcmds)
 
 	if availableslotnum > 0 {
 		c := o.selectClient()
 		if c != nil {
-			// save to slot cache
-			slotLock.Lock()
-			slotCache = append(slotCache, &slot{
-				c:       c,
-				num:     availableslotnum,
-				time:    time.Now(),
-				timeout: false,
-			})
-			bookedSlotNum += availableslotnum
-			slotLock.Unlock()
-
 			refused := 0
 			message := ""
-			o.sendSlotResponse(c.tcpclient, int32(availableslotnum), int32(refused), message)
+
+			// 加上client的锁，避免其它地方同时使用
+			clientLock.RLock()
+			consumed, err := o.sendSlotOffer(c.tcpclient, int32(availableslotnum), int32(refused), message)
+			clientLock.RUnlock()
+			if err == nil && consumed > 0 {
+				bookedSlotNum += consumed
+
+				// save to slot cache
+				slotLock.Lock()
+				slotCache = append(slotCache, &slot{
+					c:         c,
+					num:       consumed,
+					time:      time.Now(),
+					timeout:   false,
+					needclean: false,
+				})
+				slotLock.Unlock()
+			}
 		}
 	}
 
@@ -228,11 +249,11 @@ func (o *tcpManager) selectClient() *client {
 }
 
 // send query slot response
-func (o *tcpManager) sendSlotResponse(
+func (o *tcpManager) sendSlotOffer(
 	client *protocol.TCPClient,
 	availableslotnum int32,
 	refused int32,
-	message string) error {
+	message string) (int, error) {
 	blog.Infof("[slotmgr] send slot response to client[%s] with %d slots,refused:%d,message:[%s]",
 		client.RemoteAddr(), availableslotnum, refused, message)
 
@@ -240,15 +261,46 @@ func (o *tcpManager) sendSlotResponse(
 	messages, err := protocol.EncodeBKQuerySlotRsp(availableslotnum, refused, message)
 	if err != nil {
 		blog.Errorf("[slotmgr] failed to encode rsp to messages for error:%v", err)
+		return 0, err
 	}
 
 	// send response
 	err = protocol.SendMessages(client, &messages)
 	if err != nil {
 		blog.Errorf("[slotmgr] failed to send messages to client[%s] for error:%v", client.RemoteAddr(), err)
+		return 0, err
 	}
 
-	return nil
+	// TODO : 发送offer后，等待对方确认消费的数量
+	if availableslotnum > 0 {
+		ack, err := o.receiveSlotRspAck(client)
+		if err != nil {
+			return 0, err
+		}
+
+		blog.Infof("[slotmgr] got slot ack from client[%s] with %d slots,refused:%d,message:[%s],consumed:%d",
+			client.RemoteAddr(), availableslotnum, refused, message, ack.GetConsumeslotnum())
+		return int(ack.GetConsumeslotnum()), nil
+	}
+
+	return 0, nil
+}
+
+func (o *tcpManager) receiveSlotRspAck(client *protocol.TCPClient) (*dcProtocol.PBBodySlotRspAck, error) {
+	head, err := protocol.ReceiveBKCommonHead(client)
+	if err != nil {
+		blog.Errorf("failed to receive head with error:%v", err)
+		_ = client.Close()
+		return nil, err
+	}
+
+	if head.GetCmdtype() != dcProtocol.PBCmdType_SLOTRSPACK {
+		blog.Errorf("head with type %d is unexpected", head.GetCmdtype())
+		_ = client.Close()
+		return nil, err
+	}
+
+	return protocol.ReceiveBKSlotRspAck(client, head)
 }
 
 // 检查客户端连接是否正常，如果异常了，则清理掉
@@ -275,6 +327,9 @@ func (o *tcpManager) checkClient() {
 		for i := range clientCache {
 			if clientCache[i].valid {
 				tmpCache = append(tmpCache, clientCache[i])
+			} else {
+				// 将该客户端相关的slot释放掉
+				o.cleanSlotByClient(clientCache[i])
 			}
 		}
 		clientCache = tmpCache
@@ -292,31 +347,63 @@ func (o *tcpManager) checkSlot() {
 	needclean := false
 	for i := range slotCache {
 		if slotCache[i].time.Add(maxWaitSlotTime).Before(time.Now()) {
+			blog.Infof("[slotmgr] slot for %s timeout,ready clean it", slotCache[i].c.string())
 			needclean = true
 			slotCache[i].timeout = true
+			slotCache[i].needclean = true
 			if slotCache[i].num > 0 {
 				bookedSlotNum -= slotCache[i].num
 			}
 		}
 	}
 
-	if needclean {
-		if bookedSlotNum < 0 {
-			bookedSlotNum = 0
-		}
+	if bookedSlotNum < 0 {
+		bookedSlotNum = 0
+	}
 
-		newlen := slotCacheNum
-		if len(slotCache) > newlen {
-			newlen = len(slotCache)
+	if needclean {
+		o.cleanSlot()
+	}
+}
+
+func (o *tcpManager) cleanSlot() {
+	newlen := slotCacheNum
+	if len(slotCache) > newlen {
+		newlen = len(slotCache)
+	}
+	tmpCache := make([]*slot, 0, newlen)
+	for i := range slotCache {
+		if !slotCache[i].needclean {
+			tmpCache = append(tmpCache, slotCache[i])
 		}
-		tmpCache := make([]*slot, 0, newlen)
-		for i := range slotCache {
-			if !slotCache[i].timeout {
-				tmpCache = append(tmpCache, slotCache[i])
+	}
+
+	slotCache = tmpCache
+}
+
+func (o *tcpManager) cleanSlotByClient(c *client) {
+	blog.Infof("[slotmgr] clean slot with client:%s", c.string())
+
+	slotLock.Lock()
+	defer slotLock.Unlock()
+
+	needclean := false
+	for i := range slotCache {
+		if slotCache[i].c.equal(c) {
+			needclean = true
+			slotCache[i].needclean = true
+			if slotCache[i].num > 0 {
+				bookedSlotNum -= slotCache[i].num
 			}
 		}
+	}
 
-		slotCache = tmpCache
+	if bookedSlotNum < 0 {
+		bookedSlotNum = 0
+	}
+
+	if needclean {
+		o.cleanSlot()
 	}
 }
 
@@ -369,7 +456,6 @@ func (o *tcpManager) onFileReceived(ip string) {
 			if slotCache[i].num > 0 {
 				blog.Infof("[slotmgr] received file for client:%s", ip)
 				slotCache[i].time = time.Now()
-				break
 			}
 		}
 	}

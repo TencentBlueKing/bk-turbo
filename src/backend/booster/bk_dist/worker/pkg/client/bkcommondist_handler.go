@@ -24,9 +24,17 @@ import (
 )
 
 // NewCommonRemoteWorkerWithSlot get a new remote worker SDK with specifiled size of slot
-func NewCommonRemoteWorkerWithSlot(ctx context.Context, size int64) dcSDK.RemoteWorker {
+func NewCommonRemoteWorkerWithSlot(
+	ctx context.Context,
+	size int64,
+	sendwithcache bool) dcSDK.RemoteWorker {
+	var cache *fileDataCache
+	if sendwithcache {
+		cache = newFileDataCache(ctx)
+	}
 	return &RemoteWorker{
-		slot: newSlot(ctx, size),
+		slot:      newSlot(ctx, size),
+		fileCache: cache,
 	}
 }
 
@@ -39,7 +47,8 @@ func NewCommonRemoteWorker() dcSDK.RemoteWorker {
 // 但最终的连接池都是用的同一个
 // TODO: 统一管理连接池
 type RemoteWorker struct {
-	slot *slot
+	slot      *slot
+	fileCache *fileDataCache
 }
 
 // Handler get a remote handler
@@ -67,6 +76,7 @@ func (rw *RemoteWorker) Handler(
 		updateJobStatsFunc: updateJobStatsFunc,
 		ioTimeout:          ioTimeout,
 		slot:               rw.slot,
+		fileCache:          rw.fileCache,
 	}
 }
 
@@ -78,6 +88,7 @@ type CommonRemoteHandler struct {
 	updateJobStatsFunc func()
 	ioTimeout          int
 	slot               *slot
+	fileCache          *fileDataCache
 }
 
 func getRealServer(server string) string {
@@ -108,7 +119,7 @@ func (r *CommonRemoteHandler) ExecuteSyncTime(server string) (int64, error) {
 	}
 
 	// send request
-	err = sendMessages(client, messages)
+	err = SendMessages(client, messages)
 	if err != nil {
 		blog.Warnf("error: %v", err)
 		return 0, err
@@ -170,7 +181,7 @@ func (r *CommonRemoteHandler) ExecuteTask(
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendStartTime)
 	// record the send starting status, sending should be waiting for a while.
 	r.updateJobStatsFunc()
-	err = sendMessages(client, messages)
+	err = SendMessages(client, messages)
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
 	if err != nil {
 		r.recordStats.RemoteWorkFatal = true
@@ -254,7 +265,7 @@ func (r *CommonRemoteHandler) ExecuteTaskWithoutSaveFile(
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendStartTime)
 	// record the send starting status, sending should be waiting for a while.
 	r.updateJobStatsFunc()
-	err = sendMessages(client, messages)
+	err = SendMessages(client, messages)
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
 	if err != nil {
 		r.recordStats.RemoteWorkFatal = true
@@ -354,7 +365,7 @@ func EncodeCommonDistTask(req *dcSDK.BKDistCommand) ([]protocol.Message, error) 
 func EncodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([]protocol.Message, error) {
 	blog.Debugf("encodeBKCommonDistFiles now")
 
-	return encodeSendFileReq(req, sandbox)
+	return encodeSendFileReq(req, sandbox, nil)
 }
 
 // ExecuteSendFile send files to remote server
@@ -410,7 +421,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 			}
 		}
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
-		messages, err = encodeSendFileReq(req, sandbox)
+		messages, err = encodeSendFileReq(req, sandbox, r.fileCache)
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
 
 		if locallocked {
@@ -459,7 +470,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 	blog.Debugf("success connect to server %s", server)
 
-	err = sendMessages(client, messages)
+	err = SendMessages(client, messages)
 	if err != nil {
 		blog.Warnf("error: %v", err)
 
@@ -471,7 +482,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		return nil, err
 	}
 
-	blog.Debugf("remote: finished send request for send cork %d files with size:%d to server %s",
+	blog.Debugf("remote: send common file stat, total %d files with size:%d to server %s",
 		len(req.Files), totalsize, server.Server)
 
 	debug.FreeOSMemory() // free memory anyway
@@ -497,8 +508,10 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		return nil, err
 	}
 
-	blog.Debugf("remote: finished receive request for send cork %d files with size:%d to server %s",
-		len(req.Files), totalsize, server.Server)
+	d = time.Now().Sub(t)
+	blog.Infof("remotehandle: send common file stat, total %d files size %d, "+
+		"duration %f seconds to server %s",
+		len(req.Files), totalsize, d.Seconds(), server.Server)
 
 	blog.Debugf("send file task done *")
 
@@ -533,7 +546,7 @@ func (r *CommonRemoteHandler) ExecuteCheckCache(
 		return nil, err
 	}
 
-	err = sendMessages(client, messages)
+	err = SendMessages(client, messages)
 	if err != nil {
 		blog.Warnf("error: %v", err)
 		return nil, err
@@ -590,7 +603,7 @@ func (r *CommonRemoteHandler) ExecuteQuerySlot(
 		return nil, err
 	}
 
-	err = sendMessages(client, messages)
+	err = SendMessages(client, messages)
 	if err != nil {
 		blog.Warnf("query slot error: %v", err)
 		_ = client.Close()

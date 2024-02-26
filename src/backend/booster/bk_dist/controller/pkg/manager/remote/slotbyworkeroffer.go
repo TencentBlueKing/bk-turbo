@@ -12,6 +12,7 @@ package remote
 import (
 	"container/list"
 	"context"
+	"net"
 	"runtime"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
+	wkclient "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -83,7 +85,6 @@ func newWorkerOfferResource(hl []*dcProtocol.Host) *workerOffer {
 		validWorkerNum: len(hl),
 
 		waitingList: list.New(),
-		slotList:    list.New(),
 		slotQueried: false,
 
 		lastGetSlotTime:   time.Now(),
@@ -112,9 +113,6 @@ type workerOffer struct {
 
 	// 用于接收worker提供的slot offer
 	slotChan chan *dcSDK.BKQuerySlotResult
-
-	// to save slot list
-	slotList *list.List
 
 	slotQueried bool
 
@@ -444,10 +442,7 @@ func (wo *workerOffer) handle(ctx context.Context) {
 	defer tick.Stop()
 
 	tick1 := time.NewTicker(jobCheckIntervalTime)
-	defer tick.Stop()
-
-	tick2 := time.NewTicker(slotCheckIntervalTime)
-	defer tick.Stop()
+	defer tick1.Stop()
 
 	for {
 		select {
@@ -467,10 +462,6 @@ func (wo *workerOffer) handle(ctx context.Context) {
 			if wo.waitingList.Len() > 0 {
 				wo.jobCheck()
 			}
-		case <-tick2.C:
-			if wo.slotList.Len() > 0 {
-				wo.slotCheck()
-			}
 		}
 	}
 }
@@ -479,20 +470,6 @@ func (wo *workerOffer) getSlot(msg lockWorkerMessage) {
 	if wo.validWorkerNum <= 0 {
 		msg.result <- nil
 		return
-	}
-
-	if s := wo.slotList.Front(); s != nil {
-		slot := s.Value.(*remoteSlotOffer)
-		if slot.AvailableSlotNum > 0 {
-			msg.result <- slot.Host
-			slot.AvailableSlotNum -= 1
-
-			if slot.AvailableSlotNum <= 0 {
-				wo.slotList.Remove(s)
-			}
-
-			return
-		}
 	}
 
 	wo.waitingList.PushBack(&msg)
@@ -522,8 +499,9 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 		return nil
 	}
 
-	// update worker
+	// update worker status
 	wo.workerLock.RLock()
+	var targetconn *net.TCPConn
 	blog.Infof("worker offer slot: got slot offer:%+v", *r)
 	for _, w := range wo.worker {
 		if w.host.Equal(r.Host) {
@@ -545,37 +523,72 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 				return nil
 			} else {
 				w.status = InService
+				targetconn = w.conn
 			}
 			break
 		}
 	}
 	wo.workerLock.RUnlock()
 
-	// update slot
-	wo.slotList.PushBack(&remoteSlotOffer{
-		Host:             r.Host,
-		AvailableSlotNum: r.AvailableSlotNum,
-		ReceivedTime:     time.Now(),
-	})
-
 	wo.lastGetSlotTime = time.Now()
 
-	// update jobs
-	if wo.waitingList.Len() > 0 {
-		for e := wo.waitingList.Front(); e != nil; e = e.Next() {
-			msg := e.Value.(*lockWorkerMessage)
-			if s := wo.slotList.Front(); s != nil {
-				slot := s.Value.(*remoteSlotOffer)
-				if slot.AvailableSlotNum > 0 {
-					msg.result <- slot.Host
-					slot.AvailableSlotNum -= 1
-					if slot.AvailableSlotNum <= 0 {
-						wo.slotList.Remove(s)
-					}
-					wo.waitingList.Remove(e)
-				}
-			}
+	// 确认当前能够消化多少slot（根据当前任务数来计算），并通知worker
+	if r.AvailableSlotNum > 0 {
+		consumed, err := wo.consumeSlot(&remoteSlotOffer{
+			Host:             r.Host,
+			AvailableSlotNum: r.AvailableSlotNum,
+			ReceivedTime:     time.Now(),
+		})
+
+		if err != nil {
+			blog.Errorf("[slotmgr] failed to consume slot for error:%v", err)
+			return err
 		}
+
+		return wo.sendSlotRspAck(wkclient.NewTCPClientWithConn(targetconn), int32(consumed))
+	}
+
+	return nil
+}
+
+// consume slot
+func (wo *workerOffer) consumeSlot(r *remoteSlotOffer) (int, error) {
+	consumed := 0
+	if wo.waitingList.Len() > 0 {
+		for e := wo.waitingList.Front(); e != nil && consumed < int(r.AvailableSlotNum); {
+			next := e.Next()
+
+			msg := e.Value.(*lockWorkerMessage)
+			msg.result <- r.Host
+			wo.waitingList.Remove(e)
+			consumed += 1
+
+			e = next
+		}
+	}
+
+	return consumed, nil
+}
+
+// send query slot response
+func (wo *workerOffer) sendSlotRspAck(
+	client *wkclient.TCPClient,
+	consumeslotnum int32) error {
+	blog.Infof("[slotmgr] send slot response ack to client[%s] with consumed %d slots",
+		client.RemoteAddr(), consumeslotnum)
+
+	// encode response to messages
+	messages, err := wkclient.EncodeSlotRspAck(consumeslotnum)
+	if err != nil {
+		blog.Errorf("[slotmgr] failed to encode rsp ack to messages for error:%v", err)
+		return err
+	}
+
+	// send response
+	err = wkclient.SendMessages(client, messages)
+	if err != nil {
+		blog.Errorf("[slotmgr] failed to send messages to client[%s] for error:%v", client.RemoteAddr(), err)
+		return err
 	}
 
 	return nil
@@ -690,7 +703,6 @@ func (wo *workerOffer) querySlot() error {
 func (wo *workerOffer) jobCheck() error {
 	toLocalNum := 0
 	for wo.waitingList.Len() > 0 &&
-		wo.slotList.Len() == 0 &&
 		wo.lastGetSlotTime.Add(MaxNoSlotSIntervalTime).Before(time.Now()) {
 
 		e := wo.waitingList.Front()
@@ -707,21 +719,6 @@ func (wo *workerOffer) jobCheck() error {
 		}
 	}
 
-	return nil
-}
-
-// 检查worker发送的slot，避免slot一直闲置
-func (wo *workerOffer) slotCheck() error {
-	// TODO : 如果远程worker给的offer大于worker的处理能力，则有可能，但看上去不应该直接断开
-	// if wo.slotList.Len() > 0 {
-	// 	for e := wo.slotList.Front(); e != nil; e = e.Next() {
-	// 		slot := e.Value.(*remoteSlotOffer)
-	// 		if slot.ReceivedTime.Add(MaxSlotIdleIntervalTime).Before(time.Now()) {
-	// 			wo.resetWorkerSlot(slot.Host)
-	// 			wo.slotList.Remove(e)
-	// 		}
-	// 	}
-	// }
 	return nil
 }
 

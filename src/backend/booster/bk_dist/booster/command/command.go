@@ -99,6 +99,7 @@ const (
 	FlagResIdleSecsForFree   = "res_idle_secs_for_free"
 	FlagSendCork             = "send_cork"
 	FlagSendFileMemoryLimit  = "send_file_memory_limit"
+	FlagSendMemoryCache      = "send_memory_cache"
 	FlagNetErrorLimit        = "net_error_limit"
 	FlagRemoteRetryTimes     = "remote_retry_times"
 	FlagEnableLink           = "enable_link"
@@ -420,6 +421,10 @@ var (
 		commandCli.Int64Flag{
 			Name:  "send_file_memory_limit",
 			Usage: "set send file memory limit",
+		},
+		commandCli.BoolFlag{
+			Name:  "send_memory_cache",
+			Usage: "send files with memory cache",
 		},
 		commandCli.IntFlag{
 			Name:  "net_error_limit",

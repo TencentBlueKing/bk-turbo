@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -182,12 +183,17 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 
 	// 加内存锁
 	var totalsize int64
+	var locksize int64
 	memorylocked := false
+	t1 := time.Now()
 	if r.slot != nil {
 		for _, v := range req.Files {
 			totalsize += v.FileSize
 		}
-		if r.slot.Lock(totalsize) {
+		// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
+		// locksize = totalsize * 3
+		locksize = totalsize
+		if r.slot.Lock(locksize) {
 			memorylocked = true
 			blog.Debugf("remotehandle: succeed to get lock with size %d", totalsize)
 		}
@@ -195,13 +201,17 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 
 	defer func() {
 		if memorylocked {
-			r.slot.Unlock(totalsize)
+			r.slot.Unlock(locksize)
 			blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
 			memorylocked = false
 		}
 	}()
+	t2 := time.Now()
+	dmemorylock := t2.Sub(t1)
+	t1 = t2
 
 	var err error
+	var dlocallock, dencodereq time.Duration
 	messages := req.Messages
 	if messages == nil {
 		// 加本地资源锁
@@ -212,9 +222,18 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 				blog.Debugf("remotehandle: succeed to get one local lock")
 			}
 		}
+
+		t2 = time.Now()
+		dlocallock = t2.Sub(t1)
+		t1 = t2
+
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
-		messages, err = encodeSendFileReq(req, sandbox)
+		messages, err = encodeSendFileReq(req, sandbox, r.fileCache)
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
+
+		t2 = time.Now()
+		dencodereq = t2.Sub(t1)
+		t1 = t2
 
 		if locallocked {
 			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
@@ -248,11 +267,16 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
+
+	var dsend time.Duration
 	ret := session.Send(reqdata, true, func() error {
+		t2 = time.Now()
+		dsend = t2.Sub(t1)
+		t1 = t2
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
 		if memorylocked {
-			r.slot.Unlock(totalsize)
-			blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
+			r.slot.Unlock(locksize)
+			blog.Debugf("remotehandle: succeed to release lock with size %d", locksize)
 			memorylocked = false
 		}
 		return nil
@@ -277,6 +301,17 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		blog.Warnf("error: %v", err)
 		return nil, err
 	}
+
+	t2 = time.Now()
+	ddecode := t2.Sub(t1)
+	t1 = t2
+
+	blog.Infof("remotehandle: send common file stat, total %d files size:%d server:%s"+
+		" memory lock duration: %f , local lock duration: %f , "+
+		" encode req duration: %f , send duration: %f , decode response duration: %f",
+		len(req.Files), totalsize, server.Server,
+		dmemorylock.Seconds(), dlocallock.Seconds(),
+		dencodereq.Seconds(), dsend.Seconds(), ddecode.Seconds())
 
 	blog.Debugf("send file task done *")
 

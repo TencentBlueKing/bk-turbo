@@ -219,7 +219,8 @@ func fillOneFile(
 	filefullpath string,
 	buffer []byte,
 	compresstype protocol.CompressType,
-	fileMode uint32) (protocol.Message, int64, error) {
+	fileMode uint32,
+	cache *fileDataCache) (protocol.Message, int64, error) {
 	message := protocol.Message{
 		Messagetype:  protocol.MessageString,
 		Data:         nil,
@@ -237,6 +238,19 @@ func fillOneFile(
 		if os.FileMode(fileMode)&os.ModeSymlink != 0 || os.FileMode(fileMode).IsDir() {
 			data = []byte("EMPTY")
 		} else {
+			// // cache 先只支持lz4
+			if cache != nil && compresstype == protocol.CompressLZ4 {
+				buf, err := cache.Query(filefullpath)
+				blog.Infof("got %d buf from cache", len(*buf))
+				if err == nil {
+					message.Data = *buf
+					outlen := len(*buf)
+					return message, int64(outlen), nil
+				}
+
+				return message, 0, err
+			}
+
 			data, err = ioutil.ReadFile(filefullpath)
 			if err != nil {
 				blog.Warnf("failed to read file[%s] with error:%v", filefullpath, err)
@@ -340,7 +354,7 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 					md5, _ = dcFile.Stat(fullpath).Md5()
 				}
 
-				m, compressedsize, err := fillOneFile(f.FilePath, f.Buffer, f.Compresstype, filemode)
+				m, compressedsize, err := fillOneFile(f.FilePath, f.Buffer, f.Compresstype, filemode, nil)
 				if err != nil {
 					blog.Warnf("failed to encode message for file %s with error:%v", f.FilePath, err)
 					continue
@@ -795,7 +809,10 @@ func receiveCommonDispatchRspBufWithoutSaveFile(
 	return nil
 }
 
-func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([]protocol.Message, error) {
+func encodeSendFileReq(
+	req *dcSDK.BKDistFileSender,
+	sandbox *syscall.Sandbox,
+	cache *fileDataCache) ([]protocol.Message, error) {
 	blog.Debugf("encode send files request to message now")
 
 	// save files
@@ -842,7 +859,7 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 			continue
 		}
 
-		m, compressedsize, err := fillOneFile(fullpath, f.Buffer, f.Compresstype, filemode)
+		m, compressedsize, err := fillOneFile(fullpath, f.Buffer, f.Compresstype, filemode, cache)
 		if err != nil {
 			blog.Warnf("failed to encode message for file with error:%v", f.FilePath, err)
 			continue
@@ -1243,4 +1260,68 @@ func decodeQuerySlotRsp(data *protocol.PBBodyQuerySlotRsp) (*dcSDK.BKQuerySlotRe
 	results.Message = *data.Message
 
 	return &results, nil
+}
+
+func EncodeSlotRspAck(consumeslotnum int32) ([]protocol.Message, error) {
+	blog.Debugf("encode query slot rsp ack to message now")
+
+	// encode body and file to message
+	pbbody := protocol.PBBodySlotRspAck{}
+	pbbody.Consumeslotnum = &consumeslotnum
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
+
+	// encode head
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_SLOTRSPACK
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with error:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
 }

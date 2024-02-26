@@ -56,10 +56,14 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 	}
 
 	return &Mgr{
-		ctx:                   ctx,
-		work:                  work,
-		resource:              remoteSlotMgr,
-		remoteWorker:          client.NewCommonRemoteWorkerWithSlot(ctx, work.Config().SendFileMemoryLimit),
+		ctx:      ctx,
+		work:     work,
+		resource: remoteSlotMgr,
+		remoteWorker: client.NewCommonRemoteWorkerWithSlot(
+			ctx,
+			work.Config().SendFileMemoryLimit,
+			work.Config().SendMemoryCache,
+		),
 		checkSendFileTick:     100 * time.Millisecond,
 		fileSendMap:           make(map[string]*fileSendMap),
 		fileCollectionSendMap: make(map[string]*[]*types.FileCollectionInfo),
@@ -1288,10 +1292,12 @@ func (m *Mgr) ensureOneFileCollection(
 	blog.Infof("remote: try to ensure one file collection(%s) timestamp(%d) filenum(%d) cache-hit(%d) "+
 		"for work(%s) to server(%s), going to send this collection",
 		fc.UniqID, fc.Timestamp, len(needSentFiles), hit, m.work.ID(), host.Server)
-	req := &dcSDK.BKDistFileSender{Files: needSentFiles}
-	if req.Messages, err = client.EncodeSendFileReq(req, sandbox); err != nil {
-		return err
-	}
+
+	// ！！ 这个地方不需要了，需要注释掉，影响性能
+	// req := &dcSDK.BKDistFileSender{Files: needSentFiles}
+	// if req.Messages, err = client.EncodeSendFileReq(req, sandbox); err != nil {
+	// 	return err
+	// }
 
 	// // 同步发送文件
 	// result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
@@ -1768,6 +1774,10 @@ func (m *Mgr) waitCorkFileResult(cf *corkFile) (int32, error) {
 func (m *Mgr) getCorkFiles(sendanyway bool) []*[]*corkFile {
 	m.corkMutex.Lock()
 	defer m.corkMutex.Unlock()
+
+	if len(m.corkFiles) == 0 {
+		return nil
+	}
 
 	result := make([]*[]*corkFile, 0)
 	for _, v := range m.corkFiles {

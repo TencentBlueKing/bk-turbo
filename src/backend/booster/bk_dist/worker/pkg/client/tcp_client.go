@@ -35,6 +35,17 @@ type TCPClient struct {
 	conn    *net.TCPConn
 }
 
+// NewTCPClientWithConn return new TCPClient with specified conn
+func NewTCPClientWithConn(conn *net.TCPConn) *TCPClient {
+	// not sure whether it can imporve performance
+	err := conn.SetNoDelay(false)
+	if err != nil {
+		blog.Errorf("set no delay to false error: [%s]", err.Error())
+	}
+
+	return &TCPClient{conn: conn}
+}
+
 // NewTCPClient return new TCPClient
 func NewTCPClient(timeout int) *TCPClient {
 	if timeout <= 0 {
@@ -270,7 +281,7 @@ func (c *TCPClient) ReadUntilEOF() ([]byte, int, error) {
 	return data, readlen, nil
 }
 
-func sendMessages(client *TCPClient, messages []protocol.Message) error {
+func SendMessages(client *TCPClient, messages []protocol.Message) error {
 	blog.Debugf("send requests")
 
 	if len(messages) == 0 {
@@ -313,4 +324,28 @@ func (c *TCPClient) ConnDesc() string {
 	}
 
 	return fmt.Sprintf("%s->%s", c.conn.LocalAddr().String(), c.conn.RemoteAddr().String())
+}
+
+// RemoteAddr return RemoteAddr
+func (c *TCPClient) RemoteAddr() string {
+	if c.conn != nil {
+		return c.conn.RemoteAddr().String()
+	}
+
+	return ""
+}
+
+// RemoteIP return remote ip
+func (c *TCPClient) RemoteIP() string {
+	if c.conn != nil {
+		remoteAddr := c.conn.RemoteAddr()
+		tcpAddr, ok := remoteAddr.(*net.TCPAddr)
+		if !ok {
+			return ""
+		}
+
+		return tcpAddr.IP.String()
+	}
+
+	return ""
 }

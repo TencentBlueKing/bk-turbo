@@ -253,7 +253,7 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
 			if !existed {
 				err := fmt.Errorf("input tool file %s not existed", v)
-				blog.Errorf("%v", err)
+				blog.Infof("%v", err)
 				// return nil, err
 				continue
 			}
