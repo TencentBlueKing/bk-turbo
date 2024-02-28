@@ -240,7 +240,7 @@ func fillOneFile(
 		} else {
 			// // cache 先只支持lz4
 			if cache != nil && compresstype == protocol.CompressLZ4 {
-				buf, err := cache.Query(filefullpath)
+				buf, err := cache.Query(filefullpath, true)
 				blog.Infof("got %d buf from cache", len(*buf))
 				if err == nil {
 					message.Data = *buf

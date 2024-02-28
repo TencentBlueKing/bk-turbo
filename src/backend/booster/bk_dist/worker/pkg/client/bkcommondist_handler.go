@@ -397,20 +397,29 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	var totalsize int64
 	var locksize int64
 	memorylocked := false
-	if r.slot != nil {
-		for _, v := range req.Files {
-			totalsize += v.FileSize
-		}
-		// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
-		locksize = totalsize * 3
-		if r.slot.Lock(locksize) {
-			memorylocked = true
-			blog.Debugf("remotehandle: succeed to get one memory lock")
+	t1 := time.Now()
+	t2 := t1
+	tinit := time.Now()
+
+	var err error
+	var dlocallock, dencodereq, dmemorylock time.Duration
+	messages := req.Messages
+
+	// 如果只有一个文件，且已经在缓存里了(或者被其它协程在读取)，则跳过内存锁和本地锁
+	onefileincache := false
+	if len(req.Files) == 1 && r.fileCache != nil && messages == nil {
+		_, err := r.fileCache.Query(req.Files[0].FilePath, false)
+		if err == nil {
+			onefileincache = true
 		}
 	}
 
-	var err error
-	messages := req.Messages
+	if onefileincache {
+		// 有可能在这时，缓存被清理了，先忽略
+		messages, err = encodeSendFileReq(req, sandbox, r.fileCache)
+		blog.Infof("remotehandle: encode file %s without memory lock", req.Files[0].FilePath)
+	}
+
 	if messages == nil {
 		// 加本地资源锁
 		locallocked := false
@@ -420,9 +429,41 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 				blog.Debugf("remotehandle: succeed to get one local lock")
 			}
 		}
+
+		t2 = time.Now()
+		dlocallock = t2.Sub(t1)
+		t1 = t2
+
+		if r.slot != nil && messages == nil {
+			for _, v := range req.Files {
+				totalsize += v.FileSize
+			}
+			// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
+			// r.fileCache 有内存检查，如果打开了该选项，限制可以放松点，加快速度
+			if r.fileCache == nil {
+				locksize = totalsize * 3
+			} else {
+				locksize = totalsize
+			}
+			if locksize > 0 {
+				if r.slot.Lock(locksize) {
+					memorylocked = true
+					blog.Debugf("remotehandle: succeed to get one memory lock")
+				}
+			}
+		}
+
+		t2 = time.Now()
+		dmemorylock = t2.Sub(t1)
+		t1 = t2
+
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
 		messages, err = encodeSendFileReq(req, sandbox, r.fileCache)
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
+
+		t2 = time.Now()
+		dencodereq = t2.Sub(t1)
+		t1 = t2
 
 		if locallocked {
 			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
@@ -468,6 +509,10 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		_ = client.Close()
 	}()
 
+	t2 = time.Now()
+	dconnect := t2.Sub(t1)
+	t1 = t2
+
 	blog.Debugf("success connect to server %s", server)
 
 	err = SendMessages(client, messages)
@@ -481,6 +526,10 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 
 		return nil, err
 	}
+
+	t2 = time.Now()
+	dsend := t2.Sub(t1)
+	t1 = t2
 
 	blog.Debugf("remote: send common file stat, total %d files with size:%d to server %s",
 		len(req.Files), totalsize, server.Server)
@@ -497,6 +546,10 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	data, err := receiveSendFileRsp(client)
 	dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
 
+	t2 = time.Now()
+	drecv := t2.Sub(t1)
+	t1 = t2
+
 	if err != nil {
 		blog.Warnf("error: %v", err)
 		return nil, err
@@ -508,10 +561,27 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		return nil, err
 	}
 
-	d = time.Now().Sub(t)
-	blog.Infof("remotehandle: send common file stat, total %d files size %d, "+
-		"duration %f seconds to server %s",
-		len(req.Files), totalsize, d.Seconds(), server.Server)
+	t2 = time.Now()
+	ddecode := t2.Sub(t1)
+	t1 = t2
+
+	dtotal := t2.Sub(tinit)
+
+	// d = time.Now().Sub(t)
+	// blog.Infof("remotehandle: send common file stat, total %d files size %d, "+
+	// 	"duration %f seconds to server %s",
+	// 	len(req.Files), totalsize, d.Seconds(), server.Server)
+
+	blog.Infof("remotehandle: send common file stat, total %d files size:%d server:%s "+
+		"memory lock : %f , local lock : %f , "+
+		"encode req : %f , connect : %f , "+
+		"send : %f , receive : %f , "+
+		"decode response : %f , total : %f",
+		len(req.Files), totalsize, server.Server,
+		dmemorylock.Seconds(), dlocallock.Seconds(),
+		dencodereq.Seconds(), dconnect.Seconds(),
+		dsend.Seconds(), drecv.Seconds(),
+		ddecode.Seconds(), dtotal.Seconds())
 
 	blog.Debugf("send file task done *")
 

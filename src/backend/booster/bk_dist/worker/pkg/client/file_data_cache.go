@@ -40,6 +40,7 @@ const (
 var (
 	errorNotRunning  = fmt.Errorf("this handle not running")
 	errorContextExit = fmt.Errorf("context exit")
+	errorNotInCache  = fmt.Errorf("not in cache")
 )
 
 //
@@ -67,6 +68,8 @@ type chanFileDataResult chan fileDataResult
 type chanFileDataRequest struct {
 	result   chanFileDataResult
 	fullpath string
+	// 只查询缓存，不触发文件的读取，如果不存在，返回nil
+	readanyway bool
 }
 
 type chanChanRequest chan chanFileDataRequest
@@ -89,13 +92,17 @@ func (fdc *fileDataCache) Handle(ctx context.Context) {
 	go fdc.handle(ctx)
 }
 
-func (fdc *fileDataCache) Query(fullpath string) (*[]byte, error) {
+func (fdc *fileDataCache) Query(fullpath string, readanyway bool) (*[]byte, error) {
 	if !fdc.handling {
 		return nil, errorNotRunning
 	}
 
 	blog.Infof("filedatacache: ready query file %s now", fullpath)
-	msg := chanFileDataRequest{fullpath: fullpath, result: make(chanFileDataResult, 1)}
+	msg := chanFileDataRequest{
+		fullpath:   fullpath,
+		result:     make(chanFileDataResult, 1),
+		readanyway: readanyway,
+	}
 	fdc.queryChan <- msg
 
 	select {
@@ -142,6 +149,7 @@ const (
 
 type oneFileCache struct {
 	fullpath         string
+	filesize         int64
 	compressedBuf    *[]byte
 	compressedBufLen int64
 	modifiedTime     time.Time
@@ -370,8 +378,19 @@ func (ifdc *innerFileDataCache) query(req chanFileDataRequest) {
 	var f *oneFileCache
 	var ok bool
 	if f, ok = ifdc.files[req.fullpath]; !ok {
+		// 如果没有指定要读，则返回
+		if !req.readanyway {
+			result := fileDataResult{
+				buf: nil,
+				err: errorNotInCache,
+			}
+			req.result <- result
+			return
+		}
+
 		f = &oneFileCache{
 			fullpath:         req.fullpath,
+			filesize:         fileInfo.Size(),
 			compressedBuf:    nil,
 			compressedBufLen: 0,
 			modifiedTime:     fileInfo.ModTime(),
@@ -384,11 +403,15 @@ func (ifdc *innerFileDataCache) query(req chanFileDataRequest) {
 		ifdc.files[req.fullpath] = f
 	}
 
-	go ifdc.check(f, req.result, fileInfo)
+	go ifdc.check(f, req.result, fileInfo, req.readanyway)
 }
 
 // 该文件可能在处理中，用锁互斥，保证只有一个在操作中
-func (ifdc *innerFileDataCache) check(f *oneFileCache, c chanFileDataResult, fi fs.FileInfo) {
+func (ifdc *innerFileDataCache) check(
+	f *oneFileCache,
+	c chanFileDataResult,
+	fi fs.FileInfo,
+	readanyway bool) {
 	blog.Debugf("filedatacache: innerFileDataCache check %s now", f.fullpath)
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -412,7 +435,8 @@ func (ifdc *innerFileDataCache) check(f *oneFileCache, c chanFileDataResult, fi 
 			}
 			c <- result
 			f.hits += 1
-			blog.Infof("filedatacache: file %s size %d hit cache succeed", f.fullpath, f.compressedBufLen)
+			blog.Infof("filedatacache: file %s origin size %d compressed size %d hit cache succeed",
+				f.fullpath, f.filesize, f.compressedBufLen)
 			return
 		}
 
@@ -420,6 +444,15 @@ func (ifdc *innerFileDataCache) check(f *oneFileCache, c chanFileDataResult, fi 
 		if f.status == dataCacheReading || f.status == dataCacheCompressing {
 			blog.Warnf("filedatacache: why come this with status:%d???", f.status)
 		}
+	}
+
+	if !readanyway {
+		result := fileDataResult{
+			buf: nil,
+			err: nil,
+		}
+		c <- result
+		return
 	}
 
 	// reload anyway
@@ -458,7 +491,8 @@ func (ifdc *innerFileDataCache) load(f *oneFileCache, c chanFileDataResult, fi f
 		err: nil,
 	}
 	c <- result
-	blog.Infof("filedatacache: file %s compressed size %d load succeed", f.fullpath, f.compressedBufLen)
+	blog.Infof("filedatacache: file %s origin size %d compressed size %d load succeed",
+		f.fullpath, f.filesize, f.compressedBufLen)
 	return
 
 ERROR:

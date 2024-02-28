@@ -186,33 +186,28 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	var locksize int64
 	memorylocked := false
 	t1 := time.Now()
-	if r.slot != nil {
-		for _, v := range req.Files {
-			totalsize += v.FileSize
-		}
-		// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
-		// locksize = totalsize * 3
-		locksize = totalsize
-		if r.slot.Lock(locksize) {
-			memorylocked = true
-			blog.Debugf("remotehandle: succeed to get lock with size %d", totalsize)
+	t2 := t1
+	tinit := time.Now()
+
+	var err error
+	var dlocallock, dencodereq, dmemorylock time.Duration
+	messages := req.Messages
+
+	// 如果只有一个文件，且已经在缓存里了，则跳过内存锁和本地锁
+	onefileincache := false
+	if len(req.Files) == 1 && r.fileCache != nil && messages == nil {
+		_, err := r.fileCache.Query(req.Files[0].FilePath, false)
+		if err == nil {
+			onefileincache = true
 		}
 	}
 
-	defer func() {
-		if memorylocked {
-			r.slot.Unlock(locksize)
-			blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
-			memorylocked = false
-		}
-	}()
-	t2 := time.Now()
-	dmemorylock := t2.Sub(t1)
-	t1 = t2
+	if onefileincache {
+		// 有可能在这时，缓存被清理了，先忽略
+		messages, err = encodeSendFileReq(req, sandbox, r.fileCache)
+		blog.Infof("remotehandle: encode file %s without memory lock", req.Files[0].FilePath)
+	}
 
-	var err error
-	var dlocallock, dencodereq time.Duration
-	messages := req.Messages
 	if messages == nil {
 		// 加本地资源锁
 		locallocked := false
@@ -225,6 +220,36 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 
 		t2 = time.Now()
 		dlocallock = t2.Sub(t1)
+		t1 = t2
+
+		if r.slot != nil && messages == nil {
+			for _, v := range req.Files {
+				totalsize += v.FileSize
+			}
+			// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
+			// r.fileCache 有内存检查，如果打开了该选项，限制可以放松点，加快速度
+			if r.fileCache == nil {
+				locksize = totalsize * 3
+			} else {
+				locksize = totalsize
+			}
+			if locksize > 0 {
+				if r.slot.Lock(locksize) {
+					memorylocked = true
+					blog.Debugf("remotehandle: succeed to get lock with size %d", totalsize)
+				}
+			}
+		}
+
+		defer func() {
+			if memorylocked {
+				r.slot.Unlock(locksize)
+				blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
+				memorylocked = false
+			}
+		}()
+		t2 = time.Now()
+		dmemorylock = t2.Sub(t1)
 		t1 = t2
 
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
@@ -286,6 +311,10 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		return nil, ret.Err
 	}
 
+	t2 = time.Now()
+	drecv := t2.Sub(t1)
+	t1 = t2
+
 	debug.FreeOSMemory() // free memory anyway
 
 	blog.Debugf("success sent to server %s", server)
@@ -306,12 +335,16 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	ddecode := t2.Sub(t1)
 	t1 = t2
 
-	blog.Infof("remotehandle: send common file stat, total %d files size:%d server:%s"+
-		" memory lock duration: %f , local lock duration: %f , "+
-		" encode req duration: %f , send duration: %f , decode response duration: %f",
+	dtotal := t2.Sub(tinit)
+
+	blog.Infof("remotehandle: longtcp send common file stat, total %d files size:%d server:%s "+
+		"memory lock : %f , local lock : %f , "+
+		"encode req : %f , send : %f , recv : %f , "+
+		"decode response : %f , total : %f ",
 		len(req.Files), totalsize, server.Server,
 		dmemorylock.Seconds(), dlocallock.Seconds(),
-		dencodereq.Seconds(), dsend.Seconds(), ddecode.Seconds())
+		dencodereq.Seconds(), dsend.Seconds(), drecv.Seconds(),
+		ddecode.Seconds(), dtotal.Seconds())
 
 	blog.Debugf("send file task done *")
 
