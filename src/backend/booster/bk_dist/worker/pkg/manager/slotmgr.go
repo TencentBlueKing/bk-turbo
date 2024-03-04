@@ -202,28 +202,38 @@ func (o *tcpManager) estimateSlot() error {
 	availableslotnum := int(currentAvailableSlotCPU) - o.curjobs - bookedSlotNum - len(o.buffedcmds)
 
 	if availableslotnum > 0 {
-		c := o.selectClient()
-		if c != nil {
-			refused := 0
-			message := ""
+		var excludes = []*client{}
+		// 尝试按优先级给客户端发送slot信息，直到可用的slot都用掉
+		for {
+			c := o.selectClient(excludes)
+			if c != nil {
+				excludes = append(excludes, c)
 
-			// 加上client的锁，避免其它地方同时使用
-			clientLock.RLock()
-			consumed, err := o.sendSlotOffer(c.tcpclient, int32(availableslotnum), int32(refused), message)
-			clientLock.RUnlock()
-			if err == nil && consumed > 0 {
-				bookedSlotNum += consumed
+				// 加上client的锁，避免其它地方同时使用
+				clientLock.RLock()
+				consumed, err := o.sendSlotOffer(c.tcpclient, int32(availableslotnum), 0, "")
+				clientLock.RUnlock()
+				if err == nil && consumed > 0 {
+					bookedSlotNum += consumed
 
-				// save to slot cache
-				slotLock.Lock()
-				slotCache = append(slotCache, &slot{
-					c:         c,
-					num:       consumed,
-					time:      time.Now(),
-					timeout:   false,
-					needclean: false,
-				})
-				slotLock.Unlock()
+					// save to slot cache
+					slotLock.Lock()
+					slotCache = append(slotCache, &slot{
+						c:         c,
+						num:       consumed,
+						time:      time.Now(),
+						timeout:   false,
+						needclean: false,
+					})
+					slotLock.Unlock()
+
+					availableslotnum -= consumed
+					if availableslotnum <= 0 {
+						break
+					}
+				}
+			} else {
+				break
 			}
 		}
 	}
@@ -232,13 +242,23 @@ func (o *tcpManager) estimateSlot() error {
 }
 
 // 选择第一个优先级最高的客户端
-func (o *tcpManager) selectClient() *client {
+func (o *tcpManager) selectClient(excludes []*client) *client {
 	clientLock.RLock()
 	defer clientLock.RUnlock()
 
 	var c *client = nil
 	priority := -1
 	for _, v := range clientCache {
+		inexcludes := false
+		for _, v1 := range excludes {
+			if v.equal(v1) {
+				inexcludes = true
+			}
+		}
+		if inexcludes {
+			continue
+		}
+
 		if v.priority > priority {
 			c = v
 			priority = v.priority
@@ -271,7 +291,7 @@ func (o *tcpManager) sendSlotOffer(
 		return 0, err
 	}
 
-	// TODO : 发送offer后，等待对方确认消费的数量
+	// 发送offer后，等待对方确认消费的数量
 	if availableslotnum > 0 {
 		ack, err := o.receiveSlotRspAck(client)
 		if err != nil {
@@ -311,6 +331,7 @@ func (o *tcpManager) checkClient() {
 
 	needclean := false
 	for i := range clientCache {
+		blog.Infof("[slotmgr] check client %+v", *clientCache[i])
 		if clientCache[i].tcpclient.Closed() {
 			needclean = true
 			clientCache[i].valid = false
@@ -328,6 +349,7 @@ func (o *tcpManager) checkClient() {
 			if clientCache[i].valid {
 				tmpCache = append(tmpCache, clientCache[i])
 			} else {
+				blog.Infof("[slotmgr] clean client %+v", *clientCache[i])
 				// 将该客户端相关的slot释放掉
 				o.cleanSlotByClient(clientCache[i])
 			}

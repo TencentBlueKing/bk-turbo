@@ -136,8 +136,21 @@ type tcpManager struct {
 func (o *tcpManager) init() error {
 	blog.Infof("init...")
 
+	// init resource limit
+	err := o.initResourceConf()
+	if err != nil {
+		blog.Errorf("init resource conf failed with error:%v", err)
+		return err
+	}
+	go o.resourceTimer()
+
 	// init max process
 	o.maxprocess = 8
+
+	if totalExecuteCPU > 0 {
+		o.maxprocess = int(totalExecuteCPU)
+	}
+
 	envmaxcpus := env.GetEnv(env.KeyWorkerMaxProcess)
 	if envmaxcpus != "" {
 		intval, err := strconv.ParseInt(envmaxcpus, 10, 64)
@@ -219,14 +232,6 @@ func (o *tcpManager) init() error {
 
 	// init handlers
 	pbcmd.InitHandlers()
-
-	// init resource limit
-	err := o.initResourceConf()
-	if err != nil {
-		blog.Errorf("init resource conf failed with error:%v", err)
-		return err
-	}
-	go o.resourceTimer()
 
 	if o.maxjobs > int(totalExecuteCPU) {
 		o.maxjobs = int(totalExecuteCPU)

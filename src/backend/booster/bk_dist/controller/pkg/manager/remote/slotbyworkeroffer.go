@@ -131,6 +131,8 @@ func (wo *workerOffer) Reset(hl []*dcProtocol.Host) ([]*dcProtocol.Host, error) 
 	// 将老的worker的tcp connection都关掉
 	for _, v := range wo.worker {
 		v.resetSlot("reset workers")
+		blog.Infof("worker offer slot: set worker %s priority %d to Init",
+			v.host.Server, v.priority)
 	}
 
 	wl := make([]*worker, 0, len(hl))
@@ -235,6 +237,8 @@ func (wo *workerOffer) DisableWorker(host *dcProtocol.Host) {
 		invalidjobs = w.totalSlots
 
 		w.resetSlot("disable worker")
+		blog.Infof("worker offer slot: set worker %s priority %d to Init",
+			w.host.Server, w.priority)
 
 		break
 	}
@@ -275,6 +279,8 @@ func (wo *workerOffer) WorkerDead(w *worker) {
 		invalidjobs = wk.totalSlots
 
 		wk.resetSlot("worker dead")
+		blog.Infof("worker offer slot: set worker %s priority %d to Init",
+			wk.host.Server, wk.priority)
 
 		break
 	}
@@ -306,6 +312,8 @@ func (wo *workerOffer) DisableAllWorker() {
 		w.disabled = true
 
 		w.resetSlot("disable all workers")
+		blog.Infof("worker offer slot: set worker %s priority %d to Init",
+			w.host.Server, w.priority)
 	}
 
 	wo.validWorkerNum = 0
@@ -507,22 +515,31 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 		if w.host.Equal(r.Host) {
 			if r.AvailableSlotNum <= 0 {
 				if r.Refused > 0 {
-					blog.Infof("worker offer slot: host[%+v] is refused with:%s", *r.Host, r.Message)
+					// blog.Infof("worker offer slot: host[%+v] is refused with:%s", *r.Host, r.Message)
 
 					// Refused 状态后续可以重试，需要特殊处理下
 					w.status = Refused
 					w.lasttime = time.Now().Unix()
-					blog.Infof("worker offer slot: set host[%+v] to busy", *w.host)
+					// blog.Infof("worker offer slot: set host[%+v] to busy", *w.host)
+					blog.Infof("worker offer slot: set worker %s priority %d to Refused with message:%s",
+						w.host.Server, w.priority, r.Message)
 				} else {
 					// 这个地方可能是网络异常了，置状态为init，后续可以重试
 					w.resetSlot("received error")
+					blog.Infof("worker offer slot: set worker %s priority %d to Init",
+						w.host.Server, w.priority)
 				}
 
 				blog.Infof("worker offer slot: got invalid slot result:%+v", *r)
 				wo.workerLock.RUnlock()
 				return nil
 			} else {
-				w.status = InService
+				if w.status != InService {
+					w.status = InService
+					// blog.Infof("worker offer slot: host[%+v] Priority %d is in service now", *r.Host, r.Priority)
+					blog.Infof("worker offer slot: set worker %s priority %d to InService",
+						w.host.Server, w.priority)
+				}
 				targetconn = w.conn
 			}
 			break
@@ -616,6 +633,8 @@ func (wo *workerOffer) querySlot() error {
 		if w.status == Refused &&
 			time.Now().Unix()-w.lasttime > RefusedRecoverSeconds {
 			w.resetSlot("re-check refused worker")
+			blog.Infof("worker offer slot: set worker %s priority %d to Init",
+				w.host.Server, w.priority)
 		}
 
 		if w.invalid() {
@@ -676,13 +695,16 @@ func (wo *workerOffer) querySlot() error {
 
 			v.priority = targetPriority
 			v.status = Detecting
-
-			blog.Infof("worker offer slot: ready query slot worker %s with priority %d now",
+			blog.Infof("worker offer slot: set worker %s priority %d to Detecting",
 				v.host.Server, targetPriority)
+
+			// blog.Infof("worker offer slot: ready query slot worker %s with priority %d now",
+			// 	v.host.Server, targetPriority)
 			c, err := handler.ExecuteQuerySlot(v.host, req, wo.slotChan, SlotTCPTimeoutSeconds)
 			if err == nil {
 				v.status = DetectSucceed
-				blog.Infof("worker offer slot: set worker %s to DetectSucceed", v.host.Server)
+				blog.Infof("worker offer slot: set worker %s priority %d to DetectSucceed",
+					v.host.Server, targetPriority)
 				v.conn = c
 
 				sentSlots += v.host.Jobs
@@ -691,7 +713,8 @@ func (wo *workerOffer) querySlot() error {
 				}
 			} else {
 				v.status = DetectFailed
-				blog.Infof("worker offer slot: set worker %s to DetectFailed", v.host.Server)
+				blog.Infof("worker offer slot: set worker %s priority %d to DetectFailed",
+					v.host.Server, targetPriority)
 			}
 		}
 	}
@@ -728,6 +751,8 @@ func (wo *workerOffer) resetWorkerSlot(host *dcProtocol.Host) error {
 	for _, w := range wo.worker {
 		if host.Equal(w.host) {
 			w.resetSlot("idle slot too long")
+			blog.Infof("worker offer slot: set worker %s priority %d to Init",
+				w.host.Server, w.priority)
 			break
 		}
 	}

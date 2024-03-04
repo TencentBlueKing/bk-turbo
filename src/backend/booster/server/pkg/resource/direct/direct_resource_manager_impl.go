@@ -834,9 +834,9 @@ func (d *directResourceManager) getAllFreeResource(userID string) ([]*AgentResou
 	for _, v := range d.resource {
 		// 需要确认下 free 里面的字段是否完整，如果不完整，需要补齐
 		externalagent := v.Agent.FreeToExternal()
-		if externalagent.Resource.CPU > 0 {
-			ress = append(ress, externalagent)
-		}
+		// if externalagent.Resource.CPU > 0 {
+		ress = append(ress, externalagent)
+		// }
 	}
 
 	return ress, nil
