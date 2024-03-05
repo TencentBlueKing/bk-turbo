@@ -234,21 +234,45 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 		dl, _ := node.Labels[disableLabel]
 		disabled := dl == "true"
 
+		memTotal := float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024
+		cpuTotal := float64(node.Status.Capacity.Cpu().Value())
+		memUsed := float64(allocatedResource.Memory().Value()) / 1024 / 1024
+		cpuUsed := float64(allocatedResource.Cpu().Value())
+		diskUsed := float64(allocatedResource.StorageEphemeral().Value())
+		diskTotal := float64(node.Status.Capacity.StorageEphemeral().Value())
+		for _, ist := range o.conf.InstanceType {
+			if ist.Group == node.Labels[o.cityLabelKey] && ist.Platform == node.Labels[o.platformLabelKey] {
+				if ist.CPUPerInstanceOffset > 0.0 || ist.MemPerInstanceOffset > 0.0 {
+					//通过offset计算实际可用的instance数量，并矫正cpu和内存总量
+					n := op.NodeInfo{
+						MemTotal:  memTotal,
+						CPUTotal:  cpuTotal,
+						MemUsed:   memUsed,
+						CPUUsed:   cpuUsed,
+						DiskTotal: diskTotal,
+						DiskUsed:  diskUsed,
+					}
+					availableNum := n.FigureAvailableInstanceFromFree(ist.CPUPerInstance-ist.CPUPerInstanceOffset, ist.MemPerInstance-ist.MemPerInstanceOffset, 1)
+					cpuTotal = cpuUsed + float64(availableNum)*ist.CPUPerInstance
+					memTotal = memUsed + float64(availableNum)*ist.MemPerInstance
+				}
+				break
+			}
+		}
 		// use city-label-key value and platform-label-key to overwrite the city and platform
 		node.Labels[op.AttributeKeyCity], _ = node.Labels[o.cityLabelKey]
 		node.Labels[op.AttributeKeyPlatform], _ = node.Labels[o.platformLabelKey]
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:         ip,
 			Hostname:   node.Name,
-			DiskTotal:  float64(node.Status.Capacity.StorageEphemeral().Value()),
-			MemTotal:   float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024,
-			CPUTotal:   float64(node.Status.Capacity.Cpu().Value()),
-			DiskUsed:   float64(allocatedResource.StorageEphemeral().Value()),
-			MemUsed:    float64(allocatedResource.Memory().Value()) / 1024 / 1024,
-			CPUUsed:    float64(allocatedResource.Cpu().Value()),
+			DiskTotal:  diskTotal,
+			MemTotal:   memTotal,
+			CPUTotal:   cpuTotal,
+			DiskUsed:   diskUsed,
+			MemUsed:    memUsed,
+			CPUUsed:    cpuUsed,
 			Attributes: node.Labels,
-
-			Disabled: disabled,
+			Disabled:   disabled,
 		})
 	}
 
@@ -413,8 +437,8 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			DiskLeft: totalIst,
-			MemLeft:  totalIst * ist.MemPerInstance,
 			CPULeft:  totalIst * ist.CPUPerInstance,
+			MemLeft:  totalIst * ist.MemPerInstance,
 			Attributes: map[string]string{
 				op.AttributeKeyPlatform: ist.Platform,
 				op.AttributeKeyCity:     ist.Group,
