@@ -1,6 +1,7 @@
 package com.tencent.devops.turbo.service
 
 import com.tencent.devops.common.api.pojo.Page
+import com.tencent.devops.common.util.MathUtil
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PROJECT_ID_LIST
 import com.tencent.devops.turbo.dao.mongotemplate.TbsDaySummaryDao
@@ -60,7 +61,7 @@ class MachineResourcesService @Autowired constructor(
                     projectName = projectName,
                     engineCode = engineCode,
                     // 秒转分钟
-                    totalTimeWithCpu = String.format("%.2f", totalTimeWithCpu!!.toDouble() / 60).toDouble(),
+                    totalTimeWithCpu = MathUtil.secondsToMinutes(totalTimeWithCpu!!).toDouble(),
                     productId = productId,
                     bgName = bgName,
                     bgId = bgId,
