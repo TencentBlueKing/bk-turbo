@@ -14,3 +14,8 @@ const val NO_ADMIN_MEMBER_MESSAGE = "无权限，请先加入项目！"
  * 统计数据需排除的plan id
  */
 const val BASE_EXCLUDED_PLAN_ID_LIST = "EXCLUDED_PLAN_ID_LIST"
+
+/**
+ * 统计数据需排除的project id
+ */
+const val BASE_EXCLUDED_PROJECT_ID_LIST = "EXCLUDED_PROJECT_ID_LIST"

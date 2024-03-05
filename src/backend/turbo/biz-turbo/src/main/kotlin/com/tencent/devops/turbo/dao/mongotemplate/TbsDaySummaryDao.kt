@@ -25,6 +25,7 @@ class TbsDaySummaryDao @Autowired constructor(
         startDate: String,
         endDate: String,
         filterPlanIdNin: Set<String>,
+        filterProjectIdNin: Set<String>,
         pageNum: Int,
         pageSize: Int
     ): List<TTbsDaySummaryEntity> {
@@ -33,18 +34,18 @@ class TbsDaySummaryDao @Autowired constructor(
         val criteria = Criteria.where("day").gte(startDate).lte(endDate)
             .and("user").`is`(null)
 
+        // 过滤方案id
         filterPlanIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("plan_id").nin(filterPlanIdNin) }
+        // 过滤项目id
+        filterProjectIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("project_id").nin(filterPlanIdNin) }
 
         val match = Aggregation.match(criteria)
         val sort = Aggregation.sort(Sort.Direction.DESC, "day")
-        val group = Aggregation.group("plan_id", "project_id", "engine_code")
+        val group = Aggregation.group("project_id", "engine_code")
             .sum("total_time_with_cpu").`as`("total_time_with_cpu")
             .first("project_id").`as`("project_id")
             .first("project_name").`as`("project_name")
-            .first("plan_id").`as`("plan_id")
-            .first("plan_name").`as`("plan_name")
             .first("engine_code").`as`("engine_code")
-            .first("plan_creator").`as`("plan_creator")
             .first("product_id").`as`("product_id")
             .first("bg_name").`as`("bg_name")
             .first("dept_name").`as`("dept_name")

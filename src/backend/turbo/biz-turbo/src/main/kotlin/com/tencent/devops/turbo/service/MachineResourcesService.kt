@@ -2,6 +2,7 @@ package com.tencent.devops.turbo.service
 
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST
+import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PROJECT_ID_LIST
 import com.tencent.devops.turbo.dao.mongotemplate.TbsDaySummaryDao
 import com.tencent.devops.turbo.dao.repository.BaseDataRepository
 import com.tencent.devops.turbo.vo.apiwg.MachineResourcesStatVO
@@ -36,12 +37,17 @@ class MachineResourcesService @Autowired constructor(
         val baseDataEntity = baseDataRepository.findFirstByParamCode(BASE_EXCLUDED_PLAN_ID_LIST)
         val filterPlanIds = baseDataEntity?.paramValue?.split(",")?.toSet() ?: emptySet()
 
+        // 获取需要过滤掉的项目id集合
+        val projectExcludedEntity = baseDataRepository.findFirstByParamCode(BASE_EXCLUDED_PROJECT_ID_LIST)
+        val filterProjectIds = projectExcludedEntity?.paramValue?.split(",")?.toSet() ?: emptySet()
+
         val today = LocalDate.now()
 
         val summaryEntityList = tbsDaySummaryDao.findByDay(
             startDate = startDate ?: today.minusMonths(1).withDayOfMonth(1).toString(),
             endDate = endDate ?: today.withDayOfMonth(1).minusDays(1).toString(),
             filterPlanIdNin = filterPlanIds,
+            filterProjectIdNin = filterProjectIds,
             pageNum = page,
             pageSize = pageSizeNum
         )
@@ -52,11 +58,9 @@ class MachineResourcesService @Autowired constructor(
                 MachineResourcesStatVO(
                     projectId = projectId!!,
                     projectName = projectName,
-                    planId = planId!!,
-                    planName = planName,
-                    planCreator = planCreator,
                     engineCode = engineCode,
-                    totalTimeWithCpu = totalTimeWithCpu,
+                    // 秒转分钟
+                    totalTimeWithCpu = String.format("%.2f", totalTimeWithCpu!!.toDouble() / 60).toDouble(),
                     productId = productId,
                     bgName = bgName,
                     bgId = bgId,

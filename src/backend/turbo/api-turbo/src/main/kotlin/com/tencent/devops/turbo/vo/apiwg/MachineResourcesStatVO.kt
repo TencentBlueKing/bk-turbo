@@ -11,20 +11,11 @@ data class MachineResourcesStatVO(
 
     @ApiModelProperty("项目名称")
     val projectName: String?,
-    
-    @ApiModelProperty("方案id")
-    val planId: String,
-
-    @ApiModelProperty("方案名称")
-    val planName: String?,
-
-    @ApiModelProperty("方案创建者")
-    var planCreator: String?,
 
     @ApiModelProperty("加速模式")
     var engineCode: String?,
 
-    @ApiModelProperty("加速时长*cpu核数(单位秒*核)")
+    @ApiModelProperty("加速时长*cpu核数(单位分钟*核)")
     var totalTimeWithCpu: Double?,
 
     @ApiModelProperty("项目所属运营产品id")
