@@ -6,14 +6,14 @@ import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PROJECT_ID_LIST
 import com.tencent.devops.turbo.dao.mongotemplate.TbsDaySummaryDao
 import com.tencent.devops.turbo.dao.repository.BaseDataRepository
-import com.tencent.devops.turbo.vo.apiwg.MachineResourcesStatVO
+import com.tencent.devops.turbo.vo.ProjectResourceUsageVO
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import java.time.LocalDate
 
 @Service
-class MachineResourcesService @Autowired constructor(
+class ProjectResourcesService @Autowired constructor(
     private val tbsDaySummaryDao: TbsDaySummaryDao,
     private val baseDataRepository: BaseDataRepository
 ) {
@@ -30,7 +30,7 @@ class MachineResourcesService @Autowired constructor(
         endDate: String?,
         pageNum: Int?,
         pageSize: Int?
-    ): Page<MachineResourcesStatVO> {
+    ): Page<ProjectResourceUsageVO> {
         val page = pageNum?.takeIf { it > 0 }?.let { it - 1 } ?: 0
         val pageSizeNum = pageSize?.coerceAtMost(10000) ?: 100
 
@@ -56,7 +56,7 @@ class MachineResourcesService @Autowired constructor(
 
         val resultList = summaryEntityList.map {
             with(it) {
-                MachineResourcesStatVO(
+                ProjectResourceUsageVO(
                     projectId = projectId!!,
                     projectName = projectName,
                     engineCode = engineCode,

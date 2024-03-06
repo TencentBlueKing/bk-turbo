@@ -1,10 +1,10 @@
-package com.tencent.devops.turbo.vo.apiwg
+package com.tencent.devops.turbo.vo
 
 import io.swagger.annotations.ApiModel
 import io.swagger.annotations.ApiModelProperty
 
 @ApiModel("机器资源使用统计")
-data class MachineResourcesStatVO(
+data class ProjectResourceUsageVO(
 
     @ApiModelProperty("项目id")
     val projectId: String,
