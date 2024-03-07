@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/autoscaler"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/recorder"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -31,10 +32,11 @@ import (
 
 var (
 	mgrSet = types.MgrSet{
-		Basic:    basic.NewMgr,
-		Local:    local.NewMgr,
-		Remote:   remote.NewMgr,
-		Resource: resource.NewMgr,
+		Basic:      basic.NewMgr,
+		Local:      local.NewMgr,
+		Remote:     remote.NewMgr,
+		Resource:   resource.NewMgr,
+		Autoscaler: autoscaler.NewMgr,
 	}
 )
 

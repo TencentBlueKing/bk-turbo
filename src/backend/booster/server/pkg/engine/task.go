@@ -186,6 +186,8 @@ type TaskBasicClient struct {
 	ClientVersion string
 	StageTimeout  int
 	Message       string
+	RequestCPU    int
+	RequestMemory int
 }
 
 // TaskBasicStatus describe task basic status

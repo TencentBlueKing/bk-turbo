@@ -261,7 +261,16 @@ func (m *Mgr) Apply(req *v2.ParamApply, force bool) (*v2.RespTaskInfo, error) {
 
 	// support req with nil
 	if req != nil {
-		m.lastapplyparam = req
+		requestCPU := req.RequestCPU
+		requestMemory := req.RequestMemory
+		if requestCPU > 0 && req.ProjectID == "" {
+			req = m.lastapplyparam
+			req.RequestCPU = requestCPU
+			req.RequestMemory = requestMemory
+		} else {
+			m.lastapplyparam = req
+		}
+
 	} else {
 		req = m.lastapplyparam
 	}

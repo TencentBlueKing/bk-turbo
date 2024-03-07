@@ -60,6 +60,9 @@ type BcsLaunchParam struct {
 
 	// instance number to launch
 	Instance int
+
+	RequestCPU    int
+	RequestMemory int
 }
 
 // BcsVolume describe the volume mapping settings

@@ -39,6 +39,11 @@ type ParamApply struct {
 	// extra is a raw string contains the extra configurations for specific engine,
 	// it will be parsed in engine handler.
 	Extra string `json:"extra"`
+
+	// RequestCPU 自定义CPU资源
+	RequestCPU int
+	// RequestMemory 自定义内存资源
+	RequestMemory int
 }
 
 // RespTaskInfo contains the return data of Apply and Query

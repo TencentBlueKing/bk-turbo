@@ -1471,6 +1471,10 @@ func (m *Mgr) TotalSlots() int {
 	return m.resource.TotalSlots()
 }
 
+func (m *Mgr) Slots() (int, int) {
+	return m.resource.totalSlots, m.resource.occupiedSlots
+}
+
 func (m *Mgr) getRemoteFileBaseDir() string {
 	return fmt.Sprintf("common_%s", m.work.ID())
 }

@@ -10,6 +10,7 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -27,8 +28,18 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 
 	"github.com/shirou/gopsutil/net"
+)
+
+type scaleState int
+
+const (
+	initState          scaleState = iota // 初始化状态
+	runningState                         // webconsole session 存活状态
+	resourceApplyState                   // webconsole session 已终止
+	schaleingState                       // cast 上传状态
 )
 
 // NewMgr get a new Work Manager
@@ -51,6 +62,7 @@ func NewMgr(conf *config.ServerConfig) types.Mgr {
 		globalWork:        newGlobalWork(conf),
 		netCounters:       make(map[string]net.IOCountersStat),
 		hasWorkUnregisted: false,
+		autoscalerWorks:   map[string]scaleState{},
 	}
 }
 
@@ -60,6 +72,7 @@ const (
 )
 
 type mgr struct {
+	st            time.Time
 	registerMutex sync.Mutex
 	conf          *config.ServerConfig
 	worksPool     *worksPool
@@ -75,6 +88,8 @@ type mgr struct {
 
 	localResourceTaskMutex sync.Mutex
 	localResourceTaskNum   int32
+
+	autoscalerWorks map[string]scaleState
 }
 
 // Run brings up the manager handler
@@ -83,6 +98,98 @@ func (m *mgr) Run() {
 
 	go m.doCheckWork()
 	go m.doCheckNet()
+	// go m.doAutoscaling(context.Background())
+}
+
+// doAutoscaling controller remote worker autoscaling
+func (m *mgr) doAutoscaling(ctx context.Context) {
+	// 策略1, 如果make的并发数大于远程核心数，扩容到当前进程核心
+
+	// 检测任务&资源
+
+	// 任务堆积, 申请资源
+	// work, _ := m.worksPool.getWork("'")
+	// work.Resource().Apply(xx)
+
+	// 资源空闲, 释放资源
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			blog.Infof("autoscaling closed")
+			return
+
+		case <-ticker.C:
+			blog.Infof("do autoscaling")
+			for workID, _ := range m.autoscalerWorks {
+
+				detail, err := m.GetWorkDetail(workID, 0)
+				if err != nil {
+					blog.Infof("do %s autoscaling, err: %s", workID, err)
+				}
+
+				blog.Infof("do %s autoscaling, jobs: %s", workID, detail.GetRuntimeState())
+
+				// if state == initState {
+				// 	err := m.doWorkAutoscaling(ctx, workID)
+				// 	if err != nil {
+				// 		m.autoscalerWorks[workID] = initState
+				// 	}
+
+				// 	blog.Infof("autoscaling %s done, err: %s", workID, err)
+				// }
+			}
+		}
+	}
+}
+
+func (m *mgr) doWorkAutoscaling(ctx context.Context, workID string) error {
+	blog.Infof("do %s autoscaling", workID)
+
+	m.autoscalerWorks[workID] = schaleingState
+
+	work, err := m.worksPool.getWork(workID)
+	if err != nil {
+		return err
+	}
+
+	blog.Infof("do %s autoscaling, get work: %s", workID, work)
+
+	if _, err := work.Resource().Apply(nil, true); err != nil {
+		return err
+	}
+
+	blog.Infof("do %s autoscaling, applyed: %s", workID, work)
+
+	ticker := time.NewTicker(time.Second * 1)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			blog.Infof("autoscaling %s closed", workID)
+			return nil
+
+		case <-ticker.C:
+			info := work.Resource().GetStatus()
+			blog.Infof("do %s autoscaling, info: %s", workID, info)
+			if info == nil {
+				blog.Infof("do %s autoscaling, nil", workID)
+				continue
+			}
+
+			if info.Status == engine.TaskStatusFailed {
+				blog.Infof("do %s autoscaling failed, %s", workID)
+				return nil
+			}
+			if info.Status == engine.TaskStatusFinish {
+				blog.Infof("do %s autoscaling finish, %s", workID)
+				return nil
+			}
+		}
+	}
 }
 
 // RegisterWork 注册一个work, 返回其info信息, 是否为leader, 或错误信息
@@ -144,6 +251,8 @@ func (m *mgr) RegisterWork(config *types.WorkRegisterConfig) (*types.WorkInfo, b
 	blog.Infof("mgr: success to register a new work(%s) for project(%s) scene(%s)",
 		work.ID(), config.Apply.ProjectID, config.Apply.Scene)
 	work.Basic().IncRegistered()
+
+	m.autoscalerWorks[work.ID()] = initState
 	return work.Basic().Info(), true, nil
 }
 
@@ -168,6 +277,8 @@ func (m *mgr) UnregisterWork(workID string, config *types.WorkUnregisterConfig) 
 
 	work.Lock()
 	defer work.Unlock()
+
+	delete(m.autoscalerWorks, workID)
 
 	if err = work.Basic().Unregister(config); err != nil {
 		blog.Errorf("mgr: unregister work(%s)(%s) failed: %v", workID, work.Basic().Info().Status(), err)

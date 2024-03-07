@@ -10,7 +10,8 @@
 package v2
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net"
 	"strings"
 
@@ -37,6 +38,8 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam, Message: err.Error()})
 		return
 	}
+
+	fmt.Println("leijoamin", param.RequestCPU, param.RequestMemory)
 
 	tb, err := defaultManager.CreateTask(param)
 	if err != nil {
@@ -176,7 +179,7 @@ func ReleaseResource(req *restful.Request, resp *restful.Response) {
 }
 
 func getApplyParam(req *restful.Request) (*manager.TaskCreateParam, error) {
-	body, err := ioutil.ReadAll(req.Request.Body)
+	body, err := io.ReadAll(req.Request.Body)
 	if err != nil {
 		blog.Errorf("get apply param: get request body failed: %v", err)
 		return nil, err
@@ -213,6 +216,8 @@ func getApplyParam(req *restful.Request) (*manager.TaskCreateParam, error) {
 		Message:       protocol.Message,
 		Extra:         protocol.Extra,
 		ClientIP:      clientIP,
+		RequestCPU:    protocol.RequestCPU,
+		RequestMemory: protocol.RequestMemory,
 	}
 
 	blog.Infof("get apply param: get client status(project ID/client IP/user version: %s %s %s",
@@ -221,7 +226,7 @@ func getApplyParam(req *restful.Request) (*manager.TaskCreateParam, error) {
 }
 
 func getMessageParam(req *restful.Request) (*ParamMessage, error) {
-	body, err := ioutil.ReadAll(req.Request.Body)
+	body, err := io.ReadAll(req.Request.Body)
 	if err != nil {
 		blog.Errorf("get message param: get request body failed: %v", err)
 		return nil, err
@@ -270,7 +275,7 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 }
 
 func getHeartbeatParam(req *restful.Request) (string, error) {
-	body, err := ioutil.ReadAll(req.Request.Body)
+	body, err := io.ReadAll(req.Request.Body)
 	if err != nil {
 		blog.Errorf("get heartbeat param: get request body failed: %v", err)
 		return "", err
@@ -287,7 +292,7 @@ func getHeartbeatParam(req *restful.Request) (string, error) {
 }
 
 func getReleaseParam(req *restful.Request) (*manager.TaskReleaseParam, error) {
-	body, err := ioutil.ReadAll(req.Request.Body)
+	body, err := io.ReadAll(req.Request.Body)
 	if err != nil {
 		blog.Errorf("get release param: get request body failed: %v", err)
 		return nil, err

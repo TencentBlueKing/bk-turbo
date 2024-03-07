@@ -96,7 +96,7 @@ func NewServer(conf *config.ServerConfig) (*Server, error) {
 	if s.conf.DynamicPort {
 		port = 0
 	}
-	s.httpServer = httpserver.NewHTTPServer(port, s.conf.Address, "")
+	s.httpServer = httpserver.NewHTTPServer(port, "0.0.0.0", "")
 	if s.conf.ServerCert.IsSSL {
 		s.httpServer.SetSSL(
 			s.conf.ServerCert.CAFile, s.conf.ServerCert.CertFile, s.conf.ServerCert.KeyFile, s.conf.ServerCert.CertPwd)
