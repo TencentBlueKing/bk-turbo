@@ -14,7 +14,6 @@ class ServiceResourceStatController @Autowired constructor(
 ) : IServiceResourceStatController {
 
     override fun getSummary(
-        appCode: String,
         startDate: String?,
         endDate: String?,
         pageNum: Int?,

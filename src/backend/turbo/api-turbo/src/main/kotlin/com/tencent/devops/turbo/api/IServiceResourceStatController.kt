@@ -22,9 +22,6 @@ interface IServiceResourceStatController {
     @ApiOperation("获取项目使用服务器资源统计")
     @GetMapping("/getSummary", produces = [MediaType.APPLICATION_JSON_VALUE])
     fun getSummary(
-        @ApiParam("应用code")
-        @RequestParam("app_code", required = true)
-        appCode: String,
         @ApiParam("起始统计日期")
         @RequestParam("startDate")
         startDate: String?,
