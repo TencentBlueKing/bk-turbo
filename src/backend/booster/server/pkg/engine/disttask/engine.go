@@ -1139,6 +1139,11 @@ func (de *disttaskEngine) getCrMgr(queueName string) crm.HandlerWithUser {
 }
 
 func (de *disttaskEngine) canTakeFromPublicQueue(queueName string) bool {
+	// p2p的任务不允许跨组
+	if containsP2P(queueName) {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}
@@ -1157,6 +1162,11 @@ func (de *disttaskEngine) canTakeFromPublicQueue(queueName string) bool {
 }
 
 func (de *disttaskEngine) canGiveToPublicQueue(queueName string) bool {
+	// p2p的任务不允许跨组
+	if containsP2P(queueName) {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}
