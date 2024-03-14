@@ -121,5 +121,5 @@ data class TTbsDaySummaryEntity(
      * 本entity创建时间
      */
     @Field("created_date")
-    var createdDate: LocalDateTime
+    var createdDate: LocalDateTime?
 )
