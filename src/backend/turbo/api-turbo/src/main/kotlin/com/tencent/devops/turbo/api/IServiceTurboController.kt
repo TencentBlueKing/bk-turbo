@@ -3,7 +3,9 @@ package com.tencent.devops.turbo.api
 import com.tencent.devops.api.pojo.Response
 import com.tencent.devops.common.api.annotation.ServiceInterface
 import com.tencent.devops.common.api.pojo.Page
+import com.tencent.devops.turbo.pojo.TurboPlanModel
 import com.tencent.devops.turbo.pojo.TurboRecordModel
+import com.tencent.devops.turbo.validate.TurboPlanGroup
 import com.tencent.devops.turbo.validate.TurboRecordGroup
 import com.tencent.devops.turbo.vo.TurboPlanDetailVO
 import com.tencent.devops.turbo.vo.TurboPlanStatRowVO
@@ -107,5 +109,24 @@ interface IServiceTurboController {
             @ApiParam(value = "用户信息", required = true)
             @PathVariable("userId")
             userId: String
-            ): Response<TurboPlanDetailVO>
+    ): Response<TurboPlanDetailVO>
+
+    @ApiOperation("新增加速方案")
+    @PostMapping(
+        "/projectId/{projectId}/{userId}/addTurboPlan",
+        consumes = [MediaType.APPLICATION_JSON_VALUE],
+        produces = [MediaType.APPLICATION_JSON_VALUE]
+    )
+    fun addNewTurboPlan(
+            @ApiParam(value = "蓝盾项目id", required = true)
+            @PathVariable("projectId")
+            projectId: String,
+            @ApiParam(value = "用户信息", required = true)
+            @PathVariable("userId")
+            userId: String,
+            @ApiParam(value = "新增加速方案请求数据信息", required = true)
+            @RequestBody
+            @Validated(TurboPlanGroup.Create::class)
+            turboPlanModel: TurboPlanModel
+    ): Response<String?>
 }
