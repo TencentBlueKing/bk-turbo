@@ -104,6 +104,11 @@ func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
 		return
 	}
 
+	if tb.Status.Released {
+		blog.Infof("cleaner: task (%s) is already released,do nothing", tb.ID)
+		return
+	}
+
 	// StatusCode records from which status the task changed and if the server is probably alive, then collect
 	// the stats info from servers.
 	if tb.Status.StatusCode.ServerAlive() {
