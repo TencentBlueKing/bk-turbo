@@ -52,7 +52,7 @@ const (
 
 const (
 	queueNameHeaderSymbol = "://"
-	queueNameSep          = "<|>"
+	// queueNameSep          = "<|>"
 
 	workerMacLauncherName = "start.sh"
 	workerWinLauncherName = "start.bat"
@@ -109,7 +109,7 @@ type EngineConfig struct {
 	Brokers []config.EngineDisttaskBrokerConfig
 }
 
-//K8sClusterInfo define
+// K8sClusterInfo define
 type K8sClusterInfo struct {
 	K8SCRMClusterID      string
 	K8SCRMCPUPerInstance float64
@@ -523,25 +523,16 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 		return nil
 	}
 
-	// TODO : 支持 queueName 为复合内容，比如 WIN://p2p_shenzhen_buildbooster<|>K8S_WIN://shenzhen
-	// 表示支持  WIN://p2p_shenzhen_buildbooster 和 K8S_WIN://shenzhen 两种类型的资源的获取
-	realqueuenames := strings.Split(queueName, queueNameSep)
-	for _, q := range realqueuenames {
-		if matchDirectResource(q) {
-			// deal with p2p
-			if containsP2P(q) {
-				err = de.launchDirectP2PTask(task, tb, q)
-			} else {
-				err = de.launchDirectTask(task, tb, q)
-			}
+	if matchDirectResource(queueName) {
+		// deal with p2p
+		if containsP2P(queueName) {
+			err = de.launchDirectP2PTask(task, tb, queueName)
 		} else {
-			blog.Infof("engine(%s) try launch crm task(%s) with queue:%s", EngineName, tb.ID, q)
-			err = de.launchCRMTask(task, tb, q)
+			err = de.launchDirectTask(task, tb, queueName)
 		}
-
-		if err == nil {
-			return err
-		}
+	} else {
+		blog.Infof("engine(%s) try launch crm task(%s) with queue:%s", EngineName, tb.ID, queueName)
+		err = de.launchCRMTask(task, tb, queueName)
 	}
 
 	return err
@@ -1193,7 +1184,7 @@ type Message struct {
 	MessageRecordStats MessageRecordStats `json:"ccache_stats"`
 }
 
-//MessageType define
+// MessageType define
 type MessageType int
 
 const (
@@ -1281,7 +1272,7 @@ func (de *disttaskEngine) sendProjectMessage(projectID string, extra []byte) ([]
 	}
 }
 
-//EmptyJobs define
+// EmptyJobs define
 var EmptyJobs = compress.ToBase64String([]byte("[]"))
 
 func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTaskStats) ([]byte, error) {
@@ -1459,7 +1450,7 @@ func getQueueNameHeader(queueName string) queueNameHeader {
 	}
 }
 
-//GetK8sInstanceKey get instance type from queueName
+// GetK8sInstanceKey get instance type from queueName
 func GetK8sInstanceKey(queueName string) *config.InstanceType {
 	header := getQueueNameHeader(queueName)
 	if header == queueNameHeaderK8SDefault || header == queueNameHeaderK8SWin {

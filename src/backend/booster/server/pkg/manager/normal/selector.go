@@ -11,11 +11,16 @@ package normal
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+)
+
+const (
+	queueNameSep = "<|>"
 )
 
 // Selector pay attention to the tasks in queue, pick the top-ranking task and launch it.
@@ -200,11 +205,23 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 		return
 	}
 
-	if err = egn.LaunchTask(tb, queueName); err != nil {
-		if err != engine.ErrorNoEnoughResources {
-			blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
+	// 支持 queueName 为复合内容，比如 WIN://p2p_shenzhen_buildbooster<|>K8S_WIN://shenzhen
+	// 表示支持  WIN://p2p_shenzhen_buildbooster 和 K8S_WIN://shenzhen 两种类型的资源的获取
+	realqueuenames := strings.Split(queueName, queueNameSep)
+	for _, q := range realqueuenames {
+		if err = egn.LaunchTask(tb, q); err != nil {
+			if err != engine.ErrorNoEnoughResources {
+				blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), q, err)
+			}
+			blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), q, err)
+			continue
+		} else {
+			queueName = q
+			break
 		}
-		blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
+	}
+
+	if err != nil {
 		return
 	}
 

@@ -42,10 +42,14 @@ type manager struct {
 
 // NewManager get a new manager instance
 // roleEvent is a channel which receive role message when current server role changed. Manager starts when it is
-//  master and stops when it is not master.
+//
+//	master and stops when it is not master.
+//
 // debug decide if debug mode is set. If true, it will disabled some checks such as keeper checks.
 // queueBriefInfoList contains a list of queue brief info(queue-engine pair). It decide how many workers should be
-//  launched in selector.
+//
+//	launched in selector.
+//
 // engineList contains all engine instances the manager supported, it is used to init the layer cache.
 func NewManager(
 	roleEvent types.RoleChangeEvent,
@@ -505,6 +509,10 @@ func (m *manager) releaseTask(param *mgr.TaskReleaseParam) error {
 		return err
 	}
 
+	// notify next step immediately
+	// don't care whether TaskStatusFailed or TaskStatusFinish, just let cleaner to know
+	m.onTaskStatus(tb, engine.TaskStatusFinish)
+
 	blog.Infof("manager: success to set task(%s) terminated, waiting for cleaner releasing", param.TaskID)
 	return nil
 }
@@ -632,7 +640,7 @@ func generateTaskID(egnName string, projectID string) string {
 		taskIDFormat, egnName, projectID, time.Now().Unix(), strings.ToLower(util.RandomString(taskIDRandomLength)))
 }
 
-//IsOldTaskType check if the task id type is old
+// IsOldTaskType check if the task id type is old
 func IsOldTaskType(id string) bool {
 	idx := strings.LastIndex(id, "-")
 	if idx == len(id)-taskIDRandomLength-1 { //old task Id
@@ -663,6 +671,10 @@ func (m *manager) onTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatus
 		// notify tracker
 		blog.Infof("manager: task(%s) current status %s, ready notify traker", tb.ID, curstatus)
 		m.tracker.OnTaskStatus(tb, curstatus)
+	case engine.TaskStatusFinish:
+		// notify cleaner
+		blog.Infof("manager: task(%s) finished, ready notify cleaner", tb.ID)
+		m.cleaner.OnTaskStatus(tb, curstatus)
 	default:
 		blog.Infof("manager: task(%s) current status %s, do nothing", tb.ID, curstatus)
 	}
