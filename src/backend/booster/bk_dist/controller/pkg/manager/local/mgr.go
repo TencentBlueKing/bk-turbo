@@ -107,7 +107,7 @@ func (m *Mgr) ExecuteTask(
 	blog.Infof("local: try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
 		strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
 
-	e, err := newExecutor(m, req, globalWork)
+	e, err := newExecutor(m, req, globalWork, m.work.Resource().SupportAbsPath())
 	if err != nil {
 		blog.Errorf("local: try to execute task for work(%s) from pid(%d) get executor failed: %v",
 			m.work.ID(), req.Pid, err)

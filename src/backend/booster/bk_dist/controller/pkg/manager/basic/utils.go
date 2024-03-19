@@ -11,11 +11,17 @@ package basic
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+)
+
+var (
+	uniqRemoteToolchainID = ""
 )
 
 func uniqFiles(files []dcSDK.FileDesc) ([]dcSDK.FileDesc, error) {
@@ -151,4 +157,55 @@ func replaceTaskID(uniqid string, toolchain *types.ToolChain) error {
 	}
 
 	return nil
+}
+
+func getRelativeFiles(f []dcSDK.FileDesc) *[]dcSDK.FileDesc {
+	if f == nil {
+		return nil
+	}
+
+	newf := make([]dcSDK.FileDesc, len(f))
+	copy(newf, f)
+
+	for i := range newf {
+		if filepath.IsAbs(newf[i].Targetrelativepath) {
+			vol := filepath.VolumeName(newf[i].Targetrelativepath)
+			if vol != "" {
+				newf[i].Targetrelativepath = strings.Replace(newf[i].Targetrelativepath, vol, getToolchainID(), 1)
+			} else {
+				newf[i].Targetrelativepath = filepath.Join(getToolchainID(), newf[i].Targetrelativepath)
+			}
+		} else {
+			newf[i].Targetrelativepath = filepath.Join(getToolchainID(), newf[i].Targetrelativepath)
+		}
+	}
+
+	return &newf
+}
+
+func getRelativeToolChainRemotePath(p string) string {
+	if p == "" {
+		return p
+	}
+
+	if filepath.IsAbs(p) {
+		vol := filepath.VolumeName(p)
+		if vol != "" {
+			return strings.Replace(p, vol, getToolchainID(), 1)
+		} else {
+			return filepath.Join(getToolchainID(), p)
+		}
+	}
+
+	return filepath.Join(getToolchainID(), p)
+}
+
+func getToolchainID() string {
+	if uniqRemoteToolchainID != "" {
+		return uniqRemoteToolchainID
+	}
+
+	// id 作为远程的目录名，尽量简短，避免触发windows路径过长的问题
+	uniqRemoteToolchainID = fmt.Sprintf("tc_%s", dcUtil.UniqID())
+	return uniqRemoteToolchainID
 }

@@ -22,6 +22,7 @@ import (
 // stats information and release the backend servers.
 type Cleaner interface {
 	Run(pCtx context.Context) error
+	OnTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatusType) error
 }
 
 // NewCleaner get a new cleaner with given layer.
@@ -34,11 +35,14 @@ func NewCleaner(layer TaskBasicLayer) Cleaner {
 type cleaner struct {
 	ctx   context.Context
 	layer TaskBasicLayer
+
+	c chan *engine.TaskBasic
 }
 
 // Run the cleaner handler with context.
 func (c *cleaner) Run(ctx context.Context) error {
 	c.ctx = ctx
+	c.c = make(chan *engine.TaskBasic, 100)
 	go c.start()
 	return nil
 }
@@ -55,6 +59,9 @@ func (c *cleaner) start() {
 			return
 		case <-timeTicker.C:
 			c.check()
+		case tb := <-c.c:
+			blog.Infof("cleaner: received notify")
+			go c.onCleanNotify(tb)
 		}
 	}
 }
@@ -97,6 +104,11 @@ func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
 		return
 	}
 
+	if tb.Status.Released {
+		blog.Infof("cleaner: task (%s) is already released,do nothing", tb.ID)
+		return
+	}
+
 	// StatusCode records from which status the task changed and if the server is probably alive, then collect
 	// the stats info from servers.
 	if tb.Status.StatusCode.ServerAlive() {
@@ -132,4 +144,33 @@ func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
 		return
 	}
 	blog.Infof("cleaner: success to release and update task basic(%s)", taskID)
+}
+
+func (c *cleaner) onCleanNotify(tb *engine.TaskBasic) error {
+	blog.Infof("cleaner: on notify ready clean task (%s)", tb.ID)
+	if tb.Status.Released {
+		blog.Infof("cleaner: on notify task (%s) is already released,do nothing", tb.ID)
+		return nil
+	}
+
+	blog.Infof("cleaner: on notify check and find task(%s) is unreleased, prepare to collect data and release", tb.ID)
+	egn, err := c.layer.GetEngineByTypeName(tb.Client.EngineName)
+	if err != nil {
+		blog.Errorf("cleaner: on notify try get task(%s) engine failed: %v", tb.ID, err)
+		return err
+	}
+
+	// wg 不需要，只是为了保持clean的调用方式
+	var wg sync.WaitGroup
+	wg.Add(1)
+	c.clean(tb.ID, egn, &wg)
+	wg.Wait()
+
+	return nil
+}
+
+func (c *cleaner) OnTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatusType) error {
+	blog.Infof("cleaner: ready notify to task(%s) engine(%s) queue(%s)", tb.ID, tb.Client.EngineName, tb.Client.QueueName)
+	c.c <- tb
+	return nil
 }

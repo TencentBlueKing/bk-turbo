@@ -354,6 +354,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			ResIdleSecsForFree:  resIdleSecsForFree,
 			SendCork:            c.Bool(FlagSendCork),
 			SendFileMemoryLimit: c.Int64(FlagSendFileMemoryLimit),
+			SendMemoryCache:     c.Bool(FlagSendMemoryCache),
 			NetErrorLimit:       netErrLimit,
 			RemoteRetryTimes:    remoteRetryTimes,
 			EnableLink:          c.Bool(FlagEnableLink),
@@ -361,6 +362,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			LongTCP:             c.Bool(FlagLongTCP),
 			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
 			DynamicPort:         withDynamicPort,
+			WorkerOfferSlot:     c.Bool(FlagWorkerOfferSlot),
 		},
 	}
 

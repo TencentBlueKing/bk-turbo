@@ -12,7 +12,9 @@ package lib
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -104,7 +106,7 @@ func (l *TaskLib) NeedRemoteResource(command []string) bool {
 
 // RemoteRetryTimes will return the remote retry times
 func (l *TaskLib) RemoteRetryTimes() int {
-	return 0
+	return 1
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
@@ -146,8 +148,23 @@ func (l *TaskLib) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (l *TaskLib) workerSupportAbsPath() bool {
+	v := l.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
 func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("lib: start pre execute for: %v", command)
+
+	if !l.workerSupportAbsPath() {
+		blog.Infof("lib: remote worker do not support absolute path")
+		return nil, fmt.Errorf("remote worker do not support absolute path")
+	}
 
 	l.originArgs = command
 	responseFile, args, err := ensureCompiler(command)

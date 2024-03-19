@@ -62,6 +62,11 @@ func process(f restful.RouteFunction, opts ProcessType) func(req *restful.Reques
 		case ProcessNoLimit:
 			f(req, resp)
 		case ProcessMasterOnly:
+			if GetAPIResource() == nil || GetAPIResource().Rd == nil {
+				blog.Infof("global resource not init, do nothing now")
+				return
+			}
+
 			isMaster, leader, err := GetAPIResource().Rd.IsMaster()
 
 			if err != nil {

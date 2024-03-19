@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/compress"
 	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
@@ -112,6 +113,33 @@ func (m *Mgr) IsApplyFinished() bool {
 	defer m.applylock.RUnlock()
 
 	return m.applystatus != ResourceApplying
+}
+
+// 假定server返回的资源都是相同类型的，或者全部支持，或者全部不支持
+func (m *Mgr) SupportAbsPath() bool {
+	m.reslock.RLock()
+	defer m.reslock.RUnlock()
+
+	// 默认支持，只有明确不支持的才返回false
+	for _, v := range m.resources {
+		blog.Infof("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
+		if strings.Contains(v.taskInfo.Extra, commonTypes.LabelKeySupportAbsPath) {
+			blog.Infof("resource: ready decode extra to temp map")
+			temp := map[string]interface{}{}
+			codec.DecJSON([]byte(v.taskInfo.Extra), &temp)
+			blog.Infof("resource: got temp map:%v", temp)
+			if p, ok := temp[commonTypes.LabelKeySupportAbsPath]; ok {
+				b, ok := p.(bool)
+				if ok {
+					if !b {
+						return b
+					}
+				}
+			}
+		}
+	}
+
+	return true
 }
 
 // HasAvailableWorkers check if there are available ready workers
@@ -726,8 +754,9 @@ func (m *Mgr) inspectInfo(taskID string) {
 				m.addRes(&info, s)
 
 				m.updateApplyEndStatus(s == ResourceApplySucceed)
-				blog.Infof("resource: success to apply resources and get host(%d): %v",
-					len(info.HostList), info.HostList)
+				blog.Infof("resource: success to apply resources and get host(%d): %v, message:%s",
+					len(info.HostList), info.HostList, info.Message)
+				blog.Infof("resource: success to apply resources %v", info)
 				return
 
 			case engine.TaskStatusFinish, engine.TaskStatusFailed:

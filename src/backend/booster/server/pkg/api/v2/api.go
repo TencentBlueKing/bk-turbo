@@ -39,6 +39,9 @@ func InitStorage() (err error) {
 	api.RegisterV2Action(api.Action{
 		Verb: "POST", Path: "/build/heartbeat", Params: nil, Handler: api.MasterRequired(UpdateHeartbeat),
 	})
+	api.RegisterV2Action(api.Action{
+		Verb: "GET", Path: "/upgrade/worker", Params: nil, Handler: api.MasterRequired(QueryWorkerUpgradeInfo),
+	})
 
 	return nil
 }

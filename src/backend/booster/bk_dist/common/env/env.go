@@ -79,15 +79,16 @@ const (
 	// for ubt tool
 	KeyCommonUE4MaxJobs = "UE4_MAX_JOBS"
 
-	KeyWorkerPort          = "PORT_4_WORKER"        // port for worker,default is 30811
-	KeyWorkerMaxProcess    = "MAX_PROCESS_4_WORKER" // max process number, default is 8
-	KeyWorkerMaxJobs       = "MAX_JOBS_4_WORKER"    // max parallel jobs
-	KeyWorkerWhiteIP       = "WHITE_IP"             // such as "192.168.0.1 192.168.0.2 192.168.0.3 0.0.0.0"
-	KeyWorkerCacheEnable   = "CACHE_ENABLE"
-	KeyWorkerCacheDir      = "CACHE_DIR"
-	KeyWorkerCachePoolSize = "CACHE_POOL_SIZE"
-	KeyWorkerCacheMinSize  = "CACHE_MIN_SIZE"
-	KeyWorkerMemPerJob     = "MEM_PER_JOB_4_WORKER" // memory per job
+	KeyWorkerPort           = "PORT_4_WORKER"        // port for worker,default is 30811
+	KeyWorkerMaxProcess     = "MAX_PROCESS_4_WORKER" // max process number, default is 8
+	KeyWorkerMaxJobs        = "MAX_JOBS_4_WORKER"    // max parallel jobs
+	KeyWorkerWhiteIP        = "WHITE_IP"             // such as "192.168.0.1 192.168.0.2 192.168.0.3 0.0.0.0"
+	KeyWorkerCacheEnable    = "CACHE_ENABLE"
+	KeyWorkerCacheDir       = "CACHE_DIR"
+	KeyWorkerCachePoolSize  = "CACHE_POOL_SIZE"
+	KeyWorkerCacheMinSize   = "CACHE_MIN_SIZE"
+	KeyWorkerMemPerJob      = "MEM_PER_JOB_4_WORKER" // memory per job
+	KeyWorkerSupportAbsPath = "SUPPORT_ABS_PATH"     // whether support abs path
 
 	KeyCustomSetting = "CUSTOM_SETTINGS"
 

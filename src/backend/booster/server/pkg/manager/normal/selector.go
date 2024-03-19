@@ -11,10 +11,16 @@ package normal
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
+)
+
+const (
+	queueNameSep = "<|>"
 )
 
 // Selector pay attention to the tasks in queue, pick the top-ranking task and launch it.
@@ -40,6 +46,7 @@ type selector struct {
 	layer         TaskBasicLayer
 	queueInfoList []engine.QueueBriefInfo
 	queueChanMap  map[engine.QueueBriefInfo]chan bool
+	queueLock     sync.RWMutex
 	mgr           *manager
 }
 
@@ -59,6 +66,7 @@ func (s *selector) start() {
 		s.queueChanMap[info] = c
 	}
 
+	s.queueLock.Lock()
 	// start pickers
 	for _, info := range s.queueInfoList {
 		for k, v := range s.queueChanMap {
@@ -68,25 +76,63 @@ func (s *selector) start() {
 			}
 		}
 	}
+	s.queueLock.Unlock()
+
+	ticker := time.NewTicker(selectorCheckNewQueueTime)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-s.ctx.Done():
 			blog.Warnf("select shutdown")
 			return
+		case <-ticker.C:
+			s.checkNewQueue()
 		}
 	}
 }
 
 func (s *selector) OnTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatusType) error {
 	blog.Infof("selector: ready notify to task(%s) engine(%s) queue(%s)", tb.ID, tb.Client.EngineName, tb.Client.QueueName)
+
+	isNewQueue := true
 	for k, v := range s.queueChanMap {
 		if k.QueueName == tb.Client.QueueName && k.EngineName == tb.Client.EngineName {
 			blog.Infof("selector: send notify to task(%s) engine(%s) queue(%s)", tb.ID, tb.Client.EngineName, tb.Client.QueueName)
 			v <- true
+			isNewQueue = false
 			break
 		}
 	}
+
+	if isNewQueue {
+		s.onNewQueue(tb.Client.QueueName, tb.Client.EngineName)
+	}
+
+	return nil
+}
+
+func (s *selector) onNewQueue(queueName string, engineName engine.TypeName) error {
+	// add to queue with lock
+	info := engine.QueueBriefInfo{
+		QueueName:  queueName,
+		EngineName: engineName,
+	}
+	c := make(chan bool, 100)
+
+	s.queueLock.Lock()
+	s.queueChanMap[info] = c
+	s.queueLock.Unlock()
+
+	// start this go routine
+	blog.Infof("selector: ready start picker for new engine(%s) queue(%s)", engineName, queueName)
+	go s.picker(info, c)
+
+	// sleep and notify
+	// it may be fail to notify here, but the picker timer will recover this
+	time.Sleep(1 * time.Second)
+	c <- true
+
 	return nil
 }
 
@@ -159,11 +205,23 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 		return
 	}
 
-	if err = egn.LaunchTask(tb, queueName); err != nil {
-		if err != engine.ErrorNoEnoughResources {
-			blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
+	// 支持 queueName 为复合内容，比如 WIN://p2p_shenzhen_buildbooster<|>K8S_WIN://shenzhen
+	// 表示支持  WIN://p2p_shenzhen_buildbooster 和 K8S_WIN://shenzhen 两种类型的资源的获取
+	realqueuenames := strings.Split(queueName, queueNameSep)
+	for _, q := range realqueuenames {
+		if err = egn.LaunchTask(tb, q); err != nil {
+			if err != engine.ErrorNoEnoughResources {
+				blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), q, err)
+			}
+			blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), q, err)
+			continue
+		} else {
+			queueName = q
+			break
 		}
-		blog.Infof("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
+	}
+
+	if err != nil {
 		return
 	}
 
@@ -180,4 +238,31 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 
 	// notify next step immediately
 	s.mgr.onTaskStatus(tb, engine.TaskStatusStarting)
+}
+
+// 用于定时检查新的queue的任务，主要是server重启或者主从切换时
+// 如果是server运行期间的新的queue任务，会通过OnTaskStatus直接触发
+func (s *selector) checkNewQueue() {
+	blog.Debugf("selector: do check for checking new queue task")
+	taskList, err := s.layer.ListTaskBasic(false, engine.TaskStatusStaging)
+	if err != nil {
+		blog.Errorf("selector: doing check, list task failed: %v", err)
+		return
+	}
+
+	for _, tb := range taskList {
+		isNewQueue := true
+		for k := range s.queueChanMap {
+			if k.QueueName == tb.Client.QueueName && k.EngineName == tb.Client.EngineName {
+				isNewQueue = false
+				break
+			}
+		}
+
+		if isNewQueue {
+			s.onNewQueue(tb.Client.QueueName, tb.Client.EngineName)
+		}
+	}
+
+	return
 }

@@ -39,6 +39,8 @@ const (
 	// 二进制中记录数据长度的字段的长度
 	DataLengthInBinary     = 16
 	TotalLongTCPHeadLength = 48
+
+	DefaultLongTCPTimeoutSeconds = 3600 * 24
 )
 
 func longTCPHead2Byte(head *LongTCPHead) ([]byte, error) {
@@ -156,6 +158,11 @@ type OnSendDoneFunc func() error
 // server端创建session
 func NewSessionWithConn(conn *net.TCPConn, callback OnReceivedFunc) *Session {
 	client := NewTCPClientWithConn(conn)
+
+	if err := client.setIOTimeout(DefaultLongTCPTimeoutSeconds); err != nil {
+		blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", client.ConnDesc(), err.Error())
+		return nil
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	remoteaddr := conn.RemoteAddr().String()
@@ -717,6 +724,10 @@ func (s *Session) Size() int64 {
 	return atomic.LoadInt64(&s.requestNum)
 }
 
+func (s *Session) IP() string {
+	return s.ip
+}
+
 // ----------------------------------------------------
 // 用于客户端的session pool
 type ClientSessionPool struct {
@@ -770,6 +781,11 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 				return v
 			}
 		}
+	}
+
+	// 长连接的超时时间不应该太短，不符合长连接的场景需求
+	if timeout < DefaultLongTCPTimeoutSeconds {
+		timeout = DefaultLongTCPTimeoutSeconds
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

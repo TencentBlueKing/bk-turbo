@@ -13,11 +13,28 @@ import (
 	"container/list"
 	"context"
 	"sync"
+	"time"
 
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
+
+type RemoteSlotMgr interface {
+	Handle(ctx context.Context)
+	Reset(hl []*dcProtocol.Host) ([]*dcProtocol.Host, error)
+	DisableAllWorker()
+	GetDeadWorkers() []*worker
+	RecoverDeadWorker(w *worker)
+	DisableWorker(host *dcProtocol.Host)
+	Lock(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host
+	Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host)
+	TotalSlots() int
+	GetWorkers() []*worker
+	CountWorkerError(w *worker)
+	IsWorkerDead(w *worker, netErrorLimit int) bool
+	WorkerDead(w *worker)
+}
 
 type lockWorkerMessage struct {
 	jobUsage      dcSDK.JobUsage
@@ -25,6 +42,7 @@ type lockWorkerMessage struct {
 	result        chan *dcProtocol.Host
 	largeFile     string
 	banWorkerList []*dcProtocol.Host
+	startWait     time.Time
 }
 type lockWorkerChan chan lockWorkerMessage
 
@@ -208,7 +226,7 @@ func (wr *resource) TotalSlots() int {
 	return wr.totalSlots
 }
 
-func (wr *resource) disableWorker(host *dcProtocol.Host) {
+func (wr *resource) DisableWorker(host *dcProtocol.Host) {
 	if host == nil {
 		return
 	}
@@ -249,7 +267,7 @@ func (wr *resource) disableWorker(host *dcProtocol.Host) {
 	return
 }
 
-func (wr *resource) workerDead(w *worker) {
+func (wr *resource) WorkerDead(w *worker) {
 	if w == nil || w.host == nil {
 		return
 	}
@@ -290,7 +308,7 @@ func (wr *resource) workerDead(w *worker) {
 	return
 }
 
-func (wr *resource) disableAllWorker() {
+func (wr *resource) DisableAllWorker() {
 	blog.Infof("remote slot: ready disable all host")
 
 	wr.workerLock.Lock()
@@ -318,7 +336,7 @@ func (wr *resource) disableAllWorker() {
 	return
 }
 
-func (wr *resource) recoverDeadWorker(w *worker) {
+func (wr *resource) RecoverDeadWorker(w *worker) {
 	if w == nil || w.host == nil {
 		return
 	}
@@ -352,7 +370,7 @@ func (wr *resource) recoverDeadWorker(w *worker) {
 	return
 }
 
-func (wr *resource) countWorkerError(w *worker) {
+func (wr *resource) CountWorkerError(w *worker) {
 	if w == nil || w.host == nil {
 		return
 	}
@@ -370,7 +388,7 @@ func (wr *resource) countWorkerError(w *worker) {
 	}
 }
 
-func (wr *resource) getWorkers() []*worker {
+func (wr *resource) GetWorkers() []*worker {
 	wr.workerLock.RLock()
 	defer wr.workerLock.RUnlock()
 
@@ -381,7 +399,7 @@ func (wr *resource) getWorkers() []*worker {
 	return workers
 }
 
-func (wr *resource) getDeadWorkers() []*worker {
+func (wr *resource) GetDeadWorkers() []*worker {
 	wr.workerLock.RLock()
 	defer wr.workerLock.RUnlock()
 
@@ -394,7 +412,7 @@ func (wr *resource) getDeadWorkers() []*worker {
 	return workers
 }
 
-func (wr *resource) isWorkerDead(w *worker, netErrorLimit int) bool {
+func (wr *resource) IsWorkerDead(w *worker, netErrorLimit int) bool {
 	wr.workerLock.RLock()
 	defer wr.workerLock.RUnlock()
 
@@ -652,218 +670,4 @@ func (wr *resource) onSlotEmpty() {
 		msg.result <- nil
 		wr.waitingList.Remove(e)
 	}
-}
-
-// worker describe the worker information includes the host details and the slots status
-// and it is the caller's responsibility to ensure the lock.
-type worker struct {
-	disabled      bool
-	host          *dcProtocol.Host
-	totalSlots    int
-	occupiedSlots int
-	// > 100MB
-	largefiles          []string
-	largefiletotalsize  uint64
-	continuousNetErrors int
-	dead                bool
-}
-
-func (wr *worker) occupySlot() error {
-	wr.occupiedSlots++
-	return nil
-}
-
-func (wr *worker) freeSlot() error {
-	wr.occupiedSlots--
-	return nil
-}
-
-func (wr *worker) hasFile(f string) bool {
-	if len(wr.largefiles) > 0 {
-		for _, v := range wr.largefiles {
-			if v == f {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-func (wr *worker) copy() *worker {
-	return &worker{
-		disabled:            wr.dead,
-		host:                wr.host,
-		totalSlots:          wr.totalSlots,
-		occupiedSlots:       wr.occupiedSlots,
-		largefiles:          wr.largefiles,
-		largefiletotalsize:  wr.largefiletotalsize,
-		continuousNetErrors: wr.continuousNetErrors,
-		dead:                wr.dead,
-	}
-}
-
-// by tming to limit local memory usage
-func newMemorySlot(maxSlots int64) *memorySlot {
-	minmemroy := int64(100 * 1024 * 1024)          // 100MB
-	defaultmemroy := int64(1 * 1024 * 1024 * 1024) // 1GB
-	maxmemroy := int64(8 * 1024 * 1024 * 1024)     // 8GB
-
-	blog.Infof("memory slot: maxSlots:%d", maxSlots)
-	if maxSlots <= 0 {
-		// v, err := mem.VirtualMemory()
-		// if err != nil {
-		// 	blog.Infof("memory slot: failed to get virtaul memory with err:%v", err)
-		// 	maxSlots = int64((runtime.NumCPU() - 2)) * 1024 * 1024 * 1024
-		// } else {
-		// 	// maxSlots = int64(v.Total) - minmemroy
-		// 	maxSlots = int64(v.Total) / 8
-		// }
-		maxSlots = defaultmemroy
-		blog.Infof("memory slot: maxSlots:%d", maxSlots)
-	}
-
-	if maxSlots < minmemroy {
-		maxSlots = minmemroy
-	}
-
-	if maxSlots > maxmemroy {
-		maxSlots = maxmemroy
-	}
-
-	blog.Infof("memory slot: set max local memory:%d", maxSlots)
-
-	waitingList := list.New()
-
-	return &memorySlot{
-		totalSlots:    maxSlots,
-		occupiedSlots: 0,
-
-		lockChan:   make(chanChanPair, 1000),
-		unlockChan: make(chanChanPair, 1000),
-
-		waitingList: waitingList,
-	}
-}
-
-type chanResult chan struct{}
-
-type chanPair struct {
-	result chanResult
-	weight int64
-}
-
-type chanChanPair chan chanPair
-
-type memorySlot struct {
-	ctx context.Context
-
-	totalSlots    int64
-	occupiedSlots int64
-
-	lockChan   chanChanPair
-	unlockChan chanChanPair
-
-	handling bool
-
-	waitingList *list.List
-}
-
-// brings handler up and begin to handle requests
-func (lr *memorySlot) Handle(ctx context.Context) {
-	if lr.handling {
-		return
-	}
-
-	lr.handling = true
-
-	go lr.handleLock(ctx)
-}
-
-// GetStatus get current slots status
-func (lr *memorySlot) GetStatus() (int64, int64) {
-	return lr.totalSlots, lr.occupiedSlots
-}
-
-// Lock get an usage lock, success with true, failed with false
-func (lr *memorySlot) Lock(weight int64) bool {
-	if !lr.handling {
-		return false
-	}
-
-	msg := chanPair{weight: weight, result: make(chanResult, 1)}
-	lr.lockChan <- msg
-
-	select {
-	case <-lr.ctx.Done():
-		return false
-
-	// wait result
-	case <-msg.result:
-		return true
-	}
-}
-
-// Unlock release an usage lock
-func (lr *memorySlot) Unlock(weight int64) {
-	if !lr.handling {
-		return
-	}
-
-	msg := chanPair{weight: weight, result: nil}
-	lr.unlockChan <- msg
-}
-
-func (lr *memorySlot) handleLock(ctx context.Context) {
-	lr.ctx = ctx
-
-	for {
-		select {
-		case <-ctx.Done():
-			lr.handling = false
-			return
-		case pairChan := <-lr.unlockChan:
-			lr.putSlot(pairChan)
-		case pairChan := <-lr.lockChan:
-			lr.getSlot(pairChan)
-		}
-	}
-}
-
-func (lr *memorySlot) getSlot(pairChan chanPair) {
-	// blog.Infof("memory slot: before get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
-
-	if lr.occupiedSlots < lr.totalSlots {
-		lr.occupiedSlots += pairChan.weight
-		pairChan.result <- struct{}{}
-	} else {
-		lr.waitingList.PushBack(pairChan)
-	}
-
-	// blog.Infof("memory slot: after get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
-}
-
-func (lr *memorySlot) putSlot(pairChan chanPair) {
-	// blog.Infof("memory slot: before put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
-
-	lr.occupiedSlots -= pairChan.weight
-	if lr.occupiedSlots < 0 {
-		lr.occupiedSlots = 0
-	}
-
-	for lr.occupiedSlots < lr.totalSlots && lr.waitingList.Len() > 0 {
-		e := lr.waitingList.Front()
-		if e != nil {
-			tempchan := e.Value.(chanPair)
-			lr.occupiedSlots += tempchan.weight
-
-			// awake this task
-			tempchan.result <- struct{}{}
-
-			// delete this element
-			lr.waitingList.Remove(e)
-		}
-	}
-
-	// blog.Infof("memory slot: after put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
 }
