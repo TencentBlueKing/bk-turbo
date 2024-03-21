@@ -147,6 +147,7 @@ class TBSDaySummaryJob @Autowired constructor(
                 day = summary.day,
                 engineCode = engineCode,
                 planId = planId,
+                // user字段没有值即为disttask的统计数据，有值的是ue的用户数据
                 user = if (engineCode == "disttask-ue4") summary.user else null,
                 totalTime = summary.totalTime,
                 totalTimeWithCpu = summary.totalTimeWithCpu,
