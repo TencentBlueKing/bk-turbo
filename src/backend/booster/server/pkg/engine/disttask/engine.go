@@ -673,7 +673,8 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 }
 
 func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
-	crmMgr := de.getCrMgr(task.InheritSetting.QueueName)
+	// crmMgr := de.getCrMgr(task.InheritSetting.QueueName)
+	crmMgr := de.getCrMgr(queueName)
 	if crmMgr == nil {
 		blog.Errorf("engine(%s) try launching crm task(%s) failed: crmMgr is null", EngineName, tb.ID)
 		return errors.New("crmMgr is null")

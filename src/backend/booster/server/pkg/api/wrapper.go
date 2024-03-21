@@ -103,6 +103,15 @@ const (
 
 // redirect is like a proxy, it requests to the other node and return the data from that one.
 func redirect(uri string, req *restful.Request, resp *restful.Response) {
+	// adjust port if necessary
+	port := req.Request.URL.Port()
+	if port != "" {
+		fields := strings.Split(uri, ":")
+		if len(fields) == 3 && fields[2] != port {
+			uri = fmt.Sprintf("%s:%s:%s", fields[0], fields[1], port)
+		}
+	}
+
 	uri += req.Request.URL.Path + "?" + req.Request.URL.RawQuery
 
 	blog.Infof("redirect to uri: %s %s", req.Request.Method, uri)
