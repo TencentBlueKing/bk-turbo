@@ -120,8 +120,16 @@ func (m *Mgr) SupportAbsPath() bool {
 	m.reslock.RLock()
 	defer m.reslock.RUnlock()
 
+	// 如果没有资源，保险起见，返回false，防止覆盖了worker上的文件
+	if !m.HasAvailableWorkers() {
+		return false
+	}
+
 	// 默认支持，只有明确不支持的才返回false
 	for _, v := range m.resources {
+		if v.taskInfo == nil {
+			continue
+		}
 		blog.Infof("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
 		if strings.Contains(v.taskInfo.Extra, commonTypes.LabelKeySupportAbsPath) {
 			blog.Infof("resource: ready decode extra to temp map")
