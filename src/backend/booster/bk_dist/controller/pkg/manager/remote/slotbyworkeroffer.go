@@ -513,6 +513,13 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 	blog.Infof("worker offer slot: got slot offer:%+v", *r)
 	for _, w := range wo.worker {
 		if w.host.Equal(r.Host) {
+			if w.conn == nil {
+				blog.Infof("worker offer slot: worker %s closed, do nothing for slot offer",
+					w.host.Server)
+				wo.workerLock.RUnlock()
+				return nil
+			}
+
 			if r.AvailableSlotNum <= 0 {
 				if r.Refused > 0 {
 					// blog.Infof("worker offer slot: host[%+v] is refused with:%s", *r.Host, r.Message)
@@ -550,7 +557,7 @@ func (wo *workerOffer) onSlotResult(r *dcSDK.BKQuerySlotResult) error {
 	wo.lastGetSlotTime = time.Now()
 
 	// 确认当前能够消化多少slot（根据当前任务数来计算），并通知worker
-	if r.AvailableSlotNum > 0 {
+	if r.AvailableSlotNum > 0 && targetconn != nil {
 		consumed, err := wo.consumeSlot(&remoteSlotOffer{
 			Host:             r.Host,
 			AvailableSlotNum: r.AvailableSlotNum,
