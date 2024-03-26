@@ -681,6 +681,8 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 	}
 	var err error
 
+	de.setTaskIstResource(task, queueName)
+
 	envJobInt := int(task.Operator.RequestCPUPerUnit)
 	if task.Operator.RequestProcessPerUnit > 0 {
 		envJobInt = task.Operator.RequestProcessPerUnit
@@ -721,7 +723,7 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		return err
 	}
 
-	de.setTaskIstResource(task, queueName)
+	// de.setTaskIstResource(task, queueName)
 
 	err = crmMgr.Launch(tb.ID, pureQueueName, func(availableInstance int) (int, error) {
 		if availableInstance < task.Operator.LeastInstance {
