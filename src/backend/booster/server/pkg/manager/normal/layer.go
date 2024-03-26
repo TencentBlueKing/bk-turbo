@@ -346,7 +346,7 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 	if oldTask, ok := tc.tbm[tb.ID]; ok {
 		if oldTask.Status.Status != tb.Status.Status {
 			selfMetric.TaskNumController.Dec(
-				tb.Client.EngineName.String(), tb.Client.QueueName, string(oldTask.Status.Status), "")
+				tb.Client.EngineName.String(), oldTask.Client.QueueName, string(oldTask.Status.Status), "")
 			statusReason := ""
 			if tb.Status.Status.Terminated() {
 				statusReason = tb.Status.StatusCode.String()
