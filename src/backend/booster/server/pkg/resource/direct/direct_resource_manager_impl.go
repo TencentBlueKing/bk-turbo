@@ -1285,6 +1285,7 @@ func (d *directResourceManager) loadUsersFromDB() error {
 
 	opts := commonMySQL.NewListOptions()
 	opts.Equal(P2PQueryKey, 0)
+	opts.Limit(1000)
 
 	res, _, err := d.mysql.ListAllocateResource(opts)
 	if err != nil {
