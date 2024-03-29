@@ -29,12 +29,16 @@ type Cleaner interface {
 func NewCleaner(layer TaskBasicLayer) Cleaner {
 	return &cleaner{
 		layer: layer,
+		tasks: map[string]bool{},
 	}
 }
 
 type cleaner struct {
 	ctx   context.Context
 	layer TaskBasicLayer
+
+	tasks     map[string]bool
+	tasksLock sync.RWMutex
 
 	c chan *engine.TaskBasic
 }
@@ -73,7 +77,7 @@ func (c *cleaner) check() {
 		return
 	}
 
-	var wg sync.WaitGroup
+	// var wg sync.WaitGroup
 	for _, tb := range terminatedTaskList {
 		if tb.Status.Released {
 			continue
@@ -86,17 +90,50 @@ func (c *cleaner) check() {
 			continue
 		}
 
-		wg.Add(1)
-		go c.clean(tb.ID, egn, &wg)
+		// wg.Add(1)
+		// go c.clean(tb.ID, egn, &wg)
+		go c.clean(tb.ID, egn)
 	}
-	wg.Wait()
+	// wg.Wait()
 }
 
-func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
-	defer wg.Done()
+// 确保一个taskid只有一个协程处理，避免拉起太多协程
+func (c *cleaner) setFlag(taskID string) bool {
+	c.tasksLock.Lock()
+	defer c.tasksLock.Unlock()
+
+	if _, ok := c.tasks[taskID]; !ok {
+		c.tasks[taskID] = true
+		return true
+	} else {
+		return false
+	}
+}
+
+func (c *cleaner) unsetFlag(taskID string) {
+	c.tasksLock.Lock()
+	defer c.tasksLock.Unlock()
+
+	delete(c.tasks, taskID)
+}
+
+// func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
+func (c *cleaner) clean(taskID string, egn engine.Engine) {
+	// defer wg.Done()
+
+	blog.Infof("cleaner: start clean task(%s)", taskID)
+
+	if c.setFlag(taskID) {
+		defer c.unsetFlag(taskID)
+	} else {
+		blog.Infof("cleaner: task (%s) is cleaning by others, do nothing", taskID)
+		return
+	}
 
 	c.layer.LockTask(taskID, "clean_of_cleaner")
 	defer c.layer.UnLockTask(taskID)
+
+	blog.Infof("cleaner: start get basic info for task(%s)", taskID)
 
 	tb, err := c.layer.GetTaskBasic(taskID)
 	if err != nil {
@@ -161,10 +198,11 @@ func (c *cleaner) onCleanNotify(tb *engine.TaskBasic) error {
 	}
 
 	// wg 不需要，只是为了保持clean的调用方式
-	var wg sync.WaitGroup
-	wg.Add(1)
-	c.clean(tb.ID, egn, &wg)
-	wg.Wait()
+	// var wg sync.WaitGroup
+	// wg.Add(1)
+	// c.clean(tb.ID, egn, &wg)
+	c.clean(tb.ID, egn)
+	// wg.Wait()
 
 	return nil
 }
