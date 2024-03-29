@@ -26,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
+	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
@@ -38,6 +39,13 @@ const (
 	AgentReportInterval       = 15 // secs
 	AgentReportTimeoutCounter = 3
 	AgentTaskTimeoutSecs      = 30 // secs
+
+	LogResourceStatInterval = 20 * time.Second
+	LogP2PResourceTemplate  = "\tCity: %s[total cpu:%d,user num:%d]"
+
+	LeastP2PCPUPerUser       = 96
+	P2PQueryKey              = "released"
+	P2PRecordMessageTemplate = "p2p:%s:%s"
 )
 
 // define const strings
@@ -136,6 +144,15 @@ type directResourceManager struct {
 	// 记录用户注册的释放资源的命令
 	releaseCmds map[string]*Command
 
+	// p2p资源存储，第一层map的key为资源组标识，由groupkey+platform构成
+	// 第二层map的key为上报资源的唯一值，由ip+port构成
+	p2presource     map[string]map[string]*oneagentResource
+	p2presourceLock sync.RWMutex
+
+	// p2p用户信息，key由groupkey+platform构成
+	p2puser     map[string]map[string]bool
+	p2puserLock sync.RWMutex
+
 	mysql MySQL
 }
 
@@ -177,6 +194,8 @@ func NewResourceManager(conf *config.DirectResourceConfig, roleEvent types.RoleC
 		userAllocateds:        []*userAllocated{},
 		userBatchresCallbacks: []*userBatchresCallback{},
 		releaseCmds:           map[string]*Command{},
+		p2presource:           map[string]map[string]*oneagentResource{},
+		p2puser:               map[string]map[string]bool{},
 	}, nil
 }
 
@@ -285,37 +304,6 @@ func (d *directResourceManager) getFreeResource(
 	}
 
 	blog.Infof("drm: getFreeResource with userID[%s] resBatchID[%s] condition[%+v] res[%+v]",
-		userID, resBatchID, condition, res)
-	return res, nil
-}
-
-func (d *directResourceManager) getFreeP2PResource(
-	userID string, resBatchID string, condition interface{},
-	callbackSelector CallBackSelector, callBack4Command CallBack4Command) ([]*AgentResourceExternal, error) {
-	blog.Infof("drm: getFreeP2PResource with userID[%s] resBatchID[%s] condition[%+v]",
-		userID, resBatchID, condition)
-
-	d.resourceLock.Lock()
-	defer d.resourceLock.Unlock()
-
-	allfreeres, err := d.getAllFreeResource(userID)
-	if err != nil {
-		blog.Errorf("drm: failed to getAllFreeResource with userID(%s) for [%v]", userID, err)
-		return nil, err
-	}
-
-	res, err := callbackSelector(allfreeres, condition)
-	if err != nil {
-		blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
-		return nil, err
-	}
-
-	if res == nil {
-		err := fmt.Errorf("failed to get enought resource for user[%s]", userID)
-		return nil, err
-	}
-
-	blog.Infof("drm: getFreeP2PResource with userID[%s] resBatchID[%s] condition[%+v] res[%+v]",
 		userID, resBatchID, condition, res)
 	return res, nil
 }
@@ -637,35 +625,6 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, 
 	return nil
 }
 
-func (d *directResourceManager) onP2PResourceReport(resource *ReportAgentResource) error {
-	blog.Infof("drm: onP2PResourceReport with cluster[%s] ip[%s]...", resource.Base.Cluster, resource.Base.IP)
-	d.resourceLock.Lock()
-
-	if !d.isMaster {
-		blog.Errorf("drm: not master now while received cluster[%s] ip[%s] agent report",
-			resource.Base.Cluster, resource.Base.IP)
-		d.resourceLock.Unlock()
-		return errors.New("drm: not master now,do nothing")
-	}
-
-	oneagentres := &oneagentResource{
-		Agent:  resource.AgentInfo,
-		Update: time.Now().Unix(),
-	}
-
-	// record the metric data
-	go recordResource(oneagentres)
-
-	// // 更新到map中
-	d.resource[resource.Base.IP] = oneagentres
-	d.resourceLock.Unlock()
-
-	// 记录到数据库中
-	go d.mysql.PutAgentResource(d.getAgentResourceRecord(oneagentres))
-
-	return nil
-}
-
 func (d *directResourceManager) resInAllocated(userID, resBatchID string) bool {
 	flag := false
 	v := d.getUserAllocated(userID)
@@ -934,6 +893,9 @@ func (d *directResourceManager) Run() error {
 			switch e {
 			case types.ServerMaster:
 				d.isMaster = true
+				// TODO : 初始化p2p资源的使用情况（从数据库加载使用中的用户列表）
+				d.cleanP2PUser()
+				d.loadUsersFromDB()
 			case types.ServerSlave, types.ServerUnknown:
 				d.isMaster = false
 			default:
@@ -949,10 +911,15 @@ func (d *directResourceManager) tick() {
 	resourceCheckTick := time.NewTicker(AgentResourceCheckTime)
 	defer resourceCheckTick.Stop()
 
+	logP2PResourceTick := time.NewTicker(LogResourceStatInterval)
+	defer logP2PResourceTick.Stop()
+
 	for {
 		select {
 		case <-resourceCheckTick.C:
 			d.resourceCheck()
+		case <-logP2PResourceTick.C:
+			d.logP2PResource()
 		}
 	}
 }
@@ -1041,6 +1008,306 @@ func (d *directResourceManager) request(method, uri string, header http.Header, 
 	return
 }
 
+// -------------------------p2p---------------------------------
+func formatP2PMessage(platform, groupKey string) string {
+	return fmt.Sprintf(P2PRecordMessageTemplate, platform, groupKey)
+}
+
+func splitP2PMessage(message string) (string, string) {
+	fields := strings.Split(message, ":")
+	if len(fields) == 3 {
+		return fields[1], fields[2]
+	} else {
+		return "", ""
+	}
+}
+
+func (d *directResourceManager) getP2PAllocatedRecord(
+	userID string,
+	resourceBatchID string,
+	released bool,
+	agents []*AgentResourceExternal,
+	groupKey string,
+	platform string) *AllocatedResource {
+
+	nowsecs := time.Now().Unix()
+	AllocatedAgent := ""
+	if agents != nil {
+		for _, v := range agents {
+			AllocatedAgent += fmt.Sprintf("%s:%d|", v.Base.IP, v.Base.Port)
+		}
+	}
+
+	message := formatP2PMessage(platform, groupKey)
+
+	if !released {
+		return &AllocatedResource{
+			UserID:          userID,
+			ResourceBatchID: resourceBatchID,
+			Released:        0,
+			AllocatedTime:   nowsecs,
+			ReleasedTime:    0,
+			AllocatedAgent:  AllocatedAgent,
+			Message:         message,
+		}
+	}
+
+	return &AllocatedResource{
+		UserID:          userID,
+		ResourceBatchID: resourceBatchID,
+		Released:        1,
+		AllocatedTime:   0,
+		ReleasedTime:    nowsecs,
+		AllocatedAgent:  AllocatedAgent,
+		Message:         message,
+	}
+}
+
+func getP2PGroupKey(platform, groupKey string) string {
+	return fmt.Sprintf("%s_%s", platform, groupKey)
+}
+
+func getP2PAgentKey(ip string, port int) string {
+	return fmt.Sprintf("%s_%d", ip, port)
+}
+
+func (d *directResourceManager) onP2PResourceReport(resource *ReportAgentResource) error {
+	blog.Infof("drm: p2p on resource report with cluster[%s] ip[%s] port[%d]...",
+		resource.Base.Cluster, resource.Base.IP, resource.Base.Port)
+	d.p2presourceLock.Lock()
+
+	if !d.isMaster {
+		blog.Errorf("drm: p2p not master now while received cluster[%s] ip[%s] agent report",
+			resource.Base.Cluster, resource.Base.IP)
+		d.p2presourceLock.Unlock()
+		return errors.New("drm: not master now,do nothing")
+	}
+
+	oneagentres := &oneagentResource{
+		Agent:  resource.AgentInfo,
+		Update: time.Now().Unix(),
+	}
+
+	// record the metric data
+	go recordResource(oneagentres)
+
+	// // 更新到map中
+	platform := ""
+	if v, ok := resource.Base.Labels[LabelKeyGOOS]; ok {
+		platform = v
+	}
+	groupkey := getP2PGroupKey(platform, resource.Base.Cluster)
+	agentkey := getP2PAgentKey(resource.Base.IP, resource.Base.Port)
+	if v, ok := d.p2presource[groupkey]; ok {
+		v[agentkey] = oneagentres
+	} else {
+		newmap := make(map[string]*oneagentResource)
+		newmap[agentkey] = oneagentres
+		d.p2presource[groupkey] = newmap
+	}
+	d.p2presourceLock.Unlock()
+
+	// 记录到数据库中
+	go d.mysql.PutAgentResource(d.getAgentResourceRecord(oneagentres))
+
+	return nil
+}
+
+func (d *directResourceManager) getFreeP2PResource(
+	userID string,
+	resBatchID string,
+	condition interface{},
+	callbackSelector CallBackSelector,
+	groupKey string,
+	platform string) ([]*AgentResourceExternal, error) {
+	blog.Infof("drm: p2p get free resource with userID[%s] resBatchID[%s] "+
+		"condition[%+v],groupKey[%s],platform[%s]",
+		userID, resBatchID, condition, groupKey, platform)
+
+	d.p2presourceLock.Lock()
+	defer d.p2presourceLock.Unlock()
+
+	allfreeres, err := d.getP2PResource(groupKey, platform)
+	if err != nil {
+		blog.Errorf("drm: p2p failed to resource with userID(%s) groupKey(%s) platform(%s) for [%v]",
+			userID, groupKey, platform, err)
+		return nil, err
+	}
+
+	res, err := callbackSelector(allfreeres, condition)
+	if err != nil {
+		blog.Errorf("drm: p2p failed to callbackSelector with userID(%s) for [%v]", userID, err)
+		return nil, err
+	}
+
+	if res == nil {
+		err := fmt.Errorf("failed to get enought resource for user[%s]", userID)
+		return nil, err
+	}
+
+	// 如果资源选择成功，则缓存用户列表
+	resKey := getP2PGroupKey(platform, groupKey)
+	d.addP2PUser(resKey, resBatchID)
+
+	// save to db
+	d.mysql.PutAllocatedResource(d.getP2PAllocatedRecord(userID, resBatchID, false, nil, groupKey, platform))
+
+	blog.Infof("drm: p2p get free resource with userID[%s] resBatchID[%s] condition[%+v] res[%+v]",
+		userID, resBatchID, condition, res)
+	return res, nil
+}
+
+func (d *directResourceManager) getP2PUserNum(resKey string) int {
+	d.p2puserLock.RLock()
+	defer d.p2puserLock.RUnlock()
+	usernum := 0
+	if users, ok := d.p2puser[resKey]; ok {
+		usernum += len(users)
+	}
+
+	return usernum
+}
+
+func (d *directResourceManager) addP2PUser(resKey, userid string) error {
+	blog.Infof("drm: p2p add user:%s of resource:%s", userid, resKey)
+
+	d.p2puserLock.Lock()
+	defer d.p2puserLock.Unlock()
+
+	if users, ok := d.p2puser[resKey]; ok {
+		users[userid] = true
+	} else {
+		newmap := map[string]bool{}
+		newmap[userid] = true
+		d.p2puser[resKey] = newmap
+	}
+
+	return nil
+}
+
+func (d *directResourceManager) cleanP2PUser() error {
+	blog.Infof("drm: p2p clean users")
+
+	d.p2puserLock.Lock()
+	defer d.p2puserLock.Unlock()
+
+	d.p2puser = map[string]map[string]bool{}
+
+	return nil
+}
+
+func (d *directResourceManager) deleteP2PUser(resKey, userid string) error {
+	blog.Infof("drm: p2p delete user:%s of resource:%s", userid, resKey)
+
+	d.p2puserLock.Lock()
+	defer d.p2puserLock.Unlock()
+
+	if users, ok := d.p2puser[resKey]; ok {
+		delete(users, userid)
+	}
+
+	return nil
+}
+
+func (d *directResourceManager) getP2PResource(
+	groupKey,
+	platform string) ([]*AgentResourceExternal, error) {
+	resKey := getP2PGroupKey(platform, groupKey)
+	resmap, ok := d.p2presource[resKey]
+	if !ok {
+		blog.Infof("drm: p2p not found resource with key %s %s", platform, groupKey)
+		return nil, ErrorResourceNoExist
+	}
+
+	totalcpu := 0
+	ress := []*AgentResourceExternal{}
+	for _, v := range resmap {
+		externalagent := v.Agent.FreeToExternal()
+		ress = append(ress, externalagent)
+		totalcpu += int(v.Agent.Total.CPU)
+	}
+
+	// 判断资源是否充足
+	if totalcpu > 0 {
+		usernum := d.getP2PUserNum(resKey)
+		// 如果没有用户使用，即使小于最小值，也返回，由engine判断条件
+		if usernum > 0 {
+			if totalcpu/usernum < LeastP2PCPUPerUser {
+				blog.Infof("drm: p2p not enought resource[%s:%s] with total cpu[%d] user num[%d]",
+					platform, groupKey, totalcpu, usernum)
+				return nil, ErrorResourceNotEnought
+			}
+		}
+	}
+
+	return ress, nil
+}
+
+func (d *directResourceManager) logP2PResource() {
+	loginfo := []string{}
+	d.p2presourceLock.RLock()
+	defer d.p2presourceLock.RUnlock()
+
+	for k, v := range d.p2presource {
+		totalcpu := 0
+		for _, v1 := range v {
+			totalcpu += int(v1.Agent.Total.CPU)
+		}
+		usernum := d.getP2PUserNum(k)
+		line := fmt.Sprintf(LogP2PResourceTemplate, k, totalcpu, usernum)
+		loginfo = append(loginfo, line)
+	}
+
+	blog.Infof("drm: p2p resource stat:\n%s", strings.Join(loginfo, "\n"))
+}
+
+func (d *directResourceManager) releaseP2PResource(userID, resBatchID, platform, groupKey string) error {
+	blog.Infof("drm: p2p release resource with userID[%s] resBatchID[%s] platform[%s] groupKey[%s]",
+		userID, resBatchID, platform, groupKey)
+
+	d.deleteP2PUser(getP2PGroupKey(platform, groupKey), resBatchID)
+
+	// save to db
+	rec, err := d.mysql.GetAllocatedResource(userID, resBatchID)
+	if err != nil {
+		blog.Warnf("drm: failed get get record with [%s %s], error:%v", userID, resBatchID, err)
+		d.mysql.PutAllocatedResource(d.getP2PAllocatedRecord(userID, resBatchID, true, nil, groupKey, platform))
+	} else {
+		rec.Released = 1
+		rec.ReleasedTime = time.Now().Unix()
+		d.mysql.PutAllocatedResource(rec)
+	}
+
+	return nil
+}
+
+func (d *directResourceManager) loadUsersFromDB() error {
+	blog.Infof("drm: p2p load users from db now")
+
+	opts := commonMySQL.NewListOptions()
+	opts.Equal(P2PQueryKey, 0)
+
+	res, _, err := d.mysql.ListAllocateResource(opts)
+	if err != nil {
+		blog.Infof("drm: p2p load users from db with error:%v", err)
+		return err
+	}
+
+	if len(res) > 0 {
+		for _, v := range res {
+			blog.Infof("drm: p2p deal db records:[%+v]", *v)
+
+			// TODO : 如果超过6个小时，则忽略并修改状态为released
+
+			platform, groupKey := splitP2PMessage(v.Message)
+			resKey := getP2PGroupKey(platform, groupKey)
+			d.addP2PUser(resKey, v.ResourceBatchID)
+		}
+	}
+
+	return nil
+}
+
 // +++++++++++++++++++++++http server+++++++++++++++++++++++++++
 func (d *directResourceManager) startHTTPServer() error {
 	blog.Infof("drm: std.tHTTPServer...")
@@ -1096,9 +1363,10 @@ func (h *handleWithUser) GetFreeP2PResource(
 	resBatchID string,
 	condition interface{},
 	callbackSelector CallBackSelector,
-	callBack4Command CallBack4Command) ([]*AgentResourceExternal, error) {
+	groupKey string,
+	platform string) ([]*AgentResourceExternal, error) {
 	if h.mgr != nil {
-		return h.mgr.getFreeP2PResource(h.userID, resBatchID, condition, callbackSelector, callBack4Command)
+		return h.mgr.getFreeP2PResource(h.userID, resBatchID, condition, callbackSelector, groupKey, platform)
 	}
 
 	return nil, nil
@@ -1108,6 +1376,14 @@ func (h *handleWithUser) GetFreeP2PResource(
 func (h *handleWithUser) ReleaseResource(resBatchID string) error {
 	if h.mgr != nil {
 		return h.mgr.releaseResource(h.userID, resBatchID)
+	}
+
+	return fmt.Errorf("drm: direct resource manager is nil")
+}
+
+func (h *handleWithUser) ReleaseP2PResource(resBatchID, platform, groupKey string) error {
+	if h.mgr != nil {
+		return h.mgr.releaseP2PResource(h.userID, resBatchID, platform, groupKey)
 	}
 
 	return fmt.Errorf("drm: direct resource manager is nil")
