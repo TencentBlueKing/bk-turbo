@@ -1229,8 +1229,7 @@ func (d *directResourceManager) getP2PResource(
 
 	// 判断资源是否充足
 	if totalcpu > 0 {
-		usernum := d.getP2PUserNum(resKey)
-		// 如果没有用户使用，即使小于最小值，也返回，由engine判断条件
+		usernum := d.getP2PUserNum(resKey) + 1
 		if usernum > 0 {
 			if totalcpu/usernum < LeastP2PCPUPerUser {
 				blog.Infof("drm: p2p not enought resource[%s:%s] with total cpu[%d] user num[%d]",
