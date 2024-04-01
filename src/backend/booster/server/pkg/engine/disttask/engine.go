@@ -541,14 +541,19 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 func (de *disttaskEngine) launchDirectP2PTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
 	blog.Infof("engine(%s) ready to launch direct p2p task(%s) with queue:%s", EngineName, tb.ID, queueName)
 
+	purequeue := getQueueNamePure(queueName)
 	condition := &resourceCondition{
-		queueName: getQueueNamePure(queueName),
+		queueName: purequeue,
 		leastCPU:  task.InheritSetting.LeastCPU,
 		maxCPU:    task.InheritSetting.RequestCPU,
 	}
 
 	// TODO : resourceSelector 需要改为 p2p 定制的，之前的选择条件不能满足p2p的场景
-	resourceList, err := de.directMgr.GetFreeP2PResource(tb.ID, condition, p2pResourceSelector, nil)
+	resourceList, err := de.directMgr.GetFreeP2PResource(tb.ID,
+		condition,
+		p2pResourceSelector,
+		purequeue,
+		getPlatform(queueName))
 	// add task into public queue
 	if err == engine.ErrorNoEnoughResources {
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
@@ -982,9 +987,11 @@ func (de *disttaskEngine) releaseTask(taskID string) error {
 	}
 
 	if matchDirectResource(task.InheritSetting.QueueName) {
-		// TODO : deal with p2p
+		// TODO : p2p的也需要通知下，方便资源的管理
 		if containsP2P(task.InheritSetting.QueueName) {
-			return nil
+			return de.releaseP2PDirectTask(task,
+				getPlatform(task.InheritSetting.QueueName),
+				getQueueNamePure(task.InheritSetting.QueueName))
 		}
 		return de.releaseDirectTask(task)
 	}
@@ -1020,6 +1027,12 @@ func (de *disttaskEngine) releaseDirectTask(task *distTask) error {
 
 	blog.Infof("engine(%s) success to release direct task(%s)", EngineName, task.ID)
 	return nil
+}
+
+func (de *disttaskEngine) releaseP2PDirectTask(task *distTask, platform, groupKey string) error {
+	blog.Infof("engine(%s) try to release p2p direct task(%s)", EngineName, task.ID)
+
+	return de.directMgr.ReleaseP2PResource(task.ID, platform, groupKey)
 }
 
 func (de *disttaskEngine) releaseCRMTask(task *distTask) error {

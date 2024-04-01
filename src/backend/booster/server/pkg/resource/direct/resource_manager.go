@@ -51,7 +51,10 @@ type HandleWithUser interface {
 		resBatchID string,
 		condition interface{},
 		callbackSelector CallBackSelector,
-		callback4UsedRes CallBack4Command) ([]*AgentResourceExternal, error)
+		groupKey string,
+		platform string) ([]*AgentResourceExternal, error)
+
+	ReleaseP2PResource(resBatchID, platform, groupKey string) error
 }
 
 // CmdType : cmd type
