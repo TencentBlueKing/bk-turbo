@@ -55,6 +55,7 @@ var bazelActionConstOptions = []string{
 	env.GetEnvKey(env.KeyExecutorHookConfigContentRaw),
 	env.GetEnvKey(env.BoosterType),
 	env.GetEnvKey(env.KeyExecutorIOTimeout),
+	env.GetEnvKey(env.KeyExecutorForceLocalKeys),
 }
 
 func appendPreload() error {
