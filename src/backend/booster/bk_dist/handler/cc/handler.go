@@ -204,15 +204,13 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	}
 
 	for _, v := range args {
-		if strings.HasSuffix(v, ".cpp") || strings.HasSuffix(v, ".c") {
-			for _, v1 := range cc.ForceLocalCppFileKeys {
-				if v1 != "" && strings.Contains(v, v1) {
-					blog.Warnf("cc: pre execute found %s is in force local list, do not deal now", v)
-					return nil, fmt.Errorf("arg %s is in force local cpp list", v)
-				}
+		for _, v1 := range cc.ForceLocalCppFileKeys {
+			if v1 != "" && strings.Contains(v, v1) {
+				blog.Warnf("cc: pre execute found %s is in force local list, do not deal now", v)
+				return nil, fmt.Errorf("arg %s is in force local cpp list", v)
 			}
-			break
 		}
+		break
 	}
 
 	if err = cc.preBuild(args); err != nil {
