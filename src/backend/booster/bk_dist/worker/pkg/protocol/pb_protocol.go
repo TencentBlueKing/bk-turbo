@@ -35,6 +35,13 @@ var (
 	bkdistcmdmagic   = protocol.Bkdistcmdmagic
 )
 
+var (
+	SupportAbsPath = true
+	DefaultWorkDir = ""
+
+	errAbsPathNotAllowed = fmt.Errorf("absolute path is not allowed")
+)
+
 // return relativepath, abspath, error
 type PathMapping func(inputfile string, basedir string, relativedir string) (string, string, error)
 
@@ -370,6 +377,16 @@ func receiveBKCommonDispatchReqBuf(client *TCPClient,
 	return nil
 }
 
+func CheckAbsPathLimit(f string) error {
+	if !SupportAbsPath && filepath.IsAbs(f) {
+		if !strings.HasPrefix(f, DefaultWorkDir) {
+			return errAbsPathNotAllowed
+		}
+	}
+
+	return nil
+}
+
 // for size < 0, only get file path mapping
 // for size == 0, save one empty file
 func saveFile(
@@ -395,6 +412,18 @@ func saveFile(
 			_, linkTarget, _ = callback(linkTarget, basedir, rf.GetTargetrelativepath())
 		}
 		rf.Targetrelativepath = &relativepath
+	}
+
+	err = CheckAbsPathLimit(inputfile)
+	if err != nil {
+		blog.Warnf("inputfile [%s] path is not allowed!", inputfile)
+		return "", nil
+	}
+
+	err = CheckAbsPathLimit(linkTarget)
+	if err != nil {
+		blog.Warnf("link file [%s] path is not allowed!", linkTarget)
+		return "", nil
 	}
 
 	// compressed size < 0 means do not save, or may will overwrite existing files.

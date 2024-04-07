@@ -263,6 +263,20 @@ func (o *tcpManager) init() error {
 		go o.upgradeCheckTimer()
 	}
 
+	return o.updateProtocolConf()
+}
+
+func (o *tcpManager) updateProtocolConf() error {
+	protocol.SupportAbsPath = o.conf.SupportAbsPath
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	protocol.DefaultWorkDir = wd
+	blog.Infof("got protocol support abs path %v workdir %s",
+		protocol.SupportAbsPath,
+		protocol.DefaultWorkDir)
+
 	return nil
 }
 
