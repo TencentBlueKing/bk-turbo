@@ -214,7 +214,11 @@ func (o *tcpManager) init() error {
 
 	// chdir
 	if o.conf.DefaultWorkDir != "" {
+		// clean work dir
+		_ = os.RemoveAll(o.conf.DefaultWorkDir)
+		// create work dir
 		_ = os.MkdirAll(o.conf.DefaultWorkDir, os.ModePerm)
+		// change to work dir
 		err := os.Chdir(o.conf.DefaultWorkDir)
 		if err != nil {
 			blog.Errorf("failed to chdir,error: %v", err)
