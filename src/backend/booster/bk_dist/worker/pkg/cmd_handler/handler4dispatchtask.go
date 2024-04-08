@@ -464,6 +464,11 @@ func adjustParams(
 		var realpath string
 		if filepath.IsAbs(workerPath) {
 			realpath = workerPath
+			err := protocol.CheckAbsPathLimit(workerPath)
+			if err != nil {
+				blog.Warnf("result file path %s not allowed", workerPath)
+				return []string{}, err
+			}
 		} else {
 			_, realpath, _ = FilepathMapping(workerPath, basedir, "")
 			if workerPath != realpath {
