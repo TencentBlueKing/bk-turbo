@@ -38,4 +38,5 @@ var (
 	ErrNoWaitingTask                = fmt.Errorf("no waitting task")
 	ErrFileLock                     = fmt.Errorf("lock file failed")
 	ErrWorkIDEmpty                  = fmt.Errorf("work id is empty")
+	ErrWorkNotRead                  = fmt.Errorf("work is not ready")
 )

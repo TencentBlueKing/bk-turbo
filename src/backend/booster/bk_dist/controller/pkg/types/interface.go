@@ -125,6 +125,9 @@ type LocalMgr interface {
 	// unlock local slot
 	UnlockSlots(usage dcSDK.JobUsage, weight int32)
 
+	// try lock local slot
+	TryLockSlots(usage dcSDK.JobUsage, weight int32) (bool, error)
+
 	// do task execution
 	ExecuteTask(req *LocalTaskExecuteRequest,
 		globalWork *Work,
