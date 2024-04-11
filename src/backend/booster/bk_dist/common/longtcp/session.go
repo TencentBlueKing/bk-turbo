@@ -546,7 +546,6 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 	}
 }
 
-//
 func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	blog.Debugf("[longtcp] notify send and wait for response now...")
 
@@ -754,33 +753,91 @@ const (
 )
 
 var globalmutex sync.RWMutex
-var globalSessionPools []*ClientSessionPool
+var globalSessionPools map[string]*ClientSessionPool
+var globalSessionPoolsLocks map[string]*sync.RWMutex
 
 type HandshadeData func() []byte
 
-// 用于初始化并返回session pool
-func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake HandshadeData, size int32, callback OnReceivedFunc) *ClientSessionPool {
-	// 初始化全局pool，并返回一个可用的
-	if globalSessionPools != nil {
-		globalmutex.RLock()
-		for _, v := range globalSessionPools {
-			if v.ip == ip && v.port == port {
-				globalmutex.RUnlock()
-				return v
-			}
-		}
-		globalmutex.RUnlock()
+func getKey(ip string, port int32) string {
+	return fmt.Sprintf("%s_%d", ip, port)
+}
+
+func lockSessionPool(key string) error {
+	blog.Debugf("[longtcp] lock session [%s] in", key)
+
+	// 要保证globalmutex的释放，避免死锁
+	globalmutex.Lock()
+
+	var lock *sync.RWMutex
+	var ok bool
+	if lock, ok = globalSessionPoolsLocks[key]; ok {
+		blog.Debugf("[longtcp] lock [%s] existed", key)
+	} else {
+		lock = new(sync.RWMutex)
+		globalSessionPoolsLocks[key] = lock
+		blog.Debugf("[longtcp] lock [%s] not existed", key)
 	}
 
+	globalmutex.Unlock()
+
+	lock.Lock()
+
+	return nil
+}
+
+func unlockSessionPool(key string) error {
+	blog.Debugf("[longtcp] unlock session [%s] in", key)
+
+	// 要保证globalmutex的释放，避免死锁
+	globalmutex.Lock()
+
+	var lock *sync.RWMutex
+	var ok bool
+	if lock, ok = globalSessionPoolsLocks[key]; ok {
+		blog.Debugf("[longtcp] lock [%s] existed when unlock", key)
+	} else {
+		blog.Warnf("[longtcp] lock [%s] not existed when unlock", key)
+	}
+
+	globalmutex.Unlock()
+
+	if lock != nil {
+		lock.Unlock()
+	}
+
+	return nil
+}
+
+func ensureSessionPoolInited() error {
 	globalmutex.Lock()
 	defer globalmutex.Unlock()
 
-	if globalSessionPools != nil {
-		for _, v := range globalSessionPools {
-			if v.ip == ip && v.port == port {
-				return v
-			}
-		}
+	if globalSessionPools == nil {
+		globalSessionPools = make(map[string]*ClientSessionPool)
+	}
+
+	if globalSessionPoolsLocks == nil {
+		globalSessionPoolsLocks = make(map[string]*sync.RWMutex)
+	}
+
+	return nil
+}
+
+// 用于初始化并返回session pool
+func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake HandshadeData, size int32, callback OnReceivedFunc) *ClientSessionPool {
+	blog.Debugf("[longtcp] get session pool with [%s:%d] in", ip, port)
+	ensureSessionPoolInited()
+
+	key := getKey(ip, port)
+
+	lockSessionPool(key)
+	defer unlockSessionPool(key)
+
+	// 检查下是否有其它协程已经初始化过了
+	v, ok := globalSessionPools[key]
+	if ok {
+		blog.Debugf("[longtcp] get session pool with [%s:%d] out with existed", ip, port)
+		return v
 	}
 
 	// 长连接的超时时间不应该太短，不符合长连接的场景需求
@@ -805,12 +862,20 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 		cleaned:         false,
 	}
 
-	blog.Infof("[longtcp] client pool ready new client sessions")
+	blog.Infof("[longtcp] client pool ready new client sessions to [%s:%d]", ip, port)
+	failed := false
 	for i := 0; i < int(size); i++ {
+		if failed {
+			blog.Warnf("[longtcp] session failed before with %s:%d,just let it nil", ip, port)
+			tempSessionPool.sessions[i] = nil
+			continue
+		}
+
 		client := NewSession(ip, port, timeout, handshakedata, callback)
 		if client != nil {
 			tempSessionPool.sessions[i] = client
 		} else {
+			failed = true
 			blog.Warnf("[longtcp] client pool new client session failed with %s:%d", ip, port)
 			tempSessionPool.sessions[i] = nil
 		}
@@ -823,20 +888,17 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 	go tempSessionPool.check(&wg)
 	wg.Wait()
 
-	if globalSessionPools == nil {
-		globalSessionPools = make([]*ClientSessionPool, 0, 10)
-		globalSessionPools = append(globalSessionPools, tempSessionPool)
-	} else {
-		globalSessionPools = append(globalSessionPools, tempSessionPool)
-	}
+	globalSessionPools[key] = tempSessionPool
+
+	blog.Debugf("[longtcp] get session pool with [%s:%d] out new pool", ip, port)
 
 	return tempSessionPool
 }
 
-func removeElement(arr []*ClientSessionPool, index int) []*ClientSessionPool {
-	arr[len(arr)-1], arr[index] = arr[index], arr[len(arr)-1]
-	return arr[:len(arr)-1]
-}
+// func removeElement(arr []*ClientSessionPool, index int) []*ClientSessionPool {
+// 	arr[len(arr)-1], arr[index] = arr[index], arr[len(arr)-1]
+// 	return arr[:len(arr)-1]
+// }
 
 // 用于清理相应的session pool
 func CleanGlobalSessionPool(ip string, port int32) {
@@ -845,13 +907,14 @@ func CleanGlobalSessionPool(ip string, port int32) {
 	globalmutex.Lock()
 	defer globalmutex.Unlock()
 
-	for i, v := range globalSessionPools {
-		if v != nil && v.ip == ip && v.port == port {
-			v.Clean(ErrorSessionPoolCleaned)
-			globalSessionPools = removeElement(globalSessionPools, i)
-			break
-		}
+	key := getKey(ip, port)
+	if v, ok := globalSessionPools[key]; ok {
+		v.Clean(ErrorSessionPoolCleaned)
 	}
+
+	delete(globalSessionPools, key)
+	delete(globalSessionPoolsLocks, key)
+
 }
 
 // 获取可用session
