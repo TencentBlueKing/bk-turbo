@@ -210,7 +210,6 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 				return nil, fmt.Errorf("arg %s is in force local cpp list", v)
 			}
 		}
-		//break
 	}
 
 	if err = cc.preBuild(args); err != nil {
