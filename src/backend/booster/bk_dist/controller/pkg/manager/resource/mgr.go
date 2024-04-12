@@ -443,20 +443,29 @@ func (m *Mgr) cleanLongTCP(r *Res) error {
 	if m.conf.LongTCP {
 		if r != nil && r.taskInfo != nil {
 			blog.Infof("resource: try to clean long tcp for task(%s) work(%s)", r.taskid, m.work.ID())
+
+			// 长连接池释放可能比较慢，改成并行
+			var wg sync.WaitGroup
 			for _, v := range r.taskInfo.HostList {
-				hostField := strings.Split(v, "/")
-				if len(hostField) > 1 {
-					server := hostField[0]
-					ip := ""
-					port := 0
-					i := strings.LastIndex(server, ":")
-					if i > 0 && i < len(server)-1 {
-						ip = server[:i]
-						port, _ = strconv.Atoi(server[i+1:])
+				wg.Add(1)
+				go func(v string) {
+					defer wg.Done()
+					hostField := strings.Split(v, "/")
+					if len(hostField) > 1 {
+						server := hostField[0]
+						ip := ""
+						port := 0
+						i := strings.LastIndex(server, ":")
+						if i > 0 && i < len(server)-1 {
+							ip = server[:i]
+							port, _ = strconv.Atoi(server[i+1:])
+						}
+						longtcp.CleanGlobalSessionPool(ip, int32(port))
 					}
-					longtcp.CleanGlobalSessionPool(ip, int32(port))
-				}
+				}(v)
 			}
+
+			wg.Wait()
 		}
 	}
 	return nil

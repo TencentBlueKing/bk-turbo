@@ -745,7 +745,9 @@ func (o *tcpManager) obtainChance() bool {
 				}
 				curcpu := math.Max(scpu, per[0])
 				if curcpu > maxCpuUsed {
-					blog.Infof("ignore for current smooth cpu usage:%f(or curcpu:%f) over max allowed cpu usage:%f", scpu, per[0], maxCpuUsed)
+					blog.Infof("ignore for current smooth cpu usage:%f(or curcpu:%f) over max allowed cpu usage:%f",
+						scpu, per[0],
+						maxCpuUsed)
 					return false
 				}
 			}

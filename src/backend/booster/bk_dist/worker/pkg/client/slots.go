@@ -235,5 +235,8 @@ func (lr *slot) putSlot(pairChan chanPair) {
 		}
 	}
 
-	blog.Debugf("send slot: after put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
+	blog.Debugf("send slot: after put slot occpy size:%d,total size:%d,wait length:%d",
+		lr.occupiedSlots,
+		lr.totalSlots,
+		lr.waitingList.Len())
 }

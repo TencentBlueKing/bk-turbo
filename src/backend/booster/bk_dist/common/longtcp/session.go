@@ -679,6 +679,8 @@ func (s *Session) check(wg *sync.WaitGroup) {
 func (s *Session) Clean(err error) {
 	blog.Debugf("[longtcp] session %s clean now", s.Desc())
 
+	s.cancel()
+
 	// 通知发送队列中的任务
 	s.sendMutex.Lock()
 	if !s.valid { // 避免重复clean
@@ -710,7 +712,6 @@ func (s *Session) Clean(err error) {
 	if s.client != nil {
 		s.client.Close()
 	}
-	s.cancel()
 }
 
 func (s *Session) IsValid() bool {
@@ -902,19 +903,29 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 
 // 用于清理相应的session pool
 func CleanGlobalSessionPool(ip string, port int32) {
-	blog.Infof("[longtcp] clean session %s:%d", ip, port)
+	blog.Infof("[longtcp] clean session pool %s:%d in", ip, port)
 
-	globalmutex.Lock()
-	defer globalmutex.Unlock()
+	// globalmutex.Lock()
+	// defer globalmutex.Unlock()
 
 	key := getKey(ip, port)
-	if v, ok := globalSessionPools[key]; ok {
+
+	globalmutex.RLock()
+	v, ok := globalSessionPools[key]
+	globalmutex.RUnlock()
+
+	if ok {
+		lockSessionPool(key)
 		v.Clean(ErrorSessionPoolCleaned)
+		unlockSessionPool(key)
 	}
 
+	globalmutex.Lock()
 	delete(globalSessionPools, key)
 	delete(globalSessionPoolsLocks, key)
+	globalmutex.Unlock()
 
+	blog.Infof("[longtcp] clean session pool %s:%d out", ip, port)
 }
 
 // 获取可用session
@@ -958,21 +969,22 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 }
 
 func (sp *ClientSessionPool) Clean(err error) error {
-	blog.Infof("[longtcp] session pool %s:%d clean now", sp.ip, sp.port)
+	blog.Infof("[longtcp] clean sessions of pool %s:%d in", sp.ip, sp.port)
 	sp.cancel()
 
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
 
 	if !sp.cleaned {
+		sp.cleaned = true
 		for _, s := range sp.sessions {
 			if s != nil && s.IsValid() {
 				s.Clean(err)
 			}
 		}
-
-		sp.cleaned = true
 	}
+
+	blog.Infof("[longtcp] clean sessions of %s:%d out", sp.ip, sp.port)
 
 	return nil
 }

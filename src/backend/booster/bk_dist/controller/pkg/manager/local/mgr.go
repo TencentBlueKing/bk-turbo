@@ -201,15 +201,25 @@ func (m *Mgr) ExecuteTask(
 		req.Stats.RemoteTryTimes = i + 1
 		r, err = m.work.Remote().ExecuteTask(remoteReq)
 		if err != nil {
-			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v", m.work.ID(), req.Pid, i, err)
+			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v",
+				m.work.ID(),
+				req.Pid,
+				i,
+				err)
 			req.Stats.RemoteErrorMessage = err.Error()
 			if !needRetry(req) {
 				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with error: %v",
 					m.work.ID(), req.Pid, i, err)
 				break
 			}
-			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) with error(%v),ban (%d) worker:(%s)",
-				m.work.ID(), i+1, req.Pid, err.Error(), len(remoteReq.BanWorkerList), remoteReq.BanWorkerList)
+			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) "+
+				"with error(%v),ban (%d) worker:(%s)",
+				m.work.ID(),
+				i+1,
+				req.Pid,
+				err.Error(),
+				len(remoteReq.BanWorkerList),
+				remoteReq.BanWorkerList)
 		} else {
 			break
 		}
@@ -291,7 +301,10 @@ func (m *Mgr) retryOnRemoteFail(
 		m.work.Remote().DecRemoteJobs()
 
 		if err != nil {
-			blog.Warnf("local: failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)", m.work.ID(), req.Pid, err)
+			blog.Warnf("local: failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)",
+				m.work.ID(),
+				req.Pid,
+				err)
 			return nil, err
 		}
 
@@ -299,7 +312,10 @@ func (m *Mgr) retryOnRemoteFail(
 		// 重新post环节
 		err = e.executePostTask(r.Result)
 		if err != nil {
-			blog.Warnf("local: execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v", m.work.ID(), req.Pid, err)
+			blog.Warnf("local: execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v",
+				m.work.ID(),
+				req.Pid,
+				err)
 			return nil, err
 		}
 

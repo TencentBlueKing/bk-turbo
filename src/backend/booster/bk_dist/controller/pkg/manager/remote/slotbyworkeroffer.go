@@ -15,6 +15,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -315,6 +316,8 @@ func (wo *workerOffer) DisableAllWorker() {
 		blog.Infof("worker offer slot: set worker %s priority %d to Init",
 			w.host.Server, w.priority)
 	}
+
+	wo.worker = make([]*worker, 0)
 
 	wo.validWorkerNum = 0
 	if wo.validWorkerNum <= 0 {
@@ -676,7 +679,8 @@ func (wo *workerOffer) querySlot() error {
 		}
 	}
 
-	if len(initWorker) > 0 {
+	var succeedSlots int32
+	for len(initWorker) > 0 {
 		if hightSucceed < MaxHightPrioritySlot {
 			// 已经申请了足够的worker，但有些还没有返回结果，需要等待
 			if hightDetecting > 0 && (hightSucceed+hightDetecting) > MaxHightPrioritySlot {
@@ -690,41 +694,71 @@ func (wo *workerOffer) querySlot() error {
 			targetSlotNum = MaxMiddlePrioritySlot - (middleSucceed + middleDetecting)
 		}
 
-		sentSlots := 0
-		remoteWorker := client.NewCommonRemoteWorker()
-		handler := remoteWorker.Handler(SlotTCPTimeoutSeconds, nil, nil, nil)
-		for _, v := range initWorker {
-			req := &dcSDK.BKQuerySlot{
-				Priority:         int32(targetPriority),
-				WaitTotalTaskNum: 0,
-				TaskType:         "",
-			}
-
-			v.priority = targetPriority
-			v.status = Detecting
-			blog.Infof("worker offer slot: set worker %s priority %d to Detecting",
-				v.host.Server, targetPriority)
-
-			// blog.Infof("worker offer slot: ready query slot worker %s with priority %d now",
-			// 	v.host.Server, targetPriority)
-			c, err := handler.ExecuteQuerySlot(v.host, req, wo.slotChan, SlotTCPTimeoutSeconds)
-			if err == nil {
-				v.status = DetectSucceed
-				blog.Infof("worker offer slot: set worker %s priority %d to DetectSucceed",
-					v.host.Server, targetPriority)
-				v.conn = c
-
-				sentSlots += v.host.Jobs
-				if sentSlots > targetSlotNum {
-					return nil
+		// 按需要的核数尝试一批
+		tryWorker := make([]*worker, 0)
+		trySlots := 0
+		for i, v := range initWorker {
+			tryWorker = append(tryWorker, v)
+			trySlots += v.host.Jobs
+			if trySlots >= targetSlotNum {
+				if i < len(initWorker)-1 {
+					initWorker = initWorker[i+1:]
+				} else {
+					initWorker = nil
 				}
-			} else {
-				v.status = DetectFailed
-				blog.Infof("worker offer slot: set worker %s priority %d to DetectFailed",
-					v.host.Server, targetPriority)
+				break
 			}
 		}
+
+		if trySlots < targetSlotNum {
+			initWorker = nil
+		}
+
+		remoteWorker := client.NewCommonRemoteWorker()
+		handler := remoteWorker.Handler(SlotTCPTimeoutSeconds, nil, nil, nil)
+
+		var wg sync.WaitGroup
+		for _, v := range tryWorker {
+			wg.Add(1)
+			go func(v *worker) {
+				defer wg.Done()
+				req := &dcSDK.BKQuerySlot{
+					Priority:         int32(targetPriority),
+					WaitTotalTaskNum: 0,
+					TaskType:         "",
+				}
+
+				v.priority = targetPriority
+				v.status = Detecting
+				blog.Infof("worker offer slot: set worker %s priority %d to Detecting",
+					v.host.Server, targetPriority)
+
+				// blog.Infof("worker offer slot: ready query slot worker %s with priority %d now",
+				// 	v.host.Server, targetPriority)
+				c, err := handler.ExecuteQuerySlot(v.host, req, wo.slotChan, SlotTCPTimeoutSeconds)
+				if err == nil {
+					v.status = DetectSucceed
+					blog.Infof("worker offer slot: set worker %s priority %d to DetectSucceed",
+						v.host.Server, targetPriority)
+					v.conn = c
+
+					atomic.AddInt32(&succeedSlots, int32(v.host.Jobs))
+				} else {
+					v.status = DetectFailed
+					blog.Infof("worker offer slot: set worker %s priority %d to DetectFailed",
+						v.host.Server, targetPriority)
+				}
+			}(v)
+		}
+		wg.Wait()
+
+		if succeedSlots >= int32(targetSlotNum) {
+			blog.Infof("worker offer slot: got enought slot[%d]", succeedSlots)
+			return nil
+		}
 	}
+
+	blog.Infof("worker offer slot: not got enought slot after try %d workers", len(initWorker))
 
 	return nil
 }
