@@ -924,6 +924,7 @@ func (d *directResourceManager) tick() {
 		select {
 		case <-resourceCheckTick.C:
 			d.resourceCheck()
+			d.p2pResourceCheck()
 		case <-logP2PResourceTick.C:
 			d.logP2PResource()
 		}
@@ -1089,6 +1090,10 @@ func (d *directResourceManager) onP2PResourceReport(resource *ReportAgentResourc
 		return errors.New("drm: not master now,do nothing")
 	}
 
+	// 调整cpu为整数
+	resource.Total.CPU = float64(int(resource.Total.CPU))
+	resource.Free.CPU = float64(int(resource.Free.CPU))
+
 	oneagentres := &oneagentResource{
 		Agent:  resource.AgentInfo,
 		Update: time.Now().Unix(),
@@ -1215,6 +1220,15 @@ func (d *directResourceManager) deleteP2PUser(resKey, userid string) error {
 	return nil
 }
 
+func shuffleArray(arr []*AgentResourceExternal) {
+	for i := len(arr) - 1; i > 0; i-- {
+		j := rand.Intn(i + 1) // 生成随机位置
+
+		// 交换当前元素和随机位置的元素
+		arr[i], arr[j] = arr[j], arr[i]
+	}
+}
+
 func (d *directResourceManager) getP2PResource(
 	groupKey,
 	platform string) ([]*AgentResourceExternal, error) {
@@ -1244,6 +1258,9 @@ func (d *directResourceManager) getP2PResource(
 			}
 		}
 	}
+
+	// 打乱返回顺序，以便客户端访问更均衡
+	shuffleArray(ress)
 
 	return ress, nil
 }
@@ -1312,6 +1329,31 @@ func (d *directResourceManager) loadUsersFromDB() error {
 	}
 
 	return nil
+}
+
+func (d *directResourceManager) p2pResourceCheck() {
+	blog.Infof("drm: p2p resourceCheck...")
+
+	d.p2presourceLock.Lock()
+	// allagent := []string{}
+
+	for key, innerMap := range d.p2presource {
+		blog.Infof("drm: check agent with key [%s]", key)
+		for ip, agent := range innerMap {
+			blog.Infof("drm: check agent with ip [%s]", ip)
+			// allagent = append(allagent, ip)
+			// over period not update, delete
+			if time.Now().Unix()-agent.Update > AgentReportInterval*AgentReportTimeoutCounter {
+				blog.Infof("drm: found p2p agent[%s:%d] timeout, delete it",
+					agent.Agent.Base.IP,
+					agent.Agent.Base.Port)
+				delete(innerMap, ip)
+				zeroResource(agent)
+				continue
+			}
+		}
+	}
+	d.p2presourceLock.Unlock()
 }
 
 // +++++++++++++++++++++++http server+++++++++++++++++++++++++++
@@ -1445,4 +1487,16 @@ func recordResource(agent *oneagentResource) {
 	selfMetric.ResourceStatusController.UpdateMemUsed(metricLabels, agent.Agent.Total.Mem-agent.Agent.Free.Mem)
 	selfMetric.ResourceStatusController.UpdateDiskTotal(metricLabels, agent.Agent.Total.Disk)
 	selfMetric.ResourceStatusController.UpdateDiskUsed(metricLabels, agent.Agent.Total.Disk-agent.Agent.Free.Disk)
+}
+
+func zeroResource(agent *oneagentResource) {
+	metricLabels := controllers.ResourceStatusLabels{
+		IP:   agent.Agent.Base.IP,
+		Zone: fmt.Sprintf("direct_%s", agent.Agent.Base.Cluster),
+	}
+	selfMetric.ResourceStatusController.UpdateCPUTotal(metricLabels, 0)
+	selfMetric.ResourceStatusController.UpdateMemTotal(metricLabels, 0)
+	selfMetric.ResourceStatusController.UpdateMemUsed(metricLabels, 0)
+	selfMetric.ResourceStatusController.UpdateDiskTotal(metricLabels, 0)
+	selfMetric.ResourceStatusController.UpdateDiskUsed(metricLabels, 0)
 }
