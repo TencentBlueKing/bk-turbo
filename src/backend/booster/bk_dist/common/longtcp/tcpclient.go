@@ -23,10 +23,12 @@ import (
 
 // define const vars for http client
 const (
-// TCPBUFFERLEN = 10240
+	// TCPBUFFERLEN = 10240
 
-// DEFAULTTIMEOUTSECS        = 300
-// DEFAULTREADALLTIMEOUTSECS = 600
+	// DEFAULTTIMEOUTSECS        = 300
+	// DEFAULTREADALLTIMEOUTSECS = 600
+
+	connectTimeout = 5 * time.Second
 )
 
 // TCPClient wrapper net.TCPConn
@@ -70,7 +72,8 @@ func (c *TCPClient) Connect(server string) error {
 	}
 
 	t := time.Now().Local()
-	c.conn, err = net.DialTCP("tcp", nil, resolvedserver)
+	// c.conn, err = net.DialTCP("tcp", nil, resolvedserver)
+	conn, err := net.DialTimeout("tcp", server, connectTimeout)
 	d := time.Now().Sub(t)
 	if d > 50*time.Millisecond {
 		blog.Debugf("[longtcp] TCP Dail to long gt50 to server(%s): %s", resolvedserver, d.String())
@@ -81,6 +84,15 @@ func (c *TCPClient) Connect(server string) error {
 
 	if err != nil {
 		blog.Errorf("[longtcp] connect to server error: [%s]", err.Error())
+		return err
+	}
+
+	// 将 net.Conn 转换为 net.TCPConn
+	var ok bool
+	c.conn, ok = conn.(*net.TCPConn)
+	if !ok {
+		err := fmt.Errorf("failed to conver net.Conn to net.TCPConn")
+		blog.Errorf("connect to server error: [%v]", err)
 		return err
 	}
 

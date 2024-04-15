@@ -144,21 +144,15 @@ func (lr *memorySlot) handleLock(ctx context.Context) {
 }
 
 func (lr *memorySlot) getSlot(pairChan chanPair) {
-	// blog.Infof("memory slot: before get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
-
 	if lr.occupiedSlots < lr.totalSlots {
 		lr.occupiedSlots += pairChan.weight
 		pairChan.result <- struct{}{}
 	} else {
 		lr.waitingList.PushBack(pairChan)
 	}
-
-	// blog.Infof("memory slot: after get slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
 }
 
 func (lr *memorySlot) putSlot(pairChan chanPair) {
-	// blog.Infof("memory slot: before put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
-
 	lr.occupiedSlots -= pairChan.weight
 	if lr.occupiedSlots < 0 {
 		lr.occupiedSlots = 0
@@ -177,6 +171,4 @@ func (lr *memorySlot) putSlot(pairChan chanPair) {
 			lr.waitingList.Remove(e)
 		}
 	}
-
-	// blog.Infof("memory slot: after put slot occpy size:%d,total size:%d,wait length:%d", lr.occupiedSlots, lr.totalSlots, lr.waitingList.Len())
 }

@@ -166,7 +166,10 @@ func (tc *taskBasicLayer) UnLockTask(taskID string) {
 	// log a warning when the lock is hold for too long.
 	now := time.Now().Local()
 	if mutex.lastHold.Add(1 * time.Second).Before(now) {
-		blog.Warnf("layer: task(%s) by owner(%s) lock hold for too long: %s", taskID, mutex.owner, now.Sub(mutex.lastHold).String())
+		blog.Warnf("layer: task(%s) by owner(%s) lock hold for too long: %s",
+			taskID,
+			mutex.owner,
+			now.Sub(mutex.lastHold).String())
 	}
 	blog.V(5).Infof("layer: unlock task(%s) by owner(%s)", taskID, mutex.owner)
 	mutex.Unlock()

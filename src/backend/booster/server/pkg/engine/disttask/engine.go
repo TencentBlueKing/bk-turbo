@@ -594,7 +594,11 @@ func (de *disttaskEngine) launchDirectP2PTask(task *distTask, tb *engine.TaskBas
 	task.Stats.CPUTotal = cpuTotal
 	task.Stats.MemTotal = memTotal
 
-	blog.Infof("direct p2p task(%s) now has workers(%d),CPU(%f),Mem(%f)", task.ID, task.Stats.WorkerCount, cpuTotal, memTotal)
+	blog.Infof("direct p2p task(%s) now has workers(%d),CPU(%f),Mem(%f)",
+		task.ID,
+		task.Stats.WorkerCount,
+		cpuTotal,
+		memTotal)
 	if err = de.updateTask(task); err != nil {
 		blog.Errorf("engine(%s) update direct p2p task(%s) failed: %v",
 			EngineName, task.ID, err)

@@ -50,7 +50,7 @@ func (r *CommonRemoteHandler) getTCPSession(
 		ip = server[:i]
 		port, _ = strconv.Atoi(server[i+1:])
 	}
-	blog.Infof("ready execute remote task to server %s (%s:%d) with long tcp",
+	blog.Infof("ready get tcp session with server %s (%s:%d) with long tcp",
 		server, ip, port)
 
 	sp := longtcp.GetGlobalSessionPool(ip, int32(port), r.ioTimeout, encodeLongTCPHandshakeReq, 48, nil)

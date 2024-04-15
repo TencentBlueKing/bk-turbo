@@ -93,6 +93,11 @@ func (m *Mgr) UnlockSlots(usage dcSDK.JobUsage, weight int32) {
 	m.resource.Unlock(usage, weight)
 }
 
+// TryLockSlots try lock a local slot
+func (m *Mgr) TryLockSlots(usage dcSDK.JobUsage, weight int32) (bool, error) {
+	return m.resource.TryLock(usage, weight)
+}
+
 // GetPumpCache get pump cache in work
 func (m *Mgr) GetPumpCache() (*analyser.FileCache, *analyser.RootCache) {
 	return m.pumpFileCache, m.pumpRootCache
@@ -138,24 +143,34 @@ func (m *Mgr) ExecuteTask(
 		return e.executeLocalTask(), nil
 	}
 
-	// 没有申请到资源(或资源已释放) || 申请到资源但都失效了
-	// if !m.work.Resource().HasAvailableWorkers() ||
-	// 	m.work.Remote().TotalSlots() <= 0 {
-	// !! 去掉申请到资源但失效的情况，因为该情况很可能是网络原因，再加资源也没有意义
-	if !m.work.Resource().HasAvailableWorkers() {
-		// check whether this task need remote worker,
-		// apply resource when need, if not in appling, apply then
-		if e.needRemoteResource() {
-			_, err := m.work.Resource().Apply(nil, false)
-			if err != nil {
-				blog.Warnf("local: execute task for work(%s) from pid(%d) failed to apply resource with err:%v",
-					m.work.ID(), req.Pid, err)
+	// 优化没有远程资源转本地的逻辑； 如果没有远程资源，则先获取本地锁，然后转本地执行
+	// 如果没有本地锁，则先等待，后面有远程资源时，则直接远程，无需全部阻塞在本地执行
+	for {
+		// 先检查是否有远程资源
+		if !m.work.Resource().HasAvailableWorkers() {
+			// check whether this task need remote worker,
+			// apply resource when need, if not in appling, apply then
+			if e.needRemoteResource() {
+				_, err := m.work.Resource().Apply(nil, false)
+				if err != nil {
+					blog.Warnf("local: execute task for work(%s) from pid(%d) failed to apply resource with err:%v",
+						m.work.ID(), req.Pid, err)
+				}
 			}
-		}
 
-		blog.Infof("local: execute task for work(%s) from pid(%d) degrade to local for no remote workers",
-			m.work.ID(), req.Pid)
-		return e.executeLocalTask(), nil
+			// 尝试本地执行
+			blog.Infof("local: execute task for work(%s) from pid(%d) degrade to try local for no remote workers",
+				m.work.ID(), req.Pid)
+			ret := e.tryExecuteLocalTask()
+			if ret != nil {
+				return ret, nil
+			}
+
+			// failed to lock local, sleep
+			time.Sleep(1 * time.Second)
+		} else {
+			break
+		}
 	}
 
 	// TODO : check whether need more resource
@@ -186,15 +201,25 @@ func (m *Mgr) ExecuteTask(
 		req.Stats.RemoteTryTimes = i + 1
 		r, err = m.work.Remote().ExecuteTask(remoteReq)
 		if err != nil {
-			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v", m.work.ID(), req.Pid, i, err)
+			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v",
+				m.work.ID(),
+				req.Pid,
+				i,
+				err)
 			req.Stats.RemoteErrorMessage = err.Error()
 			if !needRetry(req) {
 				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with error: %v",
 					m.work.ID(), req.Pid, i, err)
 				break
 			}
-			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) with error(%v),ban (%d) worker:(%s)",
-				m.work.ID(), i+1, req.Pid, err.Error(), len(remoteReq.BanWorkerList), remoteReq.BanWorkerList)
+			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) "+
+				"with error(%v),ban (%d) worker:(%s)",
+				m.work.ID(),
+				i+1,
+				req.Pid,
+				err.Error(),
+				len(remoteReq.BanWorkerList),
+				remoteReq.BanWorkerList)
 		} else {
 			break
 		}
@@ -276,7 +301,10 @@ func (m *Mgr) retryOnRemoteFail(
 		m.work.Remote().DecRemoteJobs()
 
 		if err != nil {
-			blog.Warnf("local: failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)", m.work.ID(), req.Pid, err)
+			blog.Warnf("local: failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)",
+				m.work.ID(),
+				req.Pid,
+				err)
 			return nil, err
 		}
 
@@ -284,7 +312,10 @@ func (m *Mgr) retryOnRemoteFail(
 		// 重新post环节
 		err = e.executePostTask(r.Result)
 		if err != nil {
-			blog.Warnf("local: execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v", m.work.ID(), req.Pid, err)
+			blog.Warnf("local: execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v",
+				m.work.ID(),
+				req.Pid,
+				err)
 			return nil, err
 		}
 

@@ -48,7 +48,7 @@ type WorkerConfig struct {
 
 	// p2p上报
 	P2P           bool   `json:"p2p" value:"false" usage:"enable p2p mode"`
-	P2PServer     string `json:"p2p_server" value:"" usage:"p2p server to report,for example: bkdistcc.ied.com:30112"`
+	P2PServer     string `json:"p2p_server" value:"" usage:"p2p server to report"`
 	P2PGroupLabel string `json:"p2p_group_label" value:"" usage:"p2p group label to report"`
 
 	// 资源使用配置
@@ -67,7 +67,7 @@ type WorkerConfig struct {
 
 	// 是否自动升级
 	AutoUpgrade   bool   `json:"auto_upgrade" value:"false" usage:"whether support auto upgrade"`
-	UpgradeServer string `json:"upgrade_server" value:"" usage:"upgrade server,for example: bkdistcc.ied.com:30111"`
+	UpgradeServer string `json:"upgrade_server" value:"" usage:"upgrade server"`
 
 	// slot由worker提供，而不是客户端指定
 	OfferSlot bool `json:"offer_slot" value:"true" usage:"whether support offer slot"`

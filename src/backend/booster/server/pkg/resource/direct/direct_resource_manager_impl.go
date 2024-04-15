@@ -527,7 +527,10 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 }
 
 func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, remoteip string) error {
-	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s] remote ip[%s]...", resource.Base.Cluster, resource.Base.IP, remoteip)
+	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s] remote ip[%s]...",
+		resource.Base.Cluster,
+		resource.Base.IP,
+		remoteip)
 
 	specifiedIPByUser := false
 	if v, ok := resource.Base.Labels[commonTypes.LabelKeyP2PSpecifiedIP]; ok {
@@ -539,7 +542,10 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, 
 	}
 
 	if !specifiedIPByUser && remoteip != "" && remoteip != resource.Base.IP {
-		blog.Infof("drm: ready update cluster[%s] ip[%s] with remote ip[%s]", resource.Base.Cluster, resource.Base.IP, remoteip)
+		blog.Infof("drm: ready update cluster[%s] ip[%s] with remote ip[%s]",
+			resource.Base.Cluster,
+			resource.Base.IP,
+			remoteip)
 		resource.Base.IP = remoteip
 	}
 
