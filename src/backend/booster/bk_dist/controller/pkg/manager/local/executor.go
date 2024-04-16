@@ -342,7 +342,12 @@ func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
-	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkLeaveTime)
+	gotLock := true
+	defer func() {
+		if gotLock {
+			dcSDK.StatsTimeNow(&e.stats.LocalWorkLeaveTime)
+		}
+	}()
 	e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	var locallockweight int32 = 1
@@ -365,6 +370,7 @@ func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
 		}
 	}
 	if !ok {
+		gotLock = false
 		blog.Infof("executor: not got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
 		return nil
 	}
