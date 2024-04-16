@@ -518,6 +518,7 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 		}
 
 		if len(pod.Status.ContainerStatuses) <= 0 || len(pod.Spec.Containers) <= 0 {
+			blog.Warnf("k8s-operator: found exception pod:[%+v]", pod)
 			continue
 		}
 

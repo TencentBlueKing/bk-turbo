@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -170,6 +171,12 @@ func (o *tcpManager) initP2PBaseInfo() error {
 		}
 	}
 
+	username := "unknown"
+	usr, err := user.Current()
+	if err == nil {
+		username = usr.Username
+	}
+
 	agent.Base = types.AgentBase{
 		IP:      ip,
 		Port:    int(o.conf.Port),
@@ -183,6 +190,7 @@ func (o *tcpManager) initP2PBaseInfo() error {
 			commonTypes.LabelKeySupportAbsPath:      strconv.FormatBool(o.conf.SupportAbsPath),
 			commonTypes.LabelKeyP2PSpecifiedIP:      strconv.FormatBool(specifiedIP),
 			commonTypes.LabelKeyVersion:             version.Version,
+			commonTypes.LabelKeyUser:                username,
 		},
 	}
 

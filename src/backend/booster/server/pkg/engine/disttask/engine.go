@@ -413,8 +413,13 @@ func (de *disttaskEngine) createTask(tb *engine.TaskBasic, extra []byte) error {
 
 	crmMgr := de.getCrMgr(tb.Client.QueueName)
 	if crmMgr == nil {
-		blog.Errorf("engine(%s) try creating task(%s) failed: crmMgr is null", EngineName, task.ID)
-		return errors.New("crmMgr is null")
+		if getQueueNameHeader(tb.Client.QueueName) != queueNameHeaderDirectWin {
+			blog.Errorf("engine(%s) try creating task(%s) failed: crmMgr is null", EngineName, task.ID)
+			return errors.New("crmMgr is null")
+		} else {
+			blog.Infof("engine(%s) try creating task(%s) with queue(%s) get null crmmgr",
+				EngineName, task.ID, tb.Client.QueueName)
+		}
 	}
 
 	task.InheritSetting.WorkerVersion = worker.WorkerVersion
@@ -423,9 +428,11 @@ func (de *disttaskEngine) createTask(tb *engine.TaskBasic, extra []byte) error {
 	task.InheritSetting.ExtraWorkerSetting = worker.Extra
 
 	task.Operator.AppName = task.ID
-	task.Operator.Namespace = crmMgr.GetNamespace()
+	if crmMgr != nil {
+		task.Operator.Namespace = crmMgr.GetNamespace()
+		de.setTaskIstResource(task, tb.Client.QueueName)
+	}
 	task.Operator.Image = worker.Image
-	de.setTaskIstResource(task, tb.Client.QueueName)
 	task.Operator.RequestProcessPerUnit = ev.ProcessPerUnit
 
 	if err = de.updateTask(task); err != nil {
