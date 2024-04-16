@@ -283,4 +283,5 @@ const (
 	LabelKeyP2PSpecifiedIP      = "p2p_specified_ip"
 	LabelKeySupportAbsPath      = "support_abs_path"
 	LabelKeyVersion             = "version"
+	LabelKeyUser                = "user"
 )
