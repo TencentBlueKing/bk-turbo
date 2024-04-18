@@ -243,13 +243,13 @@ func (m *Mgr) handleUnregisteredProcess(config *types.WorkUnregisterConfig) {
 	}
 
 	if !m.settings.Degraded {
-		if err := m.work.Resource().SendStats(false); err != nil {
-			blog.Errorf("basic: handle unregistered process for work(%s), send stats failed: %v",
+		if err := m.work.Resource().Release(config.Release); err != nil {
+			blog.Errorf("basic: handle unregistered process for work(%s), try to release resource failed: %v",
 				m.info.WorkID(), err)
 		}
 
-		if err := m.work.Resource().Release(config.Release); err != nil {
-			blog.Errorf("basic: handle unregistered process for work(%s), try to release resource failed: %v",
+		if err := m.work.Resource().SendStats(false); err != nil {
+			blog.Errorf("basic: handle unregistered process for work(%s), send stats failed: %v",
 				m.info.WorkID(), err)
 		}
 	}
