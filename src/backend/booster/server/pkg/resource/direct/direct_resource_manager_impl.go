@@ -1495,6 +1495,7 @@ func zeroResource(agent *oneagentResource) {
 		Zone: fmt.Sprintf("direct_%s", agent.Agent.Base.Cluster),
 	}
 	selfMetric.ResourceStatusController.UpdateCPUTotal(metricLabels, 0)
+	selfMetric.ResourceStatusController.UpdateCPUUsed(metricLabels, 0)
 	selfMetric.ResourceStatusController.UpdateMemTotal(metricLabels, 0)
 	selfMetric.ResourceStatusController.UpdateMemUsed(metricLabels, 0)
 	selfMetric.ResourceStatusController.UpdateDiskTotal(metricLabels, 0)
