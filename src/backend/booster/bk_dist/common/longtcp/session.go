@@ -31,6 +31,7 @@ var (
 	ErrorSessionPoolCleaned     = fmt.Errorf("session pool cleaned")
 	ErrorLessThanLongTCPHeadLen = fmt.Errorf("data length is less than long tcp head length")
 	ErrorLongTCPHeadLenInvalid  = fmt.Errorf("data length of long tcp head length is invalid")
+	ErrorWaitTimeout            = fmt.Errorf("wait response timeout")
 )
 
 const (
@@ -41,6 +42,9 @@ const (
 	TotalLongTCPHeadLength = 48
 
 	DefaultLongTCPTimeoutSeconds = 3600 * 24
+	MinWaitSecs                  = 300
+
+	checkWaitIntervalTime = 1 * time.Second
 )
 
 func longTCPHead2Byte(head *LongTCPHead) ([]byte, error) {
@@ -100,6 +104,10 @@ type Message struct {
 	Data         [][]byte
 	WaitResponse bool // 发送成功后，是否还需要等待对方返回结果
 	RetChan      chan *MessageResult
+
+	// 等待时间，由客户端指定;如果 MaxWaitSecs <= 0 ，则无限等待
+	WaitStart   time.Time
+	MaxWaitSecs int32
 
 	F OnSendDoneFunc
 }
@@ -292,6 +300,7 @@ func (s *Session) putWait(msg *Message) error {
 	defer s.waitMutex.Unlock()
 
 	if s.waitMap != nil {
+		msg.WaitStart = time.Now()
 		s.waitMap[msg.TCPHead.UniqID] = msg
 	} else {
 		return ErrorConnectionInvalid
@@ -344,11 +353,21 @@ func formatID(id uint64) MessageID {
 	return MessageID(data)
 }
 
-func (s *Session) encData2Message(data [][]byte, waitresponse bool, f OnSendDoneFunc) *Message {
+func (s *Session) encData2Message(
+	data [][]byte,
+	waitresponse bool,
+	waitsecs int32,
+	f OnSendDoneFunc) *Message {
 	totallen := 0
 	for _, v := range data {
 		totallen += len(v)
 	}
+
+	wait := waitsecs
+	if wait > 0 && wait < MinWaitSecs {
+		wait = MinWaitSecs
+	}
+
 	return &Message{
 		TCPHead: &LongTCPHead{
 			UniqID:  formatID(s.uniqid()),
@@ -357,6 +376,7 @@ func (s *Session) encData2Message(data [][]byte, waitresponse bool, f OnSendDone
 		Data:         data,
 		WaitResponse: waitresponse,
 		RetChan:      make(chan *MessageResult, 1),
+		MaxWaitSecs:  wait,
 		F:            f,
 	}
 }
@@ -390,7 +410,7 @@ func (s *Session) onMessageError(m *Message, err error) {
 
 // 取任务并依次发送
 func (s *Session) sendReal() {
-	blog.Infof("[longtcp] session[%s] real send in...", s.Desc())
+	blog.Debugf("[longtcp] session[%s] real send in...", s.Desc())
 	msgs := s.copyMessages()
 
 	for _, m := range msgs {
@@ -430,7 +450,7 @@ func (s *Session) sendReal() {
 			continue
 		}
 
-		blog.Infof("[longtcp] session[%s] real sent header with ID [%s] ", s.Desc(), m.Desc())
+		blog.Debugf("[longtcp] session[%s] real sent header with ID [%s] ", s.Desc(), m.Desc())
 
 		// send real data
 		sendfailed := false
@@ -459,7 +479,7 @@ func (s *Session) sendReal() {
 			m.F()
 		}
 
-		blog.Infof("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
+		blog.Debugf("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
 
 		if !m.WaitResponse {
 			m.RetChan <- &MessageResult{
@@ -489,7 +509,7 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 			return
 		}
 
-		blog.Infof("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
+		blog.Debugf("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
 
 		head, err := byte2LongTCPHead(data)
 		if err != nil {
@@ -572,7 +592,11 @@ func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 
 // session 内部将data封装为Message发送，并通过chan接收发送结果，Message的id需要内部生成
 // 如果 waitresponse为true，则需要等待返回的结果
-func (s *Session) Send(data [][]byte, waitresponse bool, f OnSendDoneFunc) *MessageResult {
+func (s *Session) Send(
+	data [][]byte,
+	waitresponse bool,
+	waitsecs int32,
+	f OnSendDoneFunc) *MessageResult {
 	if !s.valid {
 		return &MessageResult{
 			Err:  ErrorConnectionInvalid,
@@ -584,7 +608,7 @@ func (s *Session) Send(data [][]byte, waitresponse bool, f OnSendDoneFunc) *Mess
 	defer atomic.AddInt64(&s.requestNum, -1)
 
 	// data 转到 message
-	msg := s.encData2Message(data, waitresponse, f)
+	msg := s.encData2Message(data, waitresponse, waitsecs, f)
 
 	ret := s.notifyAndWait(msg)
 
@@ -661,6 +685,10 @@ func (s *Session) serverStart() {
 
 func (s *Session) check(wg *sync.WaitGroup) {
 	wg.Done()
+
+	tick := time.NewTicker(checkWaitIntervalTime)
+	defer tick.Stop()
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -671,6 +699,8 @@ func (s *Session) check(wg *sync.WaitGroup) {
 			blog.Warnf("[longtcp] session %s found error:%v", s.Desc(), err)
 			s.Clean(err)
 			return
+		case <-tick.C:
+			s.checkWaitTimeout()
 		}
 	}
 }
@@ -711,6 +741,27 @@ func (s *Session) Clean(err error) {
 
 	if s.client != nil {
 		s.client.Close()
+	}
+}
+
+func (s *Session) checkWaitTimeout() {
+	s.waitMutex.Lock()
+	defer s.waitMutex.Unlock()
+
+	for _, m := range s.waitMap {
+		if m.MaxWaitSecs > 0 &&
+			m.WaitStart.Add(time.Duration(m.MaxWaitSecs)*time.Second).Before(time.Now()) {
+			blog.Infof("[longtcp] session %s found message with id:[%v] timeout with %d seconds",
+				s.Desc(),
+				m.TCPHead.UniqID,
+				m.MaxWaitSecs)
+			delete(s.waitMap, m.TCPHead.UniqID)
+
+			m.RetChan <- &MessageResult{
+				Err:  ErrorWaitTimeout,
+				Data: nil,
+			}
+		}
 	}
 }
 

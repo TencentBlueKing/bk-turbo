@@ -227,8 +227,20 @@ func (m *Mgr) ExecuteTask(
 	m.work.Basic().Info().DecPrepared()
 	m.work.Remote().DecRemoteJobs()
 	if err != nil {
+		if err == types.ErrSendFileFailed {
+			blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d)"+
+				" with send file error, retryOnRemoteFail now",
+				m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
+
+			lr, err := m.retryOnRemoteFail(req, globalWork, e)
+			if err == nil && lr != nil {
+				return lr, err
+			}
+		}
+
 		blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d), turn it local",
 			m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
+
 		return e.executeLocalTask(), nil
 	}
 
