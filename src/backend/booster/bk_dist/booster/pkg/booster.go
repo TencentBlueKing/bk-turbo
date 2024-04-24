@@ -341,6 +341,11 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorForceLocalKeys] = strings.Join(b.config.Works.ForceLocalList, env.CommonBKEnvSepKey)
 	}
 
+	ccEnsureOwnerVal := env.GetEnv(env.KeyCCEnsureFileOwnekey)
+	if ccEnsureOwnerVal != "" {
+		requiredEnv[env.KeyCCEnsureFileOwnekey] = ccEnsureOwnerVal
+	}
+
 	if b.config.Works.WriteMemroy {
 		requiredEnv[env.KeyExecutorWriteMemory] = envValueTrue
 	}

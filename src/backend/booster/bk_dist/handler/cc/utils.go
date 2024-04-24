@@ -912,7 +912,12 @@ func getOutputFile(args []string, sandbox *dcSyscall.Sandbox) []string {
 	seenFprofileDir := false
 	var inputFile string
 	var outputFile string
-
+	// transfer input args if an arg is a file
+	args, err := expandOptions(sandbox, args)
+	if err != nil {
+		blog.Warnf("cc: [%v] getOutputFile expand options: %v", args, err)
+		return nil
+	}
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 
