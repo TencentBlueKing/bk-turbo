@@ -37,7 +37,7 @@ class TbsDaySummaryDao @Autowired constructor(
         // 过滤方案id
         filterPlanIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("plan_id").nin(filterPlanIdNin) }
         // 过滤项目id
-        filterProjectIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("project_id").nin(filterPlanIdNin) }
+        filterProjectIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("project_id").nin(filterProjectIdNin) }
 
         val match = Aggregation.match(criteria)
         val sort = Aggregation.sort(Sort.Direction.DESC, "day")
