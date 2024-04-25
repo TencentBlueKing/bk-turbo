@@ -110,7 +110,7 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true, func() error {
+	ret := session.Send(reqdata, true, int32(r.ioTimeout), func() error {
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendEndTime)
 		return nil
 	})
@@ -294,7 +294,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	}
 
 	var dsend time.Duration
-	ret := session.Send(reqdata, true, func() error {
+	ret := session.Send(reqdata, true, int32(r.ioTimeout), func() error {
 		t2 = time.Now()
 		dsend = t2.Sub(t1)
 		t1 = t2
@@ -373,7 +373,7 @@ func (r *CommonRemoteHandler) ExecuteCheckCacheLongTCP(
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true, func() error {
+	ret := session.Send(reqdata, true, int32(r.ioTimeout), func() error {
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
 		return nil
 	})
@@ -424,7 +424,7 @@ func (r *CommonRemoteHandler) ExecuteSyncTimeLongTCP(server string) (int64, erro
 	for _, m := range messages {
 		reqdata = append(reqdata, m.Data)
 	}
-	ret := session.Send(reqdata, true, nil)
+	ret := session.Send(reqdata, true, int32(r.ioTimeout), nil)
 	if ret.Err != nil {
 		blog.Warnf("error: %v", ret.Err)
 		return 0, ret.Err
