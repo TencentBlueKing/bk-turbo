@@ -2,7 +2,7 @@ package com.tencent.devops.turbo.config
 
 import com.tencent.devops.common.util.constants.EXCHANGE_PROJECT_ENABLE_FANOUT
 import com.tencent.devops.common.util.constants.QUEUE_PROJECT_STATUS_UPDATE
-import com.tencent.devops.common.web.mq.EXTEND_CONNECTION_FACTORY_NAME
+import com.tencent.devops.common.web.mq.CORE_CONNECTION_FACTORY_NAME
 import com.tencent.devops.turbo.component.ProjectStatusUpdateConsumer
 import org.springframework.amqp.core.Binding
 import org.springframework.amqp.core.BindingBuilder
@@ -40,7 +40,7 @@ class ProjectUpdateMqConfig {
 
     @Bean
     fun messageListenerContainer(
-        @Qualifier(EXTEND_CONNECTION_FACTORY_NAME)
+        @Qualifier(CORE_CONNECTION_FACTORY_NAME)
         connectionFactory: ConnectionFactory,
         projectStatusUpdateQueue: Queue,
         projectStatusUpdateConsumer: ProjectStatusUpdateConsumer,
