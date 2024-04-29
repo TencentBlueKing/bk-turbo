@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component
 @Component
 class ProjectStatusUpdateConsumer @Autowired constructor(
     private val turboPlanService: TurboPlanService
-
 ) {
 
     companion object {
