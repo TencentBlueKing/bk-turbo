@@ -54,6 +54,7 @@ const (
 	KeyExecutorPumpSearchLinkResult    = "PUMP_SEARCH_LINK_RESULT"
 	KeyExecutorPumpLstatByDir          = "PUMP_LSTAT_BY_DIR"
 	KeyExecutorForceLocalKeys          = "FORCE_LOCAL_KEYS"
+	KeyExecutorCCEnsureFileOwnerkey    = "CC_ENSURE_OWNER"
 	KeyExecutorEnvProfile              = "ENV_PROFILE"
 	KeyExecutorWorkerSideCache         = "WORKER_SIDE_CACHE"
 	KeyExecutorLocalRecord             = "LOCAL_RECORD"
