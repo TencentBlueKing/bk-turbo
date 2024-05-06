@@ -107,6 +107,9 @@ type TaskCL struct {
 	sourcedependfile string
 	pumpHeadFile     string
 	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
+	// 在rsp中/I后面的参数，需要将这些目录全部发送到远端
+	// 有特殊场景：编译不需要该路径下的文件，但需要该路径作为跳板，去查找其它相对路径下的头文件（或其它依赖文件）
+	includePaths []string
 
 	// forcedepend 是我们主动导出依赖文件，showinclude 是编译命令已经指定了导出依赖文件
 	forcedepend          bool
@@ -373,7 +376,8 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
 	if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
-		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
+		// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
+		return commonUtil.GetFileInfo(uniqlines, true, false, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
 	} else {
 		includes := []*dcFile.Info{}
 		for _, l := range uniqlines {
@@ -420,6 +424,7 @@ type sourceDependencies struct {
 
 func formatFilePath(f string) string {
 	f = strings.Replace(f, "/", "\\", -1)
+	f = strings.Replace(f, "\\\\", "\\", -1)
 
 	// 去掉路径中的..
 	if strings.Contains(f, "..") {
@@ -503,6 +508,17 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	if len(cl.includeRspFiles) > 0 {
 		for _, l := range cl.includeRspFiles {
 			blog.Infof("cl: ready add rsp file: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, formatFilePath(l))
+		}
+	}
+
+	// copy includePaths
+	if len(cl.includePaths) > 0 {
+		for _, l := range cl.includePaths {
+			blog.Infof("cl: ready add include path: %s", l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -1089,6 +1105,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 	cl.outputFile = scannedData.outputFile
 	cl.rewriteCrossArgs = cl.scannedArgs
 	cl.includeRspFiles = scannedData.includeRspFiles
+	cl.includePaths = scannedData.includePaths
 
 	// handle the pch options
 	finalArgs := cl.scanPchFile(cl.scannedArgs)
