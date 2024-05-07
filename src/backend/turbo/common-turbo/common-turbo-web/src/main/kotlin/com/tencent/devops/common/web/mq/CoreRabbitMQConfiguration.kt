@@ -33,7 +33,7 @@ class CoreRabbitMQConfiguration {
         val connectionFactory = CachingConnectionFactory()
         connectionFactory.username = userName
         connectionFactory.setPassword(passWord)
-        connectionFactory.virtualHost = vHost
+        connectionFactory.virtualHost = "$vHost-k8s"
         connectionFactory.setAddresses(address)
         return connectionFactory
     }
