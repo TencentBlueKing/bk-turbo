@@ -47,9 +47,9 @@ class ProjectUpdateMqConfig {
         messageConverter: Jackson2JsonMessageConverter
     ): SimpleMessageListenerContainer {
         val container = SimpleMessageListenerContainer(connectionFactory)
-        container.setPrefetchCount(2)
-        container.setConcurrentConsumers(5)
-        container.setMaxConcurrentConsumers(10)
+        container.setPrefetchCount(1)
+        container.setConcurrentConsumers(1)
+        container.setMaxConcurrentConsumers(1)
         container.setQueueNames(projectStatusUpdateQueue.name)
         val adapter = MessageListenerAdapter(projectStatusUpdateConsumer, projectStatusUpdateConsumer::consumer.name)
         adapter.setMessageConverter(messageConverter)
