@@ -54,7 +54,7 @@ class ProjectResourcesService @Autowired constructor(
         )
         logger.info("summaryEntityList size: ${summaryEntityList.size}")
 
-        val resultList = summaryEntityList.map {
+        val resultList = summaryEntityList.filter { !(it.projectId.isNullOrBlank()) }.map {
             with(it) {
                 ProjectResourceUsageVO(
                     projectId = projectId!!,

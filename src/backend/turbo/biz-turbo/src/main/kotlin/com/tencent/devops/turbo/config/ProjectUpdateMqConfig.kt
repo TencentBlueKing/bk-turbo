@@ -22,9 +22,7 @@ class ProjectUpdateMqConfig {
 
     @Bean
     fun projectStatusUpdateExchange(): FanoutExchange {
-        val fanoutExchange = FanoutExchange(EXCHANGE_PROJECT_ENABLE_FANOUT, true, false)
-        fanoutExchange.isDelayed = true
-        return fanoutExchange
+        return FanoutExchange(EXCHANGE_PROJECT_ENABLE_FANOUT, true, false)
     }
 
     @Bean
