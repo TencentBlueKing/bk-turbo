@@ -1,5 +1,7 @@
 package com.tencent.devops.turbo.component
 
+import com.fasterxml.jackson.core.type.TypeReference
+import com.tencent.devops.common.api.util.JsonUtil
 import com.tencent.devops.turbo.pojo.ProjectEnableStatusBroadCastEvent
 import com.tencent.devops.turbo.service.TurboPlanService
 import org.slf4j.LoggerFactory
@@ -18,8 +20,10 @@ class ProjectStatusUpdateConsumer @Autowired constructor(
         private val logger = LoggerFactory.getLogger(this::class.java)
     }
 
-    fun consumer(event: ProjectEnableStatusBroadCastEvent) {
+    fun consumer(eventJson: String) {
+        logger.info("ProjectStatusUpdateConsumer received: $eventJson")
         try {
+            val event = JsonUtil.to(eventJson, object : TypeReference<ProjectEnableStatusBroadCastEvent>() {})
             with(event) {
                 turboPlanService.updatePlanStatusByBkProjectStatus(
                     userId = userId,
