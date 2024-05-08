@@ -65,6 +65,8 @@ class ProjectResourcesService @Autowired constructor(
                     productId = productId,
                     bgName = bgName,
                     bgId = bgId,
+                    businessLineName = businessLineName,
+                    businessLineId = businessLineId,
                     deptName = deptName,
                     deptId = deptId,
                     centerName = centerName,
