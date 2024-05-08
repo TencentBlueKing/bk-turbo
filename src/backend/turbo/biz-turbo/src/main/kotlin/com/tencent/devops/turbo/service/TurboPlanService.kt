@@ -12,7 +12,6 @@ import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
 import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.project.api.service.ServiceProjectResource
-import com.tencent.devops.turbo.component.ProjectStatusUpdateConsumer
 import com.tencent.devops.turbo.dao.mongotemplate.TurboPlanDao
 import com.tencent.devops.turbo.dao.repository.TurboPlanRepository
 import com.tencent.devops.turbo.dto.DistccRequestBody
@@ -673,6 +672,9 @@ class TurboPlanService @Autowired constructor(
             openStatus = !enabled
         )
         logger.info("Turbo plans to be updated count: ${turboPlanEntityList.size}")
+        if (turboPlanEntityList.isEmpty()) {
+            return
+        }
 
         val result = turboPlanDao.batchUpdateOpenStatus(turboPlanList = turboPlanEntityList, openStatus = enabled)
         if (result.wasAcknowledged()) {
