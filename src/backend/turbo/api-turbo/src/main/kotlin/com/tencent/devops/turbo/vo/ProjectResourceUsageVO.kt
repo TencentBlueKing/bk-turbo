@@ -27,6 +27,12 @@ data class ProjectResourceUsageVO(
     @ApiModelProperty("BG id")
     var bgId: Int?,
 
+    @ApiModelProperty("业务线名称")
+    var businessLineName: String?,
+
+    @ApiModelProperty("业务线id")
+    var businessLineId: Int?,
+
     @ApiModelProperty("部门名称")
     var deptName: String?,
 
