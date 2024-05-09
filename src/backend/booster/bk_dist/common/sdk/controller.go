@@ -138,12 +138,14 @@ type ControllerConfig struct {
 	ResIdleSecsForFree  int
 	SendCork            bool
 	SendFileMemoryLimit int64
+	SendMemoryCache     bool
 	NetErrorLimit       int
 	RemoteRetryTimes    int
 	EnableLink          bool
 	EnableLib           bool
 	LongTCP             bool
 	UseDefaultWorker    bool
+	WorkerOfferSlot     bool
 }
 
 // Target return the server ip and port of controller

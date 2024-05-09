@@ -25,8 +25,10 @@ import (
 const (
 	// TCPBUFFERLEN = 10240
 
-	DEFAULTTIMEOUTSECS        = 300
-	DEFAULTREADALLTIMEOUTSECS = 600
+	// DEFAULTTIMEOUTSECS        = 300
+	// DEFAULTREADALLTIMEOUTSECS = 600
+
+	connectTimeout = 5 * time.Second
 )
 
 // TCPClient wrapper net.TCPConn
@@ -38,7 +40,7 @@ type TCPClient struct {
 // NewTCPClient return new TCPClient
 func NewTCPClient(timeout int) *TCPClient {
 	if timeout <= 0 {
-		timeout = DEFAULTTIMEOUTSECS
+		timeout = DefaultLongTCPTimeoutSeconds
 	}
 
 	return &TCPClient{
@@ -56,7 +58,7 @@ func NewTCPClientWithConn(conn *net.TCPConn) *TCPClient {
 
 	return &TCPClient{
 		conn:    conn,
-		timeout: DEFAULTTIMEOUTSECS,
+		timeout: DefaultLongTCPTimeoutSeconds,
 	}
 }
 
@@ -70,7 +72,8 @@ func (c *TCPClient) Connect(server string) error {
 	}
 
 	t := time.Now().Local()
-	c.conn, err = net.DialTCP("tcp", nil, resolvedserver)
+	// c.conn, err = net.DialTCP("tcp", nil, resolvedserver)
+	conn, err := net.DialTimeout("tcp", server, connectTimeout)
 	d := time.Now().Sub(t)
 	if d > 50*time.Millisecond {
 		blog.Debugf("[longtcp] TCP Dail to long gt50 to server(%s): %s", resolvedserver, d.String())
@@ -81,6 +84,15 @@ func (c *TCPClient) Connect(server string) error {
 
 	if err != nil {
 		blog.Errorf("[longtcp] connect to server error: [%s]", err.Error())
+		return err
+	}
+
+	// 将 net.Conn 转换为 net.TCPConn
+	var ok bool
+	c.conn, ok = conn.(*net.TCPConn)
+	if !ok {
+		err := fmt.Errorf("failed to conver net.Conn to net.TCPConn")
+		blog.Errorf("connect to server error: [%v]", err)
 		return err
 	}
 
@@ -130,10 +142,10 @@ func (c *TCPClient) WriteData(data []byte) error {
 		return fmt.Errorf("input data is nil")
 	}
 
-	if err := c.setIOTimeout(c.timeout); err != nil {
-		blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", c.ConnDesc(), err.Error())
-		return err
-	}
+	// if err := c.setIOTimeout(c.timeout); err != nil {
+	// 	blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", c.ConnDesc(), err.Error())
+	// 	return err
+	// }
 
 	writelen := 0
 	expectlen := len(data)

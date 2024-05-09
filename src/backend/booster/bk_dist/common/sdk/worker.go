@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -31,15 +32,29 @@ type RemoteWorkerHandler interface {
 	ExecuteSyncTime(server string) (int64, error)
 	ExecuteTask(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
 	ExecuteTaskWithoutSaveFile(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
-	ExecuteSendFile(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox, mgr LockMgr) (*BKSendFileResult, error)
+	ExecuteSendFile(
+		server *dcProtocol.Host,
+		req *BKDistFileSender,
+		sandbox *syscall.Sandbox,
+		mgr LockMgr) (*BKSendFileResult, error)
 	ExecuteCheckCache(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) ([]bool, error)
 
 	// with long tcp connection
 	ExecuteTaskWithoutSaveFileLongTCP(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
 	ExecuteTaskLongTCP(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
-	ExecuteSendFileLongTCP(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox, mgr LockMgr) (*BKSendFileResult, error)
+	ExecuteSendFileLongTCP(
+		server *dcProtocol.Host,
+		req *BKDistFileSender,
+		sandbox *syscall.Sandbox,
+		mgr LockMgr) (*BKSendFileResult, error)
 	ExecuteCheckCacheLongTCP(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) ([]bool, error)
 	ExecuteSyncTimeLongTCP(server string) (int64, error)
+
+	ExecuteQuerySlot(
+		server *dcProtocol.Host,
+		req *BKQuerySlot,
+		c chan *BKQuerySlotResult,
+		timeout int) (*net.TCPConn, error)
 }
 
 // FileDescPriority from 0 ~ 100, from high to low
@@ -48,6 +63,12 @@ type FileDescPriority int
 const (
 	MinFileDescPriority FileDescPriority = 100
 	MaxFileDescPriority FileDescPriority = 0
+
+	// 优先级先只定3个
+	PriorityLow     = 0
+	PriorityMiddle  = 1
+	PriorityHight   = 2
+	PriorityUnKnown = 99
 )
 
 // FileDesc desc file base info
@@ -132,4 +153,25 @@ type LocalTaskResult struct {
 	Stdout   []byte `json:"stdout"`
 	Stderr   []byte `json:"stderr"`
 	Message  string `json:"message"`
+}
+
+// BKQuerySlot
+type BKQuerySlot struct {
+	Priority         int32  `json:"priority"`
+	WaitTotalTaskNum int32  `json:"wait_total_task_num"`
+	TaskType         string `json:"task_type"`
+}
+
+// BKQuerySlotResult
+type BKQuerySlotResult struct {
+	Host             *dcProtocol.Host `json:"host"`
+	Priority         int32            `json:"priority"`
+	AvailableSlotNum int32            `json:"available_slot_num"`
+	Refused          int32            `json:"refused"`
+	Message          string           `json:"message"`
+}
+
+// BKSlotRspAck
+type BKSlotRspAck struct {
+	Consumeslotnum int32 `json:"consume_slot_num"`
 }

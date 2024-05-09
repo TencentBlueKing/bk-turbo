@@ -12,6 +12,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg"
@@ -26,6 +27,15 @@ func main() {
 	}
 
 	c.Parse()
+
+	if !filepath.IsAbs(c.LogConfig.LogDir) {
+		newabs, err := filepath.Abs(c.LogConfig.LogDir)
+		if err == nil {
+			c.LogConfig.LogDir = newabs
+		}
+	}
+
+	fmt.Printf("ready init log with dir:%s\n", c.LogConfig.LogDir)
 	blog.InitLogs(c.LogConfig)
 	defer blog.CloseLogs()
 

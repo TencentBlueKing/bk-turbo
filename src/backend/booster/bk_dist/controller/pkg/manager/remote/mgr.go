@@ -13,7 +13,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
+	workerType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -45,11 +48,22 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 	blog.Infof("remote: new remote mgr with corkSize:%d corkMaxSize:%d largeFileSize:%d",
 		corkSize, corkMaxSize, largeFileSize)
 
+	var remoteSlotMgr RemoteSlotMgr
+	if work.Config().WorkerOfferSlot {
+		remoteSlotMgr = newWorkerOfferResource(nil)
+	} else {
+		remoteSlotMgr = newResource(nil)
+	}
+
 	return &Mgr{
-		ctx:                   ctx,
-		work:                  work,
-		resource:              newResource(nil),
-		remoteWorker:          client.NewCommonRemoteWorkerWithSlot(ctx, work.Config().SendFileMemoryLimit),
+		ctx:      ctx,
+		work:     work,
+		resource: remoteSlotMgr,
+		remoteWorker: client.NewCommonRemoteWorkerWithSlot(
+			ctx,
+			work.Config().SendFileMemoryLimit,
+			work.Config().SendMemoryCache,
+		),
 		checkSendFileTick:     100 * time.Millisecond,
 		fileSendMap:           make(map[string]*fileSendMap),
 		fileCollectionSendMap: make(map[string]*[]*types.FileCollectionInfo),
@@ -75,8 +89,9 @@ const (
 type Mgr struct {
 	ctx context.Context
 
-	work         *types.Work
-	resource     *resource
+	work *types.Work
+	// resource     *resource
+	resource     RemoteSlotMgr
 	remoteWorker dcSDK.RemoteWorker
 
 	// memSlot *memorySlot
@@ -253,7 +268,7 @@ func (m *Mgr) Init() {
 
 	// settings := m.work.Basic().Settings()
 	// m.resource = newResource(m.syncHostTimeNoWait(m.work.Resource().GetHosts()), settings.UsageLimit)
-	m.resource = newResource(m.syncHostTimeNoWait(m.work.Resource().GetHosts()))
+	// m.resource = newResource(m.syncHostTimeNoWait(m.work.Resource().GetHosts()))
 
 	// if m.initCancel != nil {
 	// 	m.initCancel()
@@ -286,6 +301,8 @@ func (m *Mgr) Start() {
 
 func (m *Mgr) callback4ResChanged() error {
 	blog.Infof("remote: resource changed call back for work:%s", m.work.ID())
+
+	// TODO : deal with p2p resource
 
 	hl := m.work.Resource().GetHosts()
 	m.resource.Reset(hl)
@@ -391,7 +408,7 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 
 				if needfree {
 					// disable all workers and release
-					m.resource.disableAllWorker()
+					m.resource.DisableAllWorker()
 					// clean file cache
 					m.cleanFileCache()
 					// notify resource release
@@ -423,7 +440,7 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 
 		case <-ticker.C:
 			handler := m.remoteWorker.Handler(0, nil, nil, nil)
-			for _, w := range m.resource.getDeadWorkers() {
+			for _, w := range m.resource.GetDeadWorkers() {
 				go func(w *worker) {
 					// do not use long tcp here, it's only check
 					_, err := handler.ExecuteSyncTime(w.host.Server)
@@ -431,7 +448,7 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 						blog.Debugf("remote: try to sync time for host(%s) failed: %v", w.host.Server, err)
 						return
 					}
-					m.resource.recoverDeadWorker(w)
+					m.resource.RecoverDeadWorker(w)
 				}(w)
 
 			}
@@ -491,7 +508,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 			"ensure tool chain failed: %v, going to disable host(%s)",
 			m.work.ID(), req.Pid, req.Server.Server, err, req.Server.Server)
 
-		m.resource.disableWorker(req.Server)
+		m.resource.DisableWorker(req.Server)
 		return nil, err
 	}
 
@@ -630,7 +647,7 @@ func (m *Mgr) ensureFiles(
 		len(fileDetails), m.work.ID(), pid, sandbox.Dir, fileDetails)
 	rules := settings.FilterRules
 
-	// TODO : pump模式下，一次编译依赖的可能有上千个文件，现在的流程会随机的添加到cork发送队列
+	// pump模式下，一次编译依赖的可能有上千个文件，现在的流程会随机的添加到cork发送队列
 	// 需要保证一次编译的依赖同时插入到cork发送队列，这样可以尽快的启动远程编译，避免远程编译等待太久
 	var err error
 	wg := make(chan error, len(fileDetails)+1)
@@ -697,7 +714,7 @@ func (m *Mgr) ensureFiles(
 					}
 				}(wg, s, sender)
 			} else {
-				// TODO : for send cork
+				// for send cork
 				cf := &corkFile{
 					handler:    handler,
 					host:       s,
@@ -731,7 +748,7 @@ func (m *Mgr) ensureFiles(
 					}
 				}(s, sender)
 			} else {
-				// TODO : for send cork
+				// for send cork
 				cf := &corkFile{
 					handler:    handler,
 					host:       s,
@@ -1146,6 +1163,7 @@ func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.Fi
 }
 
 func (m *Mgr) sendToolchain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest) error {
+	// TODO : update all file path for p2p
 	fileCollections := m.getToolChainFromExecuteRequest(req)
 	if fileCollections != nil && len(fileCollections) > 0 {
 		err := m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections)
@@ -1177,7 +1195,11 @@ func (m *Mgr) sendToolchain(handler dcSDK.RemoteWorkerHandler, req *types.Remote
 			finished, _ = m.isToolChainFinished(req, req.Server.Server)
 		}
 
+		// TODO : insert exe path as input with p2p path, not tool chain path
 		_ = m.updateToolChainPath(req)
+
+		// TODO : update result abs path to relative if need
+		_ = m.updateResultPath(req)
 	}
 
 	return nil
@@ -1270,10 +1292,12 @@ func (m *Mgr) ensureOneFileCollection(
 	blog.Infof("remote: try to ensure one file collection(%s) timestamp(%d) filenum(%d) cache-hit(%d) "+
 		"for work(%s) to server(%s), going to send this collection",
 		fc.UniqID, fc.Timestamp, len(needSentFiles), hit, m.work.ID(), host.Server)
-	req := &dcSDK.BKDistFileSender{Files: needSentFiles}
-	if req.Messages, err = client.EncodeSendFileReq(req, sandbox); err != nil {
-		return err
-	}
+
+	// ！！ 这个地方不需要了，需要注释掉，影响性能
+	// req := &dcSDK.BKDistFileSender{Files: needSentFiles}
+	// if req.Messages, err = client.EncodeSendFileReq(req, sandbox); err != nil {
+	// 	return err
+	// }
 
 	// // 同步发送文件
 	// result, err := handler.ExecuteSendFile(host, req, sandbox, m.work.LockMgr())
@@ -1553,14 +1577,28 @@ func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest
 	for _, c := range req.Req.Commands {
 		blog.Debugf("remote: ready get toolchain with key:[%s]", c.ExeToolChainKey)
 		if c.ExeToolChainKey != "" {
-			toolchainfiles, timestamp, err := m.work.Basic().GetToolChainFiles(c.ExeToolChainKey)
-			if err == nil && len(toolchainfiles) > 0 {
-				fd = append(fd, &types.FileCollectionInfo{
-					UniqID:     c.ExeToolChainKey,
-					Files:      toolchainfiles,
-					SendStatus: types.FileSending,
-					Timestamp:  timestamp,
-				})
+			if !m.work.Resource().SupportAbsPath() {
+				blog.Infof("remote: ready get relative toolchain files")
+				toolchainfiles, timestamp, err := m.work.Basic().GetToolChainRelativeFiles(c.ExeToolChainKey)
+				if err == nil && len(toolchainfiles) > 0 {
+					fd = append(fd, &types.FileCollectionInfo{
+						UniqID:     c.ExeToolChainKey,
+						Files:      toolchainfiles,
+						SendStatus: types.FileSending,
+						Timestamp:  timestamp,
+					})
+				}
+			} else {
+				blog.Infof("remote: ready get normal toolchain files")
+				toolchainfiles, timestamp, err := m.work.Basic().GetToolChainFiles(c.ExeToolChainKey)
+				if err == nil && len(toolchainfiles) > 0 {
+					fd = append(fd, &types.FileCollectionInfo{
+						UniqID:     c.ExeToolChainKey,
+						Files:      toolchainfiles,
+						SendStatus: types.FileSending,
+						Timestamp:  timestamp,
+					})
+				}
 			}
 		}
 	}
@@ -1609,7 +1647,13 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 	for i, c := range req.Req.Commands {
 		if c.ExeToolChainKey != "" {
-			remotepath, err := m.work.Basic().GetToolChainRemotePath(c.ExeToolChainKey)
+			remotepath := ""
+			var err error
+			if !m.work.Resource().SupportAbsPath() {
+				remotepath, err = m.work.Basic().GetToolChainRelativeRemotePath(c.ExeToolChainKey)
+			} else {
+				remotepath, err = m.work.Basic().GetToolChainRemotePath(c.ExeToolChainKey)
+			}
 			if err != nil {
 				return fmt.Errorf("not found remote path for toolchain %s", c.ExeToolChainKey)
 			}
@@ -1625,6 +1669,30 @@ func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 			})
 			blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
 				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
+		}
+	}
+	return nil
+}
+
+// 如果worker不支持绝对路径，则需要将结果文件改成相对路径
+// 即通过当前的绝对路径，得到一个相对路径，将绝对路径和相对同时传给远端
+// 远端用相对路径执行命令，返回时指定为绝对路径
+// 比如 绝对路径为： c:\path\1.result 则改为:  c:\path\1.result<!|!>.\1.result
+// 其中 <!|!> 为连接符号， 同时将命令中的结果文件对应的参数替换为相对路径
+func (m *Mgr) updateResultPath(req *types.RemoteTaskExecuteRequest) error {
+	if !m.work.Resource().SupportAbsPath() {
+		for i := range req.Req.Commands {
+			for j, v := range req.Req.Commands[i].ResultFiles {
+				if filepath.IsAbs(v) {
+					relative := filepath.Join(".", filepath.Base(v))
+					req.Req.Commands[i].ResultFiles[j] = v + workerType.FileConnectFlag + relative
+
+					for k, p := range req.Req.Commands[i].Params {
+						// 将参数中涉及到结果文件的本地绝对路径替换为远程的相对路径
+						req.Req.Commands[i].Params[k] = strings.Replace(p, v, relative, 1)
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -1706,6 +1774,10 @@ func (m *Mgr) waitCorkFileResult(cf *corkFile) (int32, error) {
 func (m *Mgr) getCorkFiles(sendanyway bool) []*[]*corkFile {
 	m.corkMutex.Lock()
 	defer m.corkMutex.Unlock()
+
+	if len(m.corkFiles) == 0 {
+		return nil
+	}
 
 	result := make([]*[]*corkFile, 0)
 	for _, v := range m.corkFiles {
@@ -1872,13 +1944,13 @@ func (m *Mgr) sendFilesWithCorkSameHost(files []*corkFile) {
 }
 
 func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
-	for _, w := range m.resource.getWorkers() {
+	for _, w := range m.resource.GetWorkers() {
 		if !w.host.Equal(req.Server) {
 			continue
 		}
-		m.resource.countWorkerError(w)
-		if m.resource.isWorkerDead(w, m.conf.NetErrorLimit) {
-			m.resource.workerDead(w)
+		m.resource.CountWorkerError(w)
+		if m.resource.IsWorkerDead(w, m.conf.NetErrorLimit) {
+			m.resource.WorkerDead(w)
 			blog.Errorf("remote: server(%s) in work(%s) has the %dth continuous net errors:(%v), "+
 				"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
 		}

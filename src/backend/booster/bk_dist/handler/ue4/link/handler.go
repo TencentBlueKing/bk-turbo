@@ -12,6 +12,7 @@ package link
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -121,7 +122,7 @@ func (l *TaskLink) NeedRemoteResource(command []string) bool {
 
 // RemoteRetryTimes will return the remote retry times
 func (l *TaskLink) RemoteRetryTimes() int {
-	return 0
+	return 1
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
@@ -163,8 +164,23 @@ func (l *TaskLink) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (l *TaskLink) workerSupportAbsPath() bool {
+	v := l.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
 func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("link: start pre execute for: %v", command)
+
+	if !l.workerSupportAbsPath() {
+		blog.Infof("link: remote worker do not support absolute path")
+		return nil, fmt.Errorf("remote worker do not support absolute path")
+	}
 
 	l.originArgs = command
 	responseFile, args, err := ensureCompiler(command)
@@ -237,7 +253,7 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
 			if !existed {
 				err := fmt.Errorf("input tool file %s not existed", v)
-				blog.Errorf("%v", err)
+				blog.Infof("%v", err)
 				// return nil, err
 				continue
 			}

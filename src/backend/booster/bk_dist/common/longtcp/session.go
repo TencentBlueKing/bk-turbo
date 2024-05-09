@@ -31,6 +31,7 @@ var (
 	ErrorSessionPoolCleaned     = fmt.Errorf("session pool cleaned")
 	ErrorLessThanLongTCPHeadLen = fmt.Errorf("data length is less than long tcp head length")
 	ErrorLongTCPHeadLenInvalid  = fmt.Errorf("data length of long tcp head length is invalid")
+	ErrorWaitTimeout            = fmt.Errorf("wait response timeout")
 )
 
 const (
@@ -39,6 +40,11 @@ const (
 	// 二进制中记录数据长度的字段的长度
 	DataLengthInBinary     = 16
 	TotalLongTCPHeadLength = 48
+
+	DefaultLongTCPTimeoutSeconds = 3600 * 24
+	MinWaitSecs                  = 300
+
+	checkWaitIntervalTime = 1 * time.Second
 )
 
 func longTCPHead2Byte(head *LongTCPHead) ([]byte, error) {
@@ -99,6 +105,10 @@ type Message struct {
 	WaitResponse bool // 发送成功后，是否还需要等待对方返回结果
 	RetChan      chan *MessageResult
 
+	// 等待时间，由客户端指定;如果 MaxWaitSecs <= 0 ，则无限等待
+	WaitStart   time.Time
+	MaxWaitSecs int32
+
 	F OnSendDoneFunc
 }
 
@@ -156,6 +166,11 @@ type OnSendDoneFunc func() error
 // server端创建session
 func NewSessionWithConn(conn *net.TCPConn, callback OnReceivedFunc) *Session {
 	client := NewTCPClientWithConn(conn)
+
+	if err := client.setIOTimeout(DefaultLongTCPTimeoutSeconds); err != nil {
+		blog.Errorf("[longtcp] [%s] set io timeout error: [%s]", client.ConnDesc(), err.Error())
+		return nil
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	remoteaddr := conn.RemoteAddr().String()
@@ -285,6 +300,7 @@ func (s *Session) putWait(msg *Message) error {
 	defer s.waitMutex.Unlock()
 
 	if s.waitMap != nil {
+		msg.WaitStart = time.Now()
 		s.waitMap[msg.TCPHead.UniqID] = msg
 	} else {
 		return ErrorConnectionInvalid
@@ -337,11 +353,21 @@ func formatID(id uint64) MessageID {
 	return MessageID(data)
 }
 
-func (s *Session) encData2Message(data [][]byte, waitresponse bool, f OnSendDoneFunc) *Message {
+func (s *Session) encData2Message(
+	data [][]byte,
+	waitresponse bool,
+	waitsecs int32,
+	f OnSendDoneFunc) *Message {
 	totallen := 0
 	for _, v := range data {
 		totallen += len(v)
 	}
+
+	wait := waitsecs
+	if wait > 0 && wait < MinWaitSecs {
+		wait = MinWaitSecs
+	}
+
 	return &Message{
 		TCPHead: &LongTCPHead{
 			UniqID:  formatID(s.uniqid()),
@@ -350,6 +376,7 @@ func (s *Session) encData2Message(data [][]byte, waitresponse bool, f OnSendDone
 		Data:         data,
 		WaitResponse: waitresponse,
 		RetChan:      make(chan *MessageResult, 1),
+		MaxWaitSecs:  wait,
 		F:            f,
 	}
 }
@@ -383,7 +410,7 @@ func (s *Session) onMessageError(m *Message, err error) {
 
 // 取任务并依次发送
 func (s *Session) sendReal() {
-	blog.Infof("[longtcp] session[%s] real send in...", s.Desc())
+	blog.Debugf("[longtcp] session[%s] real send in...", s.Desc())
 	msgs := s.copyMessages()
 
 	for _, m := range msgs {
@@ -423,7 +450,7 @@ func (s *Session) sendReal() {
 			continue
 		}
 
-		blog.Infof("[longtcp] session[%s] real sent header with ID [%s] ", s.Desc(), m.Desc())
+		blog.Debugf("[longtcp] session[%s] real sent header with ID [%s] ", s.Desc(), m.Desc())
 
 		// send real data
 		sendfailed := false
@@ -452,7 +479,7 @@ func (s *Session) sendReal() {
 			m.F()
 		}
 
-		blog.Infof("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
+		blog.Debugf("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
 
 		if !m.WaitResponse {
 			m.RetChan <- &MessageResult{
@@ -482,7 +509,7 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 			return
 		}
 
-		blog.Infof("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
+		blog.Debugf("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
 
 		head, err := byte2LongTCPHead(data)
 		if err != nil {
@@ -539,7 +566,6 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 	}
 }
 
-//
 func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	blog.Debugf("[longtcp] notify send and wait for response now...")
 
@@ -566,7 +592,11 @@ func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 
 // session 内部将data封装为Message发送，并通过chan接收发送结果，Message的id需要内部生成
 // 如果 waitresponse为true，则需要等待返回的结果
-func (s *Session) Send(data [][]byte, waitresponse bool, f OnSendDoneFunc) *MessageResult {
+func (s *Session) Send(
+	data [][]byte,
+	waitresponse bool,
+	waitsecs int32,
+	f OnSendDoneFunc) *MessageResult {
 	if !s.valid {
 		return &MessageResult{
 			Err:  ErrorConnectionInvalid,
@@ -578,7 +608,7 @@ func (s *Session) Send(data [][]byte, waitresponse bool, f OnSendDoneFunc) *Mess
 	defer atomic.AddInt64(&s.requestNum, -1)
 
 	// data 转到 message
-	msg := s.encData2Message(data, waitresponse, f)
+	msg := s.encData2Message(data, waitresponse, waitsecs, f)
 
 	ret := s.notifyAndWait(msg)
 
@@ -655,6 +685,10 @@ func (s *Session) serverStart() {
 
 func (s *Session) check(wg *sync.WaitGroup) {
 	wg.Done()
+
+	tick := time.NewTicker(checkWaitIntervalTime)
+	defer tick.Stop()
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -665,6 +699,8 @@ func (s *Session) check(wg *sync.WaitGroup) {
 			blog.Warnf("[longtcp] session %s found error:%v", s.Desc(), err)
 			s.Clean(err)
 			return
+		case <-tick.C:
+			s.checkWaitTimeout()
 		}
 	}
 }
@@ -672,6 +708,8 @@ func (s *Session) check(wg *sync.WaitGroup) {
 // 清理资源，包括关闭连接，停止协程等
 func (s *Session) Clean(err error) {
 	blog.Debugf("[longtcp] session %s clean now", s.Desc())
+
+	s.cancel()
 
 	// 通知发送队列中的任务
 	s.sendMutex.Lock()
@@ -704,7 +742,27 @@ func (s *Session) Clean(err error) {
 	if s.client != nil {
 		s.client.Close()
 	}
-	s.cancel()
+}
+
+func (s *Session) checkWaitTimeout() {
+	s.waitMutex.Lock()
+	defer s.waitMutex.Unlock()
+
+	for _, m := range s.waitMap {
+		if m.MaxWaitSecs > 0 &&
+			m.WaitStart.Add(time.Duration(m.MaxWaitSecs)*time.Second).Before(time.Now()) {
+			blog.Infof("[longtcp] session %s found message with id:[%v] timeout with %d seconds",
+				s.Desc(),
+				m.TCPHead.UniqID,
+				m.MaxWaitSecs)
+			delete(s.waitMap, m.TCPHead.UniqID)
+
+			m.RetChan <- &MessageResult{
+				Err:  ErrorWaitTimeout,
+				Data: nil,
+			}
+		}
+	}
 }
 
 func (s *Session) IsValid() bool {
@@ -715,6 +773,10 @@ func (s *Session) IsValid() bool {
 func (s *Session) Size() int64 {
 	// return len(s.waitMap)
 	return atomic.LoadInt64(&s.requestNum)
+}
+
+func (s *Session) IP() string {
+	return s.ip
 }
 
 // ----------------------------------------------------
@@ -743,33 +805,96 @@ const (
 )
 
 var globalmutex sync.RWMutex
-var globalSessionPools []*ClientSessionPool
+var globalSessionPools map[string]*ClientSessionPool
+var globalSessionPoolsLocks map[string]*sync.RWMutex
 
 type HandshadeData func() []byte
 
-// 用于初始化并返回session pool
-func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake HandshadeData, size int32, callback OnReceivedFunc) *ClientSessionPool {
-	// 初始化全局pool，并返回一个可用的
-	if globalSessionPools != nil {
-		globalmutex.RLock()
-		for _, v := range globalSessionPools {
-			if v.ip == ip && v.port == port {
-				globalmutex.RUnlock()
-				return v
-			}
-		}
-		globalmutex.RUnlock()
+func getKey(ip string, port int32) string {
+	return fmt.Sprintf("%s_%d", ip, port)
+}
+
+func lockSessionPool(key string) error {
+	blog.Debugf("[longtcp] lock session [%s] in", key)
+
+	// 要保证globalmutex的释放，避免死锁
+	globalmutex.Lock()
+
+	var lock *sync.RWMutex
+	var ok bool
+	if lock, ok = globalSessionPoolsLocks[key]; ok {
+		blog.Debugf("[longtcp] lock [%s] existed", key)
+	} else {
+		lock = new(sync.RWMutex)
+		globalSessionPoolsLocks[key] = lock
+		blog.Debugf("[longtcp] lock [%s] not existed", key)
 	}
 
+	globalmutex.Unlock()
+
+	lock.Lock()
+
+	return nil
+}
+
+func unlockSessionPool(key string) error {
+	blog.Debugf("[longtcp] unlock session [%s] in", key)
+
+	// 要保证globalmutex的释放，避免死锁
+	globalmutex.Lock()
+
+	var lock *sync.RWMutex
+	var ok bool
+	if lock, ok = globalSessionPoolsLocks[key]; ok {
+		blog.Debugf("[longtcp] lock [%s] existed when unlock", key)
+	} else {
+		blog.Warnf("[longtcp] lock [%s] not existed when unlock", key)
+	}
+
+	globalmutex.Unlock()
+
+	if lock != nil {
+		lock.Unlock()
+	}
+
+	return nil
+}
+
+func ensureSessionPoolInited() error {
 	globalmutex.Lock()
 	defer globalmutex.Unlock()
 
-	if globalSessionPools != nil {
-		for _, v := range globalSessionPools {
-			if v.ip == ip && v.port == port {
-				return v
-			}
-		}
+	if globalSessionPools == nil {
+		globalSessionPools = make(map[string]*ClientSessionPool)
+	}
+
+	if globalSessionPoolsLocks == nil {
+		globalSessionPoolsLocks = make(map[string]*sync.RWMutex)
+	}
+
+	return nil
+}
+
+// 用于初始化并返回session pool
+func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake HandshadeData, size int32, callback OnReceivedFunc) *ClientSessionPool {
+	blog.Debugf("[longtcp] get session pool with [%s:%d] in", ip, port)
+	ensureSessionPoolInited()
+
+	key := getKey(ip, port)
+
+	lockSessionPool(key)
+	defer unlockSessionPool(key)
+
+	// 检查下是否有其它协程已经初始化过了
+	v, ok := globalSessionPools[key]
+	if ok {
+		blog.Debugf("[longtcp] get session pool with [%s:%d] out with existed", ip, port)
+		return v
+	}
+
+	// 长连接的超时时间不应该太短，不符合长连接的场景需求
+	if timeout < DefaultLongTCPTimeoutSeconds {
+		timeout = DefaultLongTCPTimeoutSeconds
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -789,12 +914,20 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 		cleaned:         false,
 	}
 
-	blog.Infof("[longtcp] client pool ready new client sessions")
+	blog.Infof("[longtcp] client pool ready new client sessions to [%s:%d]", ip, port)
+	failed := false
 	for i := 0; i < int(size); i++ {
+		if failed {
+			blog.Warnf("[longtcp] session failed before with %s:%d,just let it nil", ip, port)
+			tempSessionPool.sessions[i] = nil
+			continue
+		}
+
 		client := NewSession(ip, port, timeout, handshakedata, callback)
 		if client != nil {
 			tempSessionPool.sessions[i] = client
 		} else {
+			failed = true
 			blog.Warnf("[longtcp] client pool new client session failed with %s:%d", ip, port)
 			tempSessionPool.sessions[i] = nil
 		}
@@ -807,35 +940,43 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 	go tempSessionPool.check(&wg)
 	wg.Wait()
 
-	if globalSessionPools == nil {
-		globalSessionPools = make([]*ClientSessionPool, 0, 10)
-		globalSessionPools = append(globalSessionPools, tempSessionPool)
-	} else {
-		globalSessionPools = append(globalSessionPools, tempSessionPool)
-	}
+	globalSessionPools[key] = tempSessionPool
+
+	blog.Debugf("[longtcp] get session pool with [%s:%d] out new pool", ip, port)
 
 	return tempSessionPool
 }
 
-func removeElement(arr []*ClientSessionPool, index int) []*ClientSessionPool {
-	arr[len(arr)-1], arr[index] = arr[index], arr[len(arr)-1]
-	return arr[:len(arr)-1]
-}
+// func removeElement(arr []*ClientSessionPool, index int) []*ClientSessionPool {
+// 	arr[len(arr)-1], arr[index] = arr[index], arr[len(arr)-1]
+// 	return arr[:len(arr)-1]
+// }
 
 // 用于清理相应的session pool
 func CleanGlobalSessionPool(ip string, port int32) {
-	blog.Infof("[longtcp] clean session %s:%d", ip, port)
+	blog.Infof("[longtcp] clean session pool %s:%d in", ip, port)
+
+	// globalmutex.Lock()
+	// defer globalmutex.Unlock()
+
+	key := getKey(ip, port)
+
+	globalmutex.RLock()
+	v, ok := globalSessionPools[key]
+	globalmutex.RUnlock()
+
+	if ok {
+		lockSessionPool(key)
+		v.Clean(ErrorSessionPoolCleaned)
+		unlockSessionPool(key)
+	}
 
 	globalmutex.Lock()
-	defer globalmutex.Unlock()
+	delete(globalSessionPools, key)
+	delete(globalSessionPoolsLocks, key)
+	globalmutex.Unlock()
 
-	for i, v := range globalSessionPools {
-		if v != nil && v.ip == ip && v.port == port {
-			v.Clean(ErrorSessionPoolCleaned)
-			globalSessionPools = removeElement(globalSessionPools, i)
-			break
-		}
-	}
+	blog.Infof("[longtcp] clean session pool %s:%d out", ip, port)
 }
 
 // 获取可用session
@@ -879,21 +1020,22 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 }
 
 func (sp *ClientSessionPool) Clean(err error) error {
-	blog.Infof("[longtcp] session pool %s:%d clean now", sp.ip, sp.port)
+	blog.Infof("[longtcp] clean sessions of pool %s:%d in", sp.ip, sp.port)
 	sp.cancel()
 
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
 
 	if !sp.cleaned {
+		sp.cleaned = true
 		for _, s := range sp.sessions {
 			if s != nil && s.IsValid() {
 				s.Clean(err)
 			}
 		}
-
-		sp.cleaned = true
 	}
+
+	blog.Infof("[longtcp] clean sessions of %s:%d out", sp.ip, sp.port)
 
 	return nil
 }

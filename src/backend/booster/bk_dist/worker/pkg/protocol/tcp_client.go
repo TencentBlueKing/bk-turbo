@@ -350,3 +350,18 @@ func (c *TCPClient) RemoteAddr() string {
 
 	return ""
 }
+
+// RemoteIP return remote ip
+func (c *TCPClient) RemoteIP() string {
+	if c.conn != nil {
+		remoteAddr := c.conn.RemoteAddr()
+		tcpAddr, ok := remoteAddr.(*net.TCPAddr)
+		if !ok {
+			return ""
+		}
+
+		return tcpAddr.IP.String()
+	}
+
+	return ""
+}

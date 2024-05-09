@@ -45,6 +45,32 @@ type WorkerConfig struct {
 	// CommonFileTypes []string `json:"need_clean_files" value:".pch,.gch" usage:"file types which need to save as common files"`
 	CmdReplaceRules []dcConfig.CmdReplaceRule `json:"cmd_replace_rules" value:"" usage:"rules to replace input cmd"`
 	CleanTempFiles  bool                      `json:"clean_temp_files" value:"true" usage:"enable temp files clean when task finished"`
+
+	// p2p上报
+	P2P           bool   `json:"p2p" value:"false" usage:"enable p2p mode"`
+	P2PServer     string `json:"p2p_server" value:"" usage:"p2p server to report"`
+	P2PGroupLabel string `json:"p2p_group_label" value:"" usage:"p2p group label to report"`
+
+	// 资源使用配置
+	MaxExecuteCPUPercent    int `json:"max_execute_cpu_percent" value:"80" usage:"[0~100], max execute cpu percent ,-1 means total cpu num - 1"`
+	MaxExecuteMemoryPercent int `json:"max_execute_memory_percent" value:"80" usage:"max execute memory percent "`
+
+	MaxSlotCPUPercent    int `json:"max_slot_cpu_percent" value:"80" usage:"[0~100], max slot cpu percent ,-1 means total cpu num - 1"`
+	MaxSlotMemoryPercent int `json:"max_slot_memory_percent" value:"80" usage:"max slot memory percent "`
+
+	// 是否支持绝对路径
+	SupportAbsPath bool `json:"support_abs_Path" value:"true" usage:"whether support absolute path"`
+
+	// 是否自动重启
+	AutoRestart          bool `json:"auto_restart" value:"false" usage:"whether support auto restart"`
+	RestartThresholdSecs int  `json:"restart_threshold_secs" value:"21600" usage:"restart when running time over this"`
+
+	// 是否自动升级
+	AutoUpgrade   bool   `json:"auto_upgrade" value:"false" usage:"whether support auto upgrade"`
+	UpgradeServer string `json:"upgrade_server" value:"" usage:"upgrade server"`
+
+	// slot由worker提供，而不是客户端指定
+	OfferSlot bool `json:"offer_slot" value:"true" usage:"whether support offer slot"`
 }
 
 // NewConfig : return config of server

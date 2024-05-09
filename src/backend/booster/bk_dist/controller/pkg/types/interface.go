@@ -125,6 +125,9 @@ type LocalMgr interface {
 	// unlock local slot
 	UnlockSlots(usage dcSDK.JobUsage, weight int32)
 
+	// try lock local slot
+	TryLockSlots(usage dcSDK.JobUsage, weight int32) (bool, error)
+
 	// do task execution
 	ExecuteTask(req *LocalTaskExecuteRequest,
 		globalWork *Work,
@@ -175,6 +178,9 @@ type ResourceMgr interface {
 
 	// check whether apply finished
 	IsApplyFinished() bool
+
+	// TODO : check whether support abs path
+	SupportAbsPath() bool
 }
 
 // BasicMgr describe a manager for handling all actions with work basic issues
@@ -239,8 +245,14 @@ type BasicMgr interface {
 	// get toolchain files by key
 	GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error)
 
+	// get toolchain relative files by key
+	GetToolChainRelativeFiles(key string) ([]dcSDK.FileDesc, int64, error)
+
 	// get toolchain remote path by key
 	GetToolChainRemotePath(key string) (string, error)
+
+	// get toolchain remote Relative path by key
+	GetToolChainRelativeRemotePath(key string) (string, error)
 
 	// get toolchain timestamp by key
 	GetToolChainTimestamp(key string) (int64, error)

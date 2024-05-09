@@ -31,6 +31,10 @@ const (
 type toolchainCache struct {
 	toolchain *types.ToolChain
 	files     *[]dcSDK.FileDesc
+
+	// TODO : support relative path
+	relativeFiles   *[]dcSDK.FileDesc
+	relativeKeyPath string
 }
 
 // NewMgr get a new BasicMgr
@@ -239,13 +243,13 @@ func (m *Mgr) handleUnregisteredProcess(config *types.WorkUnregisterConfig) {
 	}
 
 	if !m.settings.Degraded {
-		if err := m.work.Resource().SendStats(false); err != nil {
-			blog.Errorf("basic: handle unregistered process for work(%s), send stats failed: %v",
+		if err := m.work.Resource().Release(config.Release); err != nil {
+			blog.Errorf("basic: handle unregistered process for work(%s), try to release resource failed: %v",
 				m.info.WorkID(), err)
 		}
 
-		if err := m.work.Resource().Release(config.Release); err != nil {
-			blog.Errorf("basic: handle unregistered process for work(%s), try to release resource failed: %v",
+		if err := m.work.Resource().SendStats(false); err != nil {
+			blog.Errorf("basic: handle unregistered process for work(%s), send stats failed: %v",
 				m.info.WorkID(), err)
 		}
 	}
@@ -427,8 +431,10 @@ func (m *Mgr) SetToolChain(toolchain *types.ToolChain) error {
 	blog.Infof("basic: add tool chain with key:%s [%d] files total size[%d] to cache",
 		toolchain.ToolKey, len(newfiles), totalsize)
 	m.toolchainMap[toolchain.ToolKey] = toolchainCache{
-		toolchain: toolchain,
-		files:     &newfiles,
+		toolchain:       toolchain,
+		files:           &newfiles,
+		relativeFiles:   getRelativeFiles(newfiles),
+		relativeKeyPath: getRelativeToolChainRemotePath(toolchain.ToolRemoteRelativePath),
 	}
 
 	return nil
@@ -447,6 +453,19 @@ func (m *Mgr) GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error) {
 	return *(v.files), v.toolchain.Timestamp, nil
 }
 
+// GetToolChainRelativeFiles return the toolchain p2p files
+func (m *Mgr) GetToolChainRelativeFiles(key string) ([]dcSDK.FileDesc, int64, error) {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	v, ok := m.toolchainMap[key]
+	if !ok {
+		return nil, 0, fmt.Errorf("not found tool chain for key:%s", key)
+	}
+
+	return *(v.relativeFiles), v.toolchain.Timestamp, nil
+}
+
 // GetToolChainRemotePath return the toolchain remote path according to provided key
 func (m *Mgr) GetToolChainRemotePath(key string) (string, error) {
 	m.toolchainLock.RLock()
@@ -458,6 +477,19 @@ func (m *Mgr) GetToolChainRemotePath(key string) (string, error) {
 	}
 
 	return v.toolchain.ToolRemoteRelativePath, nil
+}
+
+// GetToolChainRelativeRemotePath return the toolchain remote relatieve path according to provided key
+func (m *Mgr) GetToolChainRelativeRemotePath(key string) (string, error) {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	v, ok := m.toolchainMap[key]
+	if !ok {
+		return "", fmt.Errorf("not found tool chain for key:%s", key)
+	}
+
+	return v.relativeKeyPath, nil
 }
 
 // GetToolChainTimestamp return the toolchain timestamp according to provided key

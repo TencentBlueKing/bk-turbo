@@ -25,6 +25,7 @@ const (
 
 	selectorSelectSleepTime     = 200 * time.Millisecond
 	selectorLogQueueStatGapTime = 10 * time.Second
+	selectorCheckNewQueueTime   = 20 * time.Second
 
 	trackerCheckGapTime = 1 * time.Second
 	trackerTrackGapTime = 1 * time.Second

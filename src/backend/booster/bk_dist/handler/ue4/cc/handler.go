@@ -77,6 +77,11 @@ type TaskCC struct {
 	sourcedependfile string
 	pumpHeadFile     string
 	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
+	// 在rsp中-I后面的参数，需要将这些目录全部发送到远端
+	// 有特殊场景：编译不需要该路径下的文件，但需要该路径作为跳板，去查找其它相对路径下的头文件（或其它依赖文件）
+	includePaths []string
+	// 在rsp中 -include后面的参数，将这些文件发送到远端
+	includeFiles []string
 
 	// forcedepend 是我们主动导出依赖文件，showinclude 是编译命令已经指定了导出依赖文件
 	forcedepend          bool
@@ -156,7 +161,7 @@ func (cc *TaskCC) NeedRemoteResource(command []string) bool {
 
 // RemoteRetryTimes will return the remote retry times
 func (cc *TaskCC) RemoteRetryTimes() int {
-	return 0
+	return 1
 }
 
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute
@@ -256,7 +261,8 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
-		return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+		// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+		return commonUtil.GetFileInfo(uniqlines, true, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 	} else {
 		includes := []*dcFile.Info{}
 		for _, l := range uniqlines {
@@ -306,6 +312,7 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 
 func formatFilePath(f string) string {
 	f = strings.Replace(f, "\\", "/", -1)
+	f = strings.Replace(f, "//", "/", -1)
 
 	// 去掉路径中的..
 	if strings.Contains(f, "..") {
@@ -381,6 +388,28 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	if len(cc.includeRspFiles) > 0 {
 		for _, l := range cc.includeRspFiles {
 			blog.Infof("cc: ready add rsp file: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, formatFilePath(l))
+		}
+	}
+
+	// copy includePaths
+	if len(cc.includePaths) > 0 {
+		for _, l := range cc.includePaths {
+			blog.Infof("cc: ready add include path: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, formatFilePath(l))
+		}
+	}
+
+	// copy include files
+	if len(cc.includeFiles) > 0 {
+		for _, l := range cc.includeFiles {
+			blog.Infof("cc: ready add include file: %s", l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -668,6 +697,16 @@ func (cc *TaskCC) isPumpActionNumSatisfied() (bool, error) {
 	return int32(curbatchsize) > minnum, nil
 }
 
+func (cc *TaskCC) workerSupportAbsPath() bool {
+	v := cc.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
 func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("cc: start pre execute for: %v", command)
 
@@ -676,7 +715,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	cc.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if !cc.pumpremotefailed && dcPump.SupportPump(cc.sandbox.Env) {
+	if !cc.pumpremotefailed && dcPump.SupportPump(cc.sandbox.Env) && cc.workerSupportAbsPath() {
 		if satisfied, _ := cc.isPumpActionNumSatisfied(); satisfied {
 			req, err, notifyerr := cc.trypump(command)
 			if err != nil {
@@ -919,6 +958,8 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.inputFile = scannedData.inputFile
 	cc.outputFile = scannedData.outputFile
 	cc.includeRspFiles = scannedData.includeRspFiles
+	cc.includePaths = scannedData.includePaths
+	cc.includeFiles = scannedData.includeFiles
 
 	// handle the cross-compile issues.
 	targetArgs := cc.scannedArgs

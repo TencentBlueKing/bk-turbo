@@ -370,6 +370,11 @@ func (s *sdk) launchServer() error {
 		sendcork = "--send_cork"
 	}
 
+	sendmemorycache := ""
+	if s.config.SendMemoryCache {
+		sendmemorycache = "--send_memory_cache"
+	}
+
 	netErrorLimit := 5
 	if s.config.NetErrorLimit > 0 {
 		netErrorLimit = s.config.NetErrorLimit
@@ -406,16 +411,23 @@ func (s *sdk) launchServer() error {
 		s.config.Port = 0
 	}
 
+	workerOfferSlot := ""
+	if s.config.WorkerOfferSlot {
+		workerOfferSlot = "--worker_offer_slot"
+	}
+
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
 		"%s --res_idle_secs_for_free=%d"+
+		" %s"+
 		" %s"+
 		" --send_file_memory_limit=%d"+
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
 		" %s %s"+
 		" %s %s"+
+		" %s"+
 		" %s",
 		sudo,
 		ctrlPath,
@@ -434,6 +446,7 @@ func (s *sdk) launchServer() error {
 		autoResourceMgr,
 		s.config.ResIdleSecsForFree,
 		sendcork,
+		sendmemorycache,
 		s.config.SendFileMemoryLimit,
 		netErrorLimit,
 		remoteRetryTimes,
@@ -442,6 +455,7 @@ func (s *sdk) launchServer() error {
 		longTCP,
 		useDefaultWorker,
 		dynamicPort,
+		workerOfferSlot,
 	))
 }
 

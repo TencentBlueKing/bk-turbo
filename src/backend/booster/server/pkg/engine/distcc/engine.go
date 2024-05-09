@@ -223,7 +223,8 @@ func (de *distccEngine) SendTaskMessage(taskID string, extra []byte) ([]byte, er
 
 // CollectTaskData collect the task data and the distcc daemon stats, record the stats from server side.
 func (de *distccEngine) CollectTaskData(tb *engine.TaskBasic) error {
-	return de.collectTaskData(tb)
+	// return de.collectTaskData(tb)
+	return nil
 }
 
 // ReleaseTask release task, shut down workers and free the resources.

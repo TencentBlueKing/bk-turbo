@@ -11,6 +11,7 @@ package local
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -30,7 +31,10 @@ const (
 	retryAndSuccessLimit = 3
 )
 
-func newExecutor(mgr *Mgr, req *types.LocalTaskExecuteRequest, globalWork *types.Work) (*executor, error) {
+func newExecutor(mgr *Mgr,
+	req *types.LocalTaskExecuteRequest,
+	globalWork *types.Work,
+	supportAbsPath bool) (*executor, error) {
 	environ := env.NewSandbox(req.Environments)
 	bt := dcType.GetBoosterType(environ.GetEnv(env.BoosterType))
 	hdl, err := handlermap.GetHandler(bt)
@@ -55,6 +59,9 @@ func newExecutor(mgr *Mgr, req *types.LocalTaskExecuteRequest, globalWork *types
 
 		environments = append(environments, req.Environments[i])
 	}
+
+	newenv := fmt.Sprintf("%s=%s", env.GetEnvKey(env.KeyWorkerSupportAbsPath), strconv.FormatBool(supportAbsPath))
+	environments = append(environments, newenv)
 
 	e.sandbox = &dcSyscall.Sandbox{
 		Dir:    e.req.Dir,
@@ -330,13 +337,101 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 	}
 }
 
+func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
+	blog.Infof("executor: try to execute local-task with trylock from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
+	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
+	gotLock := true
+	defer func() {
+		if gotLock {
+			dcSDK.StatsTimeNow(&e.stats.LocalWorkLeaveTime)
+		}
+	}()
+	e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	var locallockweight int32 = 1
+	if e.handler != nil && e.handler.LocalLockWeight(e.req.Commands) > 0 {
+		locallockweight = e.handler.LocalLockWeight(e.req.Commands)
+	}
+	ok, err := e.tryLock(dcSDK.JobUsageLocalExe, locallockweight)
+	if err != nil {
+		blog.Errorf("executor:failed to try lock with local job usage(%s) weight %d error:%v",
+			dcSDK.JobUsageLocalExe,
+			locallockweight,
+			err)
+		return &types.LocalTaskExecuteResult{
+			Result: &dcSDK.LocalTaskResult{
+				ExitCode: -1,
+				Message:  types.ErrSlotsLockFailed.Error(),
+				Stdout:   nil,
+				Stderr:   nil,
+			},
+		}
+	}
+	if !ok {
+		gotLock = false
+		blog.Infof("executor: not got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
+		return nil
+	}
+
+	blog.Infof("executor: got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
+	dcSDK.StatsTimeNow(&e.stats.LocalWorkLockTime)
+	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkUnlockTime)
+	defer e.unlock(dcSDK.JobUsageLocalExe, locallockweight)
+
+	dcSDK.StatsTimeNow(&e.stats.LocalWorkStartTime)
+	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkEndTime)
+	e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	var code int
+	// var err error
+	var stdout, stderr []byte
+
+	if e.handler.LocalExecuteNeed(e.req.Commands) {
+		code, err = e.handler.LocalExecute(e.req.Commands)
+		stdout, stderr = e.Stdout(), e.Stderr()
+	} else {
+		sandbox := e.sandbox.Fork()
+		var outBuf, errBuf bytes.Buffer
+		sandbox.Stdout = &outBuf
+		sandbox.Stderr = &errBuf
+		code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
+		stdout, stderr = outBuf.Bytes(), errBuf.Bytes()
+	}
+
+	if err != nil {
+		blog.Errorf("executor: failed to execute local-task from pid(%d): %v, %v",
+			e.req.Pid, err, string(stderr))
+		return &types.LocalTaskExecuteResult{
+			Result: &dcSDK.LocalTaskResult{
+				ExitCode: code,
+				Message:  err.Error(),
+				Stdout:   stdout,
+				Stderr:   stderr,
+			},
+		}
+	}
+
+	e.stats.LocalWorkSuccess = true
+	blog.Infof("executor: success to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
+	return &types.LocalTaskExecuteResult{
+		Result: &dcSDK.LocalTaskResult{
+			ExitCode: code,
+			Stdout:   stdout,
+			Stderr:   stderr,
+		},
+	}
+}
+
 func (e *executor) executeFinalTask() {
 	e.handler.FinalExecute(e.req.Commands)
 }
 
 // lock 持锁有两种
-//	一是全局锁, 当该work指定要使用全局锁时(表现为globalWork不为空), 只使用全局锁
-//  否则使用work自己的local锁
+//
+//		一是全局锁, 当该work指定要使用全局锁时(表现为globalWork不为空), 只使用全局锁
+//	 否则使用work自己的local锁
 func (e *executor) lock(usage dcSDK.JobUsage, weight int32) bool {
 	if e.globalWork != nil {
 		return e.globalWork.Local().LockSlots(usage, weight)
@@ -353,6 +448,14 @@ func (e *executor) unlock(usage dcSDK.JobUsage, weight int32) {
 	}
 
 	e.resource.Unlock(usage, weight)
+}
+
+func (e *executor) tryLock(usage dcSDK.JobUsage, weight int32) (bool, error) {
+	if e.globalWork != nil {
+		return e.globalWork.Local().TryLockSlots(usage, weight)
+	}
+
+	return e.resource.TryLock(usage, weight)
 }
 
 func (e *executor) handleRecord() {

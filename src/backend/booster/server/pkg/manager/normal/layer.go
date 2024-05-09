@@ -166,7 +166,10 @@ func (tc *taskBasicLayer) UnLockTask(taskID string) {
 	// log a warning when the lock is hold for too long.
 	now := time.Now().Local()
 	if mutex.lastHold.Add(1 * time.Second).Before(now) {
-		blog.Warnf("layer: task(%s) by owner(%s) lock hold for too long: %s", taskID, mutex.owner, now.Sub(mutex.lastHold).String())
+		blog.Warnf("layer: task(%s) by owner(%s) lock hold for too long: %s",
+			taskID,
+			mutex.owner,
+			now.Sub(mutex.lastHold).String())
 	}
 	blog.V(5).Infof("layer: unlock task(%s) by owner(%s)", taskID, mutex.owner)
 	mutex.Unlock()
@@ -346,7 +349,7 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 	if oldTask, ok := tc.tbm[tb.ID]; ok {
 		if oldTask.Status.Status != tb.Status.Status {
 			selfMetric.TaskNumController.Dec(
-				tb.Client.EngineName.String(), tb.Client.QueueName, string(oldTask.Status.Status), "")
+				tb.Client.EngineName.String(), oldTask.Client.QueueName, string(oldTask.Status.Status), "")
 			statusReason := ""
 			if tb.Status.Status.Terminated() {
 				statusReason = tb.Status.StatusCode.String()

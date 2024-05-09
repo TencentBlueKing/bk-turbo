@@ -17,7 +17,6 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/manager"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -94,10 +93,10 @@ func (s *Server) Start() error {
 
 // Run brings up the server
 func Run(conf *config.ServerConfig) error {
-	if err := common.SavePid(conf.ProcessConfig); err != nil {
-		blog.Errorf("save pid failed: %v", err)
-		return err
-	}
+	// if err := common.SavePid(conf.ProcessConfig); err != nil {
+	// 	blog.Errorf("save pid failed: %v", err)
+	// 	return err
+	// }
 
 	server, err := NewServer(conf)
 	if err != nil {

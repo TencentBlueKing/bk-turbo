@@ -86,6 +86,9 @@ enum PBCmdType {
     SENDFILERSP = 5;
     CHECKCACHEREQ = 6;
     CHECKCACHERSP = 7;
+	QUERYSLOTREQ = 20;
+	QUERYSLOTRSP = 21;
+	SLOTRSPACK = 22;
 	LONGTCPHANDSHAKEREQ = 100;
 	UNKNOWN = 9999;
 }
@@ -126,4 +129,20 @@ message PBBodyCheckCacheReq {
 
 message PBBodyCheckCacheRsp {
     repeated PBCacheResult results = 1;
+}
+
+message PBBodyQuerySlotReq {
+	required int32 Priority = 1;
+	required int32 waittotaltasknum = 2;
+	required string tasktype = 3;
+}
+
+message PBBodyQuerySlotRsp {
+	required int32 availableslotnum = 1;
+	required int32 refused = 2;
+	required string message = 3;
+}
+
+message PBBodySlotRspAck {
+	required int32 consumeslotnum = 1;
 }

@@ -225,7 +225,7 @@ func (h *UBTTool) executeActions() error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("UBTTool: got action result:%+v", r)
-			if r.Exitcode != 0 || r.Err != nil {
+			if (r.Exitcode != 0 || r.Err != nil) && !h.settings.ContinueOnError {
 				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("UBTTool: %v", err)
 				return err
@@ -571,7 +571,7 @@ func (h *UBTTool) dump() {
 	blog.Infof("UBTTool: -------------------dump end-----------------------")
 }
 
-//---------------------------------to support set tool chain----------------------------------------------------------
+// ---------------------------------to support set tool chain----------------------------------------------------------
 func (h *UBTTool) getControllerConfig() dcSDK.ControllerConfig {
 	return dcSDK.ControllerConfig{
 		NoLocal: false,

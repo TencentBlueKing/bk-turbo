@@ -35,6 +35,13 @@ var (
 	bkdistcmdmagic   = protocol.Bkdistcmdmagic
 )
 
+var (
+	SupportAbsPath = true
+	DefaultWorkDir = ""
+
+	errAbsPathNotAllowed = fmt.Errorf("absolute path is not allowed")
+)
+
 // return relativepath, abspath, error
 type PathMapping func(inputfile string, basedir string, relativedir string) (string, string, error)
 
@@ -370,6 +377,16 @@ func receiveBKCommonDispatchReqBuf(client *TCPClient,
 	return nil
 }
 
+func CheckAbsPathLimit(f string) error {
+	if !SupportAbsPath && filepath.IsAbs(f) {
+		if !strings.HasPrefix(f, DefaultWorkDir) {
+			return errAbsPathNotAllowed
+		}
+	}
+
+	return nil
+}
+
 // for size < 0, only get file path mapping
 // for size == 0, save one empty file
 func saveFile(
@@ -395,6 +412,18 @@ func saveFile(
 			_, linkTarget, _ = callback(linkTarget, basedir, rf.GetTargetrelativepath())
 		}
 		rf.Targetrelativepath = &relativepath
+	}
+
+	err = CheckAbsPathLimit(inputfile)
+	if err != nil {
+		blog.Warnf("inputfile [%s] path is not allowed!", inputfile)
+		return "", nil
+	}
+
+	err = CheckAbsPathLimit(linkTarget)
+	if err != nil {
+		blog.Warnf("link file [%s] path is not allowed!", linkTarget)
+		return "", nil
 	}
 
 	// compressed size < 0 means do not save, or may will overwrite existing files.
@@ -451,7 +480,9 @@ func saveFile(
 	// save as temp file if existed, then change name after saved
 	existed := dcFile.Stat(inputfile).Exist()
 	targetname := inputfile
-	targetbakname := fmt.Sprintf("%s_%d", targetname, time.Now().UnixNano())
+	// only leave one bak file, to avoid disk increase
+	// targetbakname := fmt.Sprintf("%s_%d", targetname, time.Now().UnixNano())
+	targetbakname := fmt.Sprintf("%s.bak", targetname)
 	tempname := fmt.Sprintf("%s_temp", targetbakname)
 	if existed {
 		inputfile = tempname
@@ -468,7 +499,12 @@ func saveFile(
 		_ = f.Close()
 
 		if existed && newfilesaved {
-			blog.Infof("rename existed file %s to %s", targetname, targetbakname)
+			if dcFile.Stat(targetbakname).Exist() {
+				blog.Infof("ready delete old bak file %s", targetbakname)
+				os.Remove(targetbakname)
+			}
+
+			blog.Infof("backup file %s to %s", targetname, targetbakname)
 			err = os.Rename(targetname, targetbakname)
 			if err != nil {
 				blog.Infof("failed to rename existed file %s to %s with error:%v",
@@ -1085,4 +1121,138 @@ func ReceiveUnknown(client *TCPClient,
 	}
 
 	return nil
+}
+
+// ReceiveBKQuerySlot to receive pb command body for query slot
+func ReceiveBKQuerySlot(client *TCPClient,
+	head *protocol.PBHead) (*protocol.PBBodyQuerySlotReq, error) {
+	blog.Debugf("receive query slot body now")
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 || buflen > 0 {
+		err := fmt.Errorf("get invalid body length %d, buf len %d", bodylen, buflen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with err:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodyQuerySlotReq{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+	} else {
+		blog.Debugf("succeed to decode pbbody")
+	}
+
+	return &body, nil
+}
+
+// EncodeBKQuerySlotRsp encode time to Messages
+func EncodeBKQuerySlotRsp(availableslotnum int32, refused int32, message string) ([]protocol.Message, error) {
+	blog.Debugf("encode query slot request to message now")
+
+	// encode body and file to message
+	pbbody := protocol.PBBodyQuerySlotRsp{
+		Availableslotnum: &availableslotnum,
+		Refused:          &refused,
+		Message:          &message,
+	}
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody for error: %v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Infof("encode body to size %d", bodylen)
+
+	// encode head
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_QUERYSLOTRSP
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with err:%v", err)
+		return nil, err
+	}
+	blog.Infof("encode head to size %d", pbhead.XXX_Size())
+
+	headtokendata, err := formatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with err:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}
+
+// ReceiveBKSlotRspAck to receive pb command body for slot offer ack
+func ReceiveBKSlotRspAck(client *TCPClient,
+	head *protocol.PBHead) (*protocol.PBBodySlotRspAck, error) {
+	blog.Debugf("receive slot response ack body now")
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 || buflen > 0 {
+		err := fmt.Errorf("get invalid body length %d, buf len %d", bodylen, buflen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with err:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodySlotRspAck{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+	} else {
+		blog.Debugf("succeed to decode pbbody")
+	}
+
+	return &body, nil
 }

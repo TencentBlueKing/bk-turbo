@@ -309,3 +309,14 @@ func getReleaseParam(req *restful.Request) (*manager.TaskReleaseParam, error) {
 	blog.Infof("get release param: %s", string(body))
 	return param, nil
 }
+
+// QueryWorkerUpgradeInfo handle the http request for querying worker upgrade info
+func QueryWorkerUpgradeInfo(req *restful.Request, resp *restful.Response) {
+	conf := "./conf/worker_upgrade.json"
+	data, err := ioutil.ReadFile(conf)
+	if err != nil {
+		blog.Warnf("get conf: %s failed with error:%v", conf, err)
+		data = []byte("")
+	}
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: data})
+}

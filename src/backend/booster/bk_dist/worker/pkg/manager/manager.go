@@ -31,6 +31,7 @@ import (
 	pbcmd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cmd_handler"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
@@ -128,13 +129,28 @@ type tcpManager struct {
 	cpulast      float64
 	cpuindex     int32
 	cpusamplenum int32
+
+	client *httpclient.HTTPClient
 }
 
 func (o *tcpManager) init() error {
 	blog.Infof("init...")
 
+	// init resource limit
+	err := o.initResourceConf()
+	if err != nil {
+		blog.Errorf("init resource conf failed with error:%v", err)
+		return err
+	}
+	go o.resourceTimer()
+
 	// init max process
 	o.maxprocess = 8
+
+	if totalExecuteCPU > 0 {
+		o.maxprocess = int(totalExecuteCPU)
+	}
+
 	envmaxcpus := env.GetEnv(env.KeyWorkerMaxProcess)
 	if envmaxcpus != "" {
 		intval, err := strconv.ParseInt(envmaxcpus, 10, 64)
@@ -198,7 +214,11 @@ func (o *tcpManager) init() error {
 
 	// chdir
 	if o.conf.DefaultWorkDir != "" {
+		// clean work dir
+		_ = os.RemoveAll(o.conf.DefaultWorkDir)
+		// create work dir
 		_ = os.MkdirAll(o.conf.DefaultWorkDir, os.ModePerm)
+		// change to work dir
 		err := os.Chdir(o.conf.DefaultWorkDir)
 		if err != nil {
 			blog.Errorf("failed to chdir,error: %v", err)
@@ -216,6 +236,50 @@ func (o *tcpManager) init() error {
 
 	// init handlers
 	pbcmd.InitHandlers()
+
+	if o.maxjobs > int(totalExecuteCPU) {
+		o.maxjobs = int(totalExecuteCPU)
+		blog.Infof("change max job %d for resource limit", o.maxjobs)
+	}
+
+	// support p2p
+	if o.conf.P2P {
+		err := o.startP2P()
+		if err != nil {
+			blog.Errorf("start p2p failed with error:%v", err)
+			return err
+		}
+	}
+
+	// for new feature
+	if o.conf.OfferSlot {
+		go o.slotTimer()
+	}
+
+	if o.conf.AutoRestart {
+		if o.conf.RestartThresholdSecs <= 0 {
+			o.conf.RestartThresholdSecs = defaultRestartThresholdSecs
+		}
+		go o.restartCheckTimer()
+	}
+
+	if o.conf.AutoUpgrade {
+		go o.upgradeCheckTimer()
+	}
+
+	return o.updateProtocolConf()
+}
+
+func (o *tcpManager) updateProtocolConf() error {
+	protocol.SupportAbsPath = o.conf.SupportAbsPath
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	protocol.DefaultWorkDir = wd
+	blog.Infof("got protocol support abs path %v workdir %s",
+		protocol.SupportAbsPath,
+		protocol.DefaultWorkDir)
 
 	return nil
 }
@@ -336,6 +400,8 @@ func (o *tcpManager) dealTCPConn(conn *net.TCPConn) error {
 		return o.dealSendFileCmd(client, head)
 	case dcProtocol.PBCmdType_CHECKCACHEREQ:
 		return o.dealCheckCacheCmd(client, head)
+	case dcProtocol.PBCmdType_QUERYSLOTREQ:
+		return o.dealQuerySlotCmd(client, head)
 	case dcProtocol.PBCmdType_LONGTCPHANDSHAKEREQ:
 		longtcp.NewSessionWithConn(conn, o.onLongTCPReceived)
 		return nil
@@ -374,6 +440,10 @@ func (o *tcpManager) dealRemoteTaskCmd(client *protocol.TCPClient, head *dcProto
 	}
 
 	debug.FreeOSMemory() // free memory anyway
+
+	if o.conf.OfferSlot {
+		go o.onTaskReceived(client.RemoteIP())
+	}
 
 	curcmd := buffedcmd{
 		client:       client,
@@ -450,6 +520,10 @@ func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtoco
 	}
 
 	debug.FreeOSMemory() // free memory anyway
+
+	if o.conf.OfferSlot {
+		go o.onFileReceived(client.RemoteIP())
+	}
 
 	defer func() {
 		blog.Infof("ready to close tcp connection after deal this cmd")
@@ -671,9 +745,18 @@ func (o *tcpManager) obtainChance() bool {
 				}
 				curcpu := math.Max(scpu, per[0])
 				if curcpu > maxCpuUsed {
-					blog.Infof("ignore for current smooth cpu usage:%f(or curcpu:%f) over max allowed cpu usage:%f", scpu, per[0], maxCpuUsed)
+					blog.Infof("ignore for current smooth cpu usage:%f(or curcpu:%f) over max allowed cpu usage:%f",
+						scpu, per[0],
+						maxCpuUsed)
 					return false
 				}
+			}
+
+			// new resource check
+			if !o.resourceAvailable() {
+				blog.Infof("ignore for current available p2p CPU:%f, current available memory:%f",
+					currentAvailableExecuteCPU, currentAvailableExecuteMemory)
+				return false
 			}
 
 			// failed to get resource info or has enought resource, return ok

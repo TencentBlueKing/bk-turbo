@@ -602,6 +602,7 @@ type ccArgs struct {
 	args                []string
 	specifiedSourceType bool
 	includeRspFiles     []string
+	includePaths        []string
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
@@ -650,6 +651,23 @@ func scanArgs(args []string) (*ccArgs, error) {
 			// if strings.HasPrefix(arg, "/Zm") {
 			// 	continue
 			// }
+
+			if strings.HasPrefix(arg, "/I") {
+				// if -I just a prefix, save the remain of this line.
+				if len(arg) > 2 {
+					r.includePaths = append(r.includePaths, strings.Trim(arg[2:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cl: scan args: no file found after /I")
+					return nil, ErrorMissingOption
+				}
+				r.includePaths = append(r.includePaths, strings.Trim(args[index], "\""))
+				continue
+			}
 
 			if strings.HasPrefix(arg, "/Fo") {
 				// /Fo should always appear once.
@@ -1037,11 +1055,11 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 // in https://msdn.microsoft.com/en-us/library/ms880421.
 // This function returns "" (2 double quotes) if s is empty.
 // Alternatively, these transformations are done:
-// - every back slash (\) is doubled, but only if immediately
-//   followed by double quote (");
-// - every double quote (") is escaped by back slash (\);
-// - finally, s is wrapped with double quotes (arg -> "arg"),
-//   but only if there is space or tab inside s.
+//   - every back slash (\) is doubled, but only if immediately
+//     followed by double quote (");
+//   - every double quote (") is escaped by back slash (\);
+//   - finally, s is wrapped with double quotes (arg -> "arg"),
+//     but only if there is space or tab inside s.
 func EscapeArg(s string) string {
 	if len(s) == 0 {
 		return "\"\""

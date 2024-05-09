@@ -11,8 +11,10 @@ package disttask
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 )
 
 type distTask struct {
@@ -98,12 +100,33 @@ func (dt *distTask) CustomData(params interface{}) interface{} {
 		JobServer:         jobServer,
 		ExtraWorkerData:   dt.InheritSetting.ExtraWorkerSetting,
 		ExtraProjectData:  dt.InheritSetting.ExtraProjectSetting,
+		SupportAbsPath:    dt.supportAbsPath(),
 	}
 
 	var data []byte
 	_ = codec.EncJSON(dataStruct, &data)
 
 	return data
+}
+
+func (dt *distTask) supportAbsPath() bool {
+	// 如果没有明确指定不支持，则默认认为支持
+	for _, v := range dt.Workers {
+		if v.Message != "" {
+			temp := map[string]string{}
+			codec.DecJSON([]byte(v.Message), &temp)
+			if p, ok := temp[commonTypes.LabelKeySupportAbsPath]; ok {
+				b, err := strconv.ParseBool(p)
+				if err == nil {
+					if !b {
+						return b
+					}
+				}
+			}
+		}
+	}
+
+	return true
 }
 
 // CustomData describe the detail data of dist task.
@@ -114,6 +137,7 @@ type CustomData struct {
 	JobServer         int               `json:"job_server"`
 	ExtraWorkerData   string            `json:"extra_worker_data"`
 	ExtraProjectData  string            `json:"extra_project_data"`
+	SupportAbsPath    bool              `json:"support_abs_path"`
 }
 
 type taskClient struct {
