@@ -10,6 +10,7 @@ import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.service.prometheus.BkTimed
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
+import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.project.api.service.ServiceProjectResource
 import com.tencent.devops.turbo.dao.mongotemplate.TurboPlanDao
 import com.tencent.devops.turbo.dao.repository.TurboPlanRepository
@@ -349,22 +350,41 @@ class TurboPlanService @Autowired constructor(
                 return false
             }
             // 3. 同步至后端编译加速服务
-            val tbsJsonMap = mapOf(
-                "project_name" to planName,
-                "ban_all_booster" to !(openStatus?:true)
+            return updateTbsProjectInfo(
+                user = user,
+                engineCode = turboPlanEntity.engineCode,
+                planId = planId,
+                planName = planName,
+                openStatus = !(openStatus?:true)
             )
-            try {
-                // 创建项目信息
-                TBSSdkApi.updateTurboProjectInfo(
-                    engineCode = turboPlanEntity.engineCode,
-                    projectId = planId,
-                    jsonBody = JsonUtil.toJson(DistccRequestBody(user, tbsJsonMap))
-                )
-            } catch (e: Exception) {
-                throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "同步数据至加速后端失败")
-            }
-            return true
         }
+    }
+
+    /**
+     * 同步加速方案信息至后端编译加速服务
+     */
+    private fun updateTbsProjectInfo(
+        user: String,
+        engineCode: String,
+        planId: String,
+        openStatus: Boolean,
+        planName: String?,
+    ): Boolean {
+        val tbsJsonMap = mutableMapOf<String, Any>(
+            "ban_all_booster" to openStatus
+        )
+
+        planName?.run { tbsJsonMap["project_name"] = this }
+        try {
+            TBSSdkApi.updateTurboProjectInfo(
+                engineCode = engineCode,
+                projectId = planId,
+                jsonBody = JsonUtil.toJson(DistccRequestBody(user, tbsJsonMap))
+            )
+        } catch (e: Exception) {
+            throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "同步数据至加速后端失败")
+        }
+        return true
     }
 
     /**
@@ -632,5 +652,52 @@ class TurboPlanService @Autowired constructor(
             turboPlanResult.count, turboPlanResult.page, turboPlanResult.pageSize, turboPlanResult.totalPages,
             turboPlanVOList
         )
+    }
+
+    /**
+     * 按项目id维度批量更新加速方案状态
+     * 项目停用：批量停用项目下的加速方案，更新者为Turbo
+     * 项目启用：把更新者为Turbo的加速方案批量启用，用户停用的不需更改
+     */
+    fun updatePlanStatusByBkProjectStatus(userId: String, projectId: String, enabled: Boolean) {
+        logger.info("ProjectStatusUpdate event: $userId, $projectId, $enabled")
+        // true表示启用项目，false表示停用项目
+        // 启用项目时注意，只回复系统自动停用的方案，用户停用的方案保持停用
+        val updatedBy = if (enabled) SYSTEM_ADMIN else null
+
+        // 获取到待启用/待停用的加速方案清单
+        val turboPlanEntityList = turboPlanDao.findByProjectIdAndOpenStatus(
+            projectId = projectId,
+            updatedBy = updatedBy,
+            openStatus = !enabled
+        )
+        logger.info("Turbo plans to be updated count: ${turboPlanEntityList.size}")
+        if (turboPlanEntityList.isEmpty()) {
+            return
+        }
+
+        val result = turboPlanDao.batchUpdateOpenStatus(turboPlanList = turboPlanEntityList, openStatus = enabled)
+        if (result.wasAcknowledged()) {
+            logger.info("Updated turbo plans successfully, projectId: $projectId, count: ${result.modifiedCount}")
+        }
+        val failedPlanIds = mutableListOf<String>()
+        turboPlanEntityList.forEach {
+            try {
+                this.updateTbsProjectInfo(
+                    user = userId,
+                    engineCode = it.engineCode,
+                    planId = it.id!!,
+                    openStatus = enabled,
+                    planName = null
+                )
+            } catch (e: TurboException) {
+                failedPlanIds.add(it.id!!)
+            }
+        }
+        if (failedPlanIds.isNotEmpty()) {
+            logger.error("Sync turbo info to TBS backend failed: $projectId, plan ids: ${failedPlanIds.joinToString()}")
+        } else {
+            logger.info("Sync turbo info to TBS backend successful")
+        }
     }
 }

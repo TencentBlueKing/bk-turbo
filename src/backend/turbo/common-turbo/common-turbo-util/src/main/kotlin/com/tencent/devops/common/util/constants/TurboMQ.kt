@@ -13,3 +13,9 @@ const val ROUTE_TURBO_PLUGIN_DATA = "route.turbo.plugin.data.new"
  * 蓝盾度量数据上报
  */
 const val EXCHANGE_METRICS_STATISTIC_TURBO_DAILY = "e.metrics.statistic.turbo.daily"
+
+/**
+ * 蓝盾项目停用广播通知
+ */
+const val EXCHANGE_PROJECT_ENABLE_FANOUT = "e.project.enable.exchange.fanout"
+const val QUEUE_PROJECT_STATUS_UPDATE = "queue.turbo.project.status.update"
