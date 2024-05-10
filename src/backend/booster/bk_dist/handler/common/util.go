@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -175,14 +176,26 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 
 //-----------------------------------------------------------------------
 
-const (
-	commonPathSep = "/"
+var (
+	commonTargetPathSep = string(filepath.Separator)
+	commonInitPathSep1  = ""
+	commonInitPathSep2  = ""
 )
 
 var (
 	pathmapLock sync.RWMutex
 	pathmap     map[string]string = make(map[string]string, 10000)
 )
+
+func init() {
+	if runtime.GOOS == "windows" {
+		commonInitPathSep1 = "/"
+		commonInitPathSep2 = "\\\\"
+	} else {
+		commonInitPathSep1 = "\\"
+		commonInitPathSep2 = "//"
+	}
+}
 
 // 在指定目录下找到正确的文件名（大小写）
 func getWindowsRealName(inputdir, inputname string) (string, error) {
@@ -226,7 +239,7 @@ func getWindowsFullRealPath(inputPath string) (string, error) {
 	// 先检查目录是否在缓存，如果在，只需要检查文件名
 	realPath := inputPath
 	inputdir, inputfile := filepath.Split(inputPath)
-	inputdir = strings.TrimRight(inputdir, commonPathSep)
+	inputdir = strings.TrimRight(inputdir, commonTargetPathSep)
 
 	newpath, ok = getPath(inputdir)
 	if ok {
@@ -244,14 +257,14 @@ func getWindowsFullRealPath(inputPath string) (string, error) {
 	}
 
 	// 完整目录逐级检查，并将逐级目录放入缓存
-	parts := strings.Split(inputPath, commonPathSep)
+	parts := strings.Split(inputPath, commonTargetPathSep)
 	oldpath := []string{}
 	if len(parts) > 0 {
 		oldpath = append(oldpath, parts[0])
 
 		realPath = parts[0]
 		if strings.HasSuffix(realPath, ":") {
-			realPath = strings.ToUpper(realPath + commonPathSep)
+			realPath = strings.ToUpper(realPath + commonTargetPathSep)
 		}
 
 		for i, part := range parts {
@@ -277,7 +290,7 @@ func getWindowsFullRealPath(inputPath string) (string, error) {
 					realPath = filepath.Join(realPath, file.Name())
 
 					// 将过程中的路径记录下来
-					putPath(strings.Join(oldpath, commonPathSep), FormatFilePath(realPath))
+					putPath(strings.Join(oldpath, commonTargetPathSep), FormatFilePath(realPath))
 
 					break
 				}
@@ -308,12 +321,12 @@ func CorrectPathCap(inputPaths []string) ([]string, error) {
 
 // ----------------------------------------------------------------------
 func FormatFilePath(f string) string {
-	f = strings.Replace(f, "\\", commonPathSep, -1)
-	f = strings.Replace(f, "//", commonPathSep, -1)
+	f = strings.Replace(f, commonInitPathSep1, commonTargetPathSep, -1)
+	f = strings.Replace(f, commonInitPathSep2, commonTargetPathSep, -1)
 
 	// 去掉路径中的..
 	if strings.Contains(f, "..") {
-		p := strings.Split(f, commonPathSep)
+		p := strings.Split(f, commonTargetPathSep)
 
 		var newPath []string
 		for _, v := range p {
@@ -323,7 +336,7 @@ func FormatFilePath(f string) string {
 				newPath = append(newPath, v)
 			}
 		}
-		f = strings.Join(newPath, commonPathSep)
+		f = strings.Join(newPath, commonTargetPathSep)
 	}
 
 	return f
