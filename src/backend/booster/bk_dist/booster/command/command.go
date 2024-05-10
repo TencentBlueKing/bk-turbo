@@ -83,6 +83,7 @@ const (
 	FlagPumpSearchLinkFile   = "pump_search_link_file"
 	FlagPumpSearchLinkDir    = "pump_search_link_dir"
 	FlagPumpLstatByDir       = "pump_lstat_by_dir"
+	FlagPumpCorrectCap       = "pump_correct_cap"
 	FlagForceLocalList       = "force_local_list"
 	FlagNoWork               = "no_work"
 	FlagControllerNoWait     = "controller_no_wait"
@@ -357,6 +358,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "pump_lstat_by_dir",
 			Usage: "whether get file stat info by search dir",
+		},
+		commandCli.BoolFlag{
+			Name:  "pump_correct_cap",
+			Usage: "whether correct capitalization when save pump depend file list",
 		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",

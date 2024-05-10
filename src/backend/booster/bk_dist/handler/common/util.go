@@ -88,12 +88,17 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 			continue
 		}
 
-		if mustexisted && !i.Exist() {
-			// continue
-			// TODO : return fail if not existed
-			blog.Warnf("common util: depend file:%s not existed ", f)
-			return nil, fmt.Errorf("%s not existed", f)
+		if !i.Exist() {
+			if mustexisted {
+				// continue
+				// TODO : return fail if not existed
+				blog.Warnf("common util: depend file:%s not existed ", f)
+				return nil, fmt.Errorf("%s not existed", f)
+			} else {
+				continue
+			}
 		}
+
 		if notdir && i.Basic().IsDir() {
 			continue
 		}
@@ -117,11 +122,15 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 		}
 		tempis[f] = i
 
-		if mustexisted && !i.Exist() {
-			// TODO : return fail if not existed
-			// continue
-			blog.Warnf("common util: depend file:%s not existed ", f)
-			return nil, fmt.Errorf("%s not existed", f)
+		if !i.Exist() {
+			if mustexisted {
+				// TODO : return fail if not existed
+				// continue
+				blog.Warnf("common util: depend file:%s not existed ", f)
+				return nil, fmt.Errorf("%s not existed", f)
+			} else {
+				continue
+			}
 		}
 
 		if i.Basic().Mode()&os.ModeSymlink != 0 {
@@ -162,4 +171,160 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 	}(&tempis)
 
 	return is, nil
+}
+
+//-----------------------------------------------------------------------
+
+const (
+	commonPathSep = "/"
+)
+
+var (
+	pathmapLock sync.RWMutex
+	pathmap     map[string]string = make(map[string]string, 10000)
+)
+
+// 在指定目录下找到正确的文件名（大小写）
+func getWindowsRealName(inputdir, inputname string) (string, error) {
+	files, err := os.ReadDir(inputdir)
+	if err != nil {
+		fmt.Printf("check dir:%s with error:%v\r\n", inputdir, err)
+		return "", err
+	}
+	for _, file := range files {
+		if strings.EqualFold(file.Name(), inputname) {
+			return FormatFilePath(filepath.Join(inputdir, file.Name())), nil
+		}
+	}
+
+	return "", fmt.Errorf("%s not exist", inputname)
+}
+
+func getPath(inputPath string) (string, bool) {
+	pathmapLock.RLock()
+	newpath, ok := pathmap[inputPath]
+	pathmapLock.RUnlock()
+
+	return newpath, ok
+}
+
+func putPath(oldPath, newPath string) {
+	pathmapLock.Lock()
+	pathmap[oldPath] = newPath
+	pathmapLock.Unlock()
+
+	return
+}
+
+// 根据指定的完整路径得到正确的大小写的完整路径
+func getWindowsFullRealPath(inputPath string) (string, error) {
+	newpath, ok := getPath(inputPath)
+	if ok {
+		return newpath, nil
+	}
+
+	// 先检查目录是否在缓存，如果在，只需要检查文件名
+	realPath := inputPath
+	inputdir, inputfile := filepath.Split(inputPath)
+	inputdir = strings.TrimRight(inputdir, commonPathSep)
+
+	newpath, ok = getPath(inputdir)
+	if ok {
+		newPath, err := getWindowsRealName(newpath, inputfile)
+		if err == nil {
+			realPath = newPath
+			// 将结果记录下来
+			putPath(inputPath, realPath)
+			return realPath, nil
+		} else {
+			// 将结果记录下来
+			putPath(inputPath, inputPath)
+			return inputPath, err
+		}
+	}
+
+	// 完整目录逐级检查，并将逐级目录放入缓存
+	parts := strings.Split(inputPath, commonPathSep)
+	oldpath := []string{}
+	if len(parts) > 0 {
+		oldpath = append(oldpath, parts[0])
+
+		realPath = parts[0]
+		if strings.HasSuffix(realPath, ":") {
+			realPath = strings.ToUpper(realPath + commonPathSep)
+		}
+
+		for i, part := range parts {
+			if i == 0 {
+				continue
+			}
+			if part == "" {
+				continue
+			}
+
+			oldpath = append(oldpath, part)
+
+			files, err := os.ReadDir(realPath)
+			if err != nil {
+				fmt.Printf("check dir:%s with error:%v\r\n", realPath, err)
+				// 将结果记录下来
+				putPath(inputPath, inputPath)
+				return inputPath, err
+			}
+
+			for _, file := range files {
+				if strings.EqualFold(file.Name(), part) {
+					realPath = filepath.Join(realPath, file.Name())
+
+					// 将过程中的路径记录下来
+					putPath(strings.Join(oldpath, commonPathSep), FormatFilePath(realPath))
+
+					break
+				}
+			}
+		}
+	}
+
+	// 将结果记录下来
+	realPath = FormatFilePath(realPath)
+	putPath(inputPath, realPath)
+
+	return realPath, nil
+}
+
+func CorrectPathCap(inputPaths []string) ([]string, error) {
+	newpaths := make([]string, 0, len(inputPaths))
+	for _, oldpath := range inputPaths {
+		newpath, err := getWindowsFullRealPath(oldpath)
+		if err == nil {
+			newpaths = append(newpaths, newpath)
+		} else {
+			newpaths = append(newpaths, oldpath)
+		}
+	}
+
+	return newpaths, nil
+}
+
+// ----------------------------------------------------------------------
+func FormatFilePath(f string) string {
+	f = strings.Replace(f, "\\", commonPathSep, -1)
+	f = strings.Replace(f, "//", commonPathSep, -1)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, commonPathSep)
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, commonPathSep)
+	}
+
+	return f
 }

@@ -325,6 +325,10 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorPumpLstatByDir] = envValueTrue
 	}
 
+	if b.config.Works.PumpCorrectCap {
+		requiredEnv[env.KeyExecutorPumpCorrectCap] = envValueTrue
+	}
+
 	if b.config.Works.IOTimeoutSecs > 0 {
 		requiredEnv[env.KeyExecutorIOTimeout] = strconv.Itoa(b.config.Works.IOTimeoutSecs)
 	}
