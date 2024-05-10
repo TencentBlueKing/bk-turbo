@@ -96,6 +96,14 @@ data class TTbsDaySummaryEntity(
     var bgId: Int? = null,
 
     /**
+     * 业务线
+     */
+    @Field("business_line_name")
+    var businessLineName: String? = null,
+    @Field("business_line_id")
+    var businessLineId: Int? = null,
+
+    /**
      * 部门信息
      */
     @Field("dept_name")

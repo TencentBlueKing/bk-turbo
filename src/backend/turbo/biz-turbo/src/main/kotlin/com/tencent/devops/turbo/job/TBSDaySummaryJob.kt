@@ -102,14 +102,18 @@ class TBSDaySummaryJob @Autowired constructor(
                 }
 
                 for (it in summaryList) {
-                    it.projectName = projectVOMap[it.projectId]?.projectName
-                    it.bgName = projectVOMap[it.projectId]?.bgName
-                    it.bgId = projectVOMap[it.projectId]?.bgId?.toInt()
-                    it.deptName = projectVOMap[it.projectId]?.deptName
-                    it.deptId = projectVOMap[it.projectId]?.deptId?.toInt()
-                    it.centerName = projectVOMap[it.projectId]?.centerName
-                    it.centerId = projectVOMap[it.projectId]?.centerId?.toInt()
-                    it.productId = projectVOMap[it.projectId]?.productId
+                    val projectVO = projectVOMap[it.projectId]
+
+                    it.projectName = projectVO?.projectName
+                    it.bgName = projectVO?.bgName
+                    it.bgId = projectVO?.bgId?.toInt()
+                    it.businessLineName = projectVO?.businessLineName
+                    it.businessLineId = projectVO?.businessLineId?.toInt()
+                    it.deptName = projectVO?.deptName
+                    it.deptId = projectVO?.deptId?.toInt()
+                    it.centerName = projectVO?.centerName
+                    it.centerId = projectVO?.centerId?.toInt()
+                    it.productId = projectVO?.productId
                 }
             }
 
