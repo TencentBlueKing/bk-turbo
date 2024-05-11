@@ -40,7 +40,11 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 
 	tb, err := defaultManager.CreateTask(param)
 	if err != nil {
-		blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		if err == engine.ErrorProjectNoFound {
+			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		} else {
+			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		}
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrApplyResourceFailed, Message: err.Error()})
 		return
 	}
@@ -89,7 +93,7 @@ func SendMessage(req *restful.Request, resp *restful.Response) {
 			return
 		}
 		if data, err = defaultManager.SendProjectMessage(param.ProjectID, []byte(param.Extra)); err != nil {
-			blog.Errorf("send message: send project(%s) message to engine failed, url(%s) message(%s): %v",
+			blog.Warnf("send message: send project(%s) message to engine failed, url(%s) message(%s): %v",
 				param.ProjectID, req.Request.URL.String(), param.Extra, err)
 			api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrSendMessageFailed, Message: err.Error()})
 			return

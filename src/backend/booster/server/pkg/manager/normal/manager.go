@@ -311,7 +311,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 
 	pb, egn, err := m.getBasicProject(param.ProjectID)
 	if err != nil {
-		blog.Errorf("manager: try creating task, get project(%s) failed: %v", param.ProjectID, err)
+		blog.Warnf("manager: try creating task, get project(%s) failed: %v", param.ProjectID, err)
 		return nil, err
 	}
 
@@ -417,7 +417,7 @@ func (m *manager) sendProjectMessage(projectID string, data []byte) ([]byte, err
 
 	_, egn, err := m.getBasicProject(projectID)
 	if err != nil {
-		blog.Errorf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
+		blog.Warnf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
 		return nil, err
 	}
 
@@ -535,7 +535,7 @@ func (m *manager) getBasicProject(projectID string) (*engine.ProjectBasic, engin
 		return pb, egn, nil
 	}
 
-	blog.Errorf("manager: get project(%s) no found", projectID)
+	blog.Warnf("manager: get project(%s) no found", projectID)
 	return nil, nil, engine.ErrorProjectNoFound
 }
 

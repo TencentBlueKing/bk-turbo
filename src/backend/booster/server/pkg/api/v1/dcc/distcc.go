@@ -73,7 +73,11 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 		Extra:         string(extraData),
 	})
 	if err != nil {
-		blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		if err == engine.ErrorProjectNoFound {
+			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		} else {
+			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		}
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrApplyResourceFailed, Message: err.Error()})
 		return
 	}
