@@ -161,6 +161,10 @@ func IsPumpCache(env *env.Sandbox) bool {
 	return env.GetEnv(dcEnv.KeyExecutorPumpCache) != ""
 }
 
+func PumpCorrectCap(env *env.Sandbox) bool {
+	return env.GetEnv(dcEnv.KeyExecutorPumpCorrectCap) != ""
+}
+
 func PumpCacheDir(env *env.Sandbox) string {
 	return env.GetEnv(dcEnv.KeyExecutorPumpCacheDir)
 }

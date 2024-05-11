@@ -260,42 +260,42 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 	uniqlines := uniqArr(lines)
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
-	if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
-		// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
-		return commonUtil.GetFileInfo(uniqlines, true, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
-	} else {
-		includes := []*dcFile.Info{}
-		for _, l := range uniqlines {
-			if !filepath.IsAbs(l) {
-				l, _ = filepath.Abs(filepath.Join(workdir, l))
-			}
-			fstat := dcFile.Lstat(l)
-			if fstat.Exist() && !fstat.Basic().IsDir() {
-				if fstat.Basic().Mode()&os.ModeSymlink != 0 {
-					originFile, err := os.Readlink(l)
-					if err == nil {
-						if !filepath.IsAbs(originFile) {
-							originFile, err = filepath.Abs(filepath.Join(filepath.Dir(l), originFile))
-							if err == nil {
-								fstat.LinkTarget = originFile
-								blog.Infof("cc: symlink %s to %s", l, originFile)
-							}
-						} else {
-							fstat.LinkTarget = originFile
-							blog.Infof("cc: symlink %s to %s", l, originFile)
-						}
-					}
-				}
-				includes = append(includes, fstat)
-			} else {
-				blog.Warnf("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
-				// return fail if not existed
-				return nil, fmt.Errorf("%s not existed", dependf)
-			}
-		}
+	// if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
+	// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+	// } else {
+	// 	includes := []*dcFile.Info{}
+	// 	for _, l := range uniqlines {
+	// 		if !filepath.IsAbs(l) {
+	// 			l, _ = filepath.Abs(filepath.Join(workdir, l))
+	// 		}
+	// 		fstat := dcFile.Lstat(l)
+	// 		if fstat.Exist() && !fstat.Basic().IsDir() {
+	// 			if fstat.Basic().Mode()&os.ModeSymlink != 0 {
+	// 				originFile, err := os.Readlink(l)
+	// 				if err == nil {
+	// 					if !filepath.IsAbs(originFile) {
+	// 						originFile, err = filepath.Abs(filepath.Join(filepath.Dir(l), originFile))
+	// 						if err == nil {
+	// 							fstat.LinkTarget = originFile
+	// 							blog.Infof("cc: symlink %s to %s", l, originFile)
+	// 						}
+	// 					} else {
+	// 						fstat.LinkTarget = originFile
+	// 						blog.Infof("cc: symlink %s to %s", l, originFile)
+	// 					}
+	// 				}
+	// 			}
+	// 			includes = append(includes, fstat)
+	// 		} else {
+	// 			blog.Warnf("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
+	// 			// return fail if not existed
+	// 			return nil, fmt.Errorf("%s not existed", dependf)
+	// 		}
+	// 	}
 
-		return includes, nil
-	}
+	// 	return includes, nil
+	// }
 }
 
 func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -310,27 +310,27 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	return nil, nil
 }
 
-func formatFilePath(f string) string {
-	f = strings.Replace(f, "\\", "/", -1)
-	f = strings.Replace(f, "//", "/", -1)
+// func formatFilePath(f string) string {
+// 	f = strings.Replace(f, "\\", "/", -1)
+// 	f = strings.Replace(f, "//", "/", -1)
 
-	// 去掉路径中的..
-	if strings.Contains(f, "..") {
-		p := strings.Split(f, "/")
+// 	// 去掉路径中的..
+// 	if strings.Contains(f, "..") {
+// 		p := strings.Split(f, "/")
 
-		var newPath []string
-		for _, v := range p {
-			if v == ".." {
-				newPath = newPath[:len(newPath)-1]
-			} else {
-				newPath = append(newPath, v)
-			}
-		}
-		f = strings.Join(newPath, "/")
-	}
+// 		var newPath []string
+// 		for _, v := range p {
+// 			if v == ".." {
+// 				newPath = newPath[:len(newPath)-1]
+// 			} else {
+// 				newPath = append(newPath, v)
+// 			}
+// 		}
+// 		f = strings.Join(newPath, "/")
+// 	}
 
-	return f
-}
+// 	return f
+// }
 
 func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	blog.Infof("cc: copy pump head file: %s to: %s", cc.sourcedependfile, cc.pumpHeadFile)
@@ -379,7 +379,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
 				}
 
-				includes = append(includes, formatFilePath(targetf))
+				includes = append(includes, commonUtil.FormatFilePath(targetf))
 			}
 		}
 	}
@@ -391,7 +391,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 		}
 	}
 
@@ -402,7 +402,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 		}
 	}
 
@@ -413,7 +413,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 		}
 	}
 
@@ -960,6 +960,15 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.includeRspFiles = scannedData.includeRspFiles
 	cc.includePaths = scannedData.includePaths
 	cc.includeFiles = scannedData.includeFiles
+
+	// TODO : resolve rsp files recursively
+	if len(cc.includeRspFiles) > 0 {
+		checkedRspFiles := []string{}
+		for _, f := range cc.includeRspFiles {
+			scanRspFilesRecursively(f, cc.sandbox.Dir, &cc.includePaths, &cc.includeFiles, &checkedRspFiles)
+		}
+		cc.includeRspFiles = append(cc.includeRspFiles, checkedRspFiles...)
+	}
 
 	// handle the cross-compile issues.
 	targetArgs := cc.scannedArgs

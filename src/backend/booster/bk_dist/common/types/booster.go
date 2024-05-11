@@ -118,6 +118,7 @@ type BoosterWorks struct {
 	PumpSearchLinkFile   string
 	PumpSearchLinkDir    []string
 	PumpLstatByDir       bool
+	PumpCorrectCap       bool
 
 	ForceLocalList []string
 
