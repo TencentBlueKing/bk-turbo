@@ -47,6 +47,12 @@ type TaskBasicLayer interface {
 	// init task basic, create task basic table in database
 	InitTaskBasic(tb *engine.TaskBasic) error
 
+	//put task basic to cache
+	PutTB(tb *engine.TaskBasic)
+
+	//delete task basic from cache
+	DeleteTB(tb *engine.TaskBasic)
+
 	// update task basic, both database and cache, just update the field implements in task basic
 	UpdateTaskBasic(tb *engine.TaskBasic) error
 
@@ -237,9 +243,23 @@ func (tc *taskBasicLayer) ListTaskBasic(
 	return rl, nil
 }
 
-// InitTaskBasic init a task basic into layer cache and databases.
+// InitTaskBasic create a task basic in databases.
 func (tc *taskBasicLayer) InitTaskBasic(tb *engine.TaskBasic) error {
-	return tc.updateTaskBasic(tb, true)
+	egn, err := tc.GetEngineByTypeName(tb.Client.EngineName)
+	if err != nil {
+		blog.Errorf("layer: try updating task basic(%s), get engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+		return err
+	}
+	err = engine.CreateTaskBasic(egn, tb)
+
+	if err != nil {
+		blog.Errorf("layer: update task basic(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+		return err
+
+	}
+	blog.Infof("layer: success to init task basic(%s) in status(%s) with engine(%s) and queue(%s)",
+		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
+	return nil
 }
 
 // UpdateTaskBasic update a existing task basic into layer cache and databases.
@@ -336,12 +356,16 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) err
 		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
 	return nil
 }
+func (tc *taskBasicLayer) PutTB(tbRaw *engine.TaskBasic) {
+	tb := engine.CopyTaskBasic(tbRaw)
+	tc.putTB(tb)
+}
 
 func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 	tc.tbmLock.Lock()
 	defer tc.tbmLock.Unlock()
 
-	blog.Debugf("layer: get lock and going to putTB(%s) to cache and queue", tb.ID)
+	blog.Debugf("layer: get lock and going to putTB(%s) status(%s) to cache and queue", tb.ID, tb.Status.Status)
 
 	// update metric data of task num
 	// decrease last status num and add current status num, if the status is same as last one, then do nothing
@@ -396,6 +420,17 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 			tb.ID, tb.Status.Status, tb.Client.QueueName, tb.Client.EngineName)
 	}
 	tc.tbm[tb.ID] = tb
+}
+
+func (tc *taskBasicLayer) DeleteTB(tbRaw *engine.TaskBasic) {
+	blog.Debugf("layer: going to deleteTB(%s) status(%s) from cache and queue", tbRaw.ID, tbRaw.Status.Status)
+
+	tb := engine.CopyTaskBasic(tbRaw)
+	if oldTask, ok := tc.tbm[tb.ID]; ok {
+		selfMetric.TaskNumController.Dec(
+			tb.Client.EngineName.String(), oldTask.Client.QueueName, string(oldTask.Status.Status), "")
+	}
+	tc.deleteTB(tb)
 }
 
 // delete task basic from layer, both cache and queue

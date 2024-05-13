@@ -332,11 +332,11 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 
 	// lock project when creating task for controlling concurrency
 	m.layer.LockProject(param.ProjectID)
-	defer m.layer.UnLockProject(param.ProjectID)
 
 	if err = m.invalidConcurrency(pb); err != nil {
 		blog.Errorf("manager: try creating task, check concurrency for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 
@@ -344,6 +344,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	if err != nil {
 		blog.Errorf("manager: try creating task, generate taskID for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 
@@ -379,13 +380,18 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	}
 	if err = tb.Check(); err != nil {
 		blog.Errorf("manager: create task basic(%s) check failed: %v", taskID, err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 	tb.Status.Init()
 	tb.Status.Message = messageTaskInit
 
+	m.layer.PutTB(tb)
+	m.layer.UnLockProject(param.ProjectID)
+
 	if err = m.layer.InitTaskBasic(tb); err != nil {
-		blog.Errorf("manager: create task basic(%s) for project(%s) in engine(%s) failed: %v",
+		m.layer.DeleteTB(tb)
+		blog.Errorf("manager: init task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
 		return nil, err
 	}
