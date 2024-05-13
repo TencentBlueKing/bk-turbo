@@ -375,27 +375,27 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	uniqlines := uniqArr(lines)
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
-	if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
-		// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
-		return commonUtil.GetFileInfo(uniqlines, true, false, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
-	} else {
-		includes := []*dcFile.Info{}
-		for _, l := range uniqlines {
-			if !filepath.IsAbs(l) {
-				l, _ = filepath.Abs(filepath.Join(workdir, l))
-			}
-			fstat := dcFile.Stat(l)
-			if fstat.Exist() && !fstat.Basic().IsDir() {
-				includes = append(includes, fstat)
-			} else {
-				blog.Warnf("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
-				// return fail if not existed
-				return nil, fmt.Errorf("%s not existed", f)
-			}
-		}
+	// if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
+	// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
+	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
+	// } else {
+	// 	includes := []*dcFile.Info{}
+	// 	for _, l := range uniqlines {
+	// 		if !filepath.IsAbs(l) {
+	// 			l, _ = filepath.Abs(filepath.Join(workdir, l))
+	// 		}
+	// 		fstat := dcFile.Stat(l)
+	// 		if fstat.Exist() && !fstat.Basic().IsDir() {
+	// 			includes = append(includes, fstat)
+	// 		} else {
+	// 			blog.Warnf("cl: do not deal include file: %s in file:%s for not existed or is dir", l, f)
+	// 			// return fail if not existed
+	// 			return nil, fmt.Errorf("%s not existed", f)
+	// 		}
+	// 	}
 
-		return includes, nil
-	}
+	// 	return includes, nil
+	// }
 }
 
 func (cl *TaskCL) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -422,27 +422,27 @@ type sourceDependencies struct {
 	Data    sourceDependenciesData `json:"Data"`
 }
 
-func formatFilePath(f string) string {
-	f = strings.Replace(f, "/", "\\", -1)
-	f = strings.Replace(f, "\\\\", "\\", -1)
+// func formatFilePath(f string) string {
+// 	f = strings.Replace(f, "/", "\\", -1)
+// 	f = strings.Replace(f, "\\\\", "\\", -1)
 
-	// 去掉路径中的..
-	if strings.Contains(f, "..") {
-		p := strings.Split(f, "\\")
+// 	// 去掉路径中的..
+// 	if strings.Contains(f, "..") {
+// 		p := strings.Split(f, "\\")
 
-		var newPath []string
-		for _, v := range p {
-			if v == ".." {
-				newPath = newPath[:len(newPath)-1]
-			} else {
-				newPath = append(newPath, v)
-			}
-		}
-		f = strings.Join(newPath, "\\")
-	}
+// 		var newPath []string
+// 		for _, v := range p {
+// 			if v == ".." {
+// 				newPath = newPath[:len(newPath)-1]
+// 			} else {
+// 				newPath = append(newPath, v)
+// 			}
+// 		}
+// 		f = strings.Join(newPath, "\\")
+// 	}
 
-	return f
-}
+// 	return f
+// }
 
 func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	blog.Infof("cl: copy pump head file: %s to: %s", cl.sourcedependfile, cl.pumpHeadFile)
@@ -472,13 +472,13 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 
 			for _, l := range depend.Data.Includes {
 				if !filepath.IsAbs(l) {
 					l, _ = filepath.Abs(filepath.Join(workdir, l))
 				}
-				includes = append(includes, formatFilePath(l))
+				includes = append(includes, commonUtil.FormatFilePath(l))
 			}
 		} else {
 			blog.Warnf("cl: failed to resolve depend file: %s with err:%s", cl.sourcedependfile, err)
@@ -491,7 +491,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 		}
 	}
 
@@ -501,7 +501,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		if !filepath.IsAbs(l) {
 			l, _ = filepath.Abs(filepath.Join(workdir, l))
 		}
-		includes = append(includes, formatFilePath(l))
+		includes = append(includes, commonUtil.FormatFilePath(l))
 	}
 
 	// copy includeRspFiles
@@ -511,7 +511,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 		}
 	}
 
@@ -522,7 +522,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, formatFilePath(l))
+			includes = append(includes, commonUtil.FormatFilePath(l))
 		}
 	}
 
@@ -537,6 +537,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	// 	includes[i] = strings.Replace(includes[i], "/", "\\", -1)
 	// }
 	uniqlines := uniqArr(includes)
+
+	if dcPump.PumpCorrectCap(cl.sandbox.Env) {
+		uniqlines, _ = commonUtil.CorrectPathCap(uniqlines)
+	}
 
 	// TODO : save to cc.pumpHeadFile
 	newdata := strings.Join(uniqlines, sep)

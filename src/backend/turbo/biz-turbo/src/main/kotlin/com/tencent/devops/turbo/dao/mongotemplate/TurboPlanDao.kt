@@ -1,11 +1,13 @@
 package com.tencent.devops.turbo.dao.mongotemplate
 
+import com.mongodb.bulk.BulkWriteResult
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.turbo.model.TTurboPlanEntity
 import com.tencent.devops.turbo.pojo.TurboDaySummaryOverviewModel
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.Pageable
+import org.springframework.data.mongodb.core.BulkOperations
 import org.springframework.data.mongodb.core.FindAndModifyOptions
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.aggregation.Aggregation
@@ -289,5 +291,42 @@ class TurboPlanDao @Autowired constructor(
             query.addCriteria(Criteria.where("created_date").lte(endTime))
         }
         return query
+    }
+
+    /**
+     * 查询项目下指定状态的加速方案
+     */
+    fun findByProjectIdAndOpenStatus(
+        projectId: String,
+        updatedBy: String?,
+        openStatus: Boolean = true
+    ): List<TTurboPlanEntity> {
+        val query = Query()
+        query.addCriteria(Criteria.where("project_id").`is`(projectId).and("open_status").`is`(openStatus))
+
+        updatedBy?.let {
+            query.addCriteria(Criteria.where("updated_by").`is`(updatedBy))
+        }
+        return mongoTemplate.find(query, TTurboPlanEntity::class.java, "t_turbo_plan_entity")
+    }
+
+    /**
+     * 批量更新指定加速方案状态
+     */
+    fun batchUpdateOpenStatus(turboPlanList: List<TTurboPlanEntity>, openStatus: Boolean): BulkWriteResult {
+        val bulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, TTurboPlanEntity::class.java)
+
+        turboPlanList.forEach {
+            val query = Query()
+            query.addCriteria(Criteria.where("_id").`is`(it.id).and("project_id").`is`(it.projectId))
+
+            val update = Update()
+            update.set("open_status", openStatus)
+            update.set("updated_by", SYSTEM_ADMIN)
+            update.set("updated_date", LocalDateTime.now())
+            bulkOps.updateOne(query, update)
+        }
+
+        return bulkOps.execute()
     }
 }

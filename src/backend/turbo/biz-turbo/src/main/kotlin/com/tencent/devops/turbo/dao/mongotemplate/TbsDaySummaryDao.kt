@@ -37,10 +37,10 @@ class TbsDaySummaryDao @Autowired constructor(
         // 过滤方案id
         filterPlanIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("plan_id").nin(filterPlanIdNin) }
         // 过滤项目id
-        filterProjectIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("project_id").nin(filterPlanIdNin) }
+        filterProjectIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("project_id").nin(filterProjectIdNin) }
 
         val match = Aggregation.match(criteria)
-        val sort = Aggregation.sort(Sort.Direction.DESC, "day")
+        val sort = Aggregation.sort(Sort.Direction.DESC, "day", "created_date")
         val group = Aggregation.group("project_id", "engine_code")
             .sum("total_time_with_cpu").`as`("total_time_with_cpu")
             .first("project_id").`as`("project_id")
