@@ -405,8 +405,8 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 		return nil, err
 	}
 
-	if err = m.layer.InitTaskBasic(tb); err != nil {
-		blog.Errorf("manager: init task basic(%s) for project(%s) in engine(%s) failed: %v",
+	if err = m.layer.CreateTaskBasic(tb); err != nil {
+		blog.Errorf("manager: create task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
 		//insert task to db failed, delete task from cache directly
 		m.layer.DeleteTB(tb)
