@@ -47,8 +47,8 @@ type TaskBasicLayer interface {
 	// init task basic, create task basic table in database
 	InitTaskBasic(tb *engine.TaskBasic) error
 
-	//put task basic to cache
-	PutTB(tb *engine.TaskBasic)
+	//insert task basic to cache first time
+	InsertTB(tb *engine.TaskBasic) error
 
 	//delete task basic from cache
 	DeleteTB(tb *engine.TaskBasic)
@@ -356,9 +356,36 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) err
 		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
 	return nil
 }
-func (tc *taskBasicLayer) PutTB(tbRaw *engine.TaskBasic) {
+
+// InsertTB create a new record of init task in cache, do not need to create in queue
+func (tc *taskBasicLayer) InsertTB(tbRaw *engine.TaskBasic) error {
 	tb := engine.CopyTaskBasic(tbRaw)
-	tc.putTB(tb)
+	tc.tbmLock.Lock()
+	defer tc.tbmLock.Unlock()
+	if tb.Status.Status != engine.TaskStatusInit {
+		return fmt.Errorf("taskId %s is not init status,can not insert into cache", tb.ID)
+	}
+	if _, ok := tc.tbm[tb.ID]; ok {
+		return fmt.Errorf("taskId %s already exist in cache", tb.ID)
+	}
+	selfMetric.TaskNumController.Inc(
+		tb.Client.EngineName.String(), tb.Client.QueueName, string(tb.Status.Status), "")
+	tc.tbm[tb.ID] = tb
+	return nil
+}
+
+// DeleteTB delete task from cache and queue if task exsited
+func (tc *taskBasicLayer) DeleteTB(tb *engine.TaskBasic) {
+	blog.Debugf("layer: going to deleteTB(%s) status(%s) from cache and queue", tb.ID, tb.Status.Status)
+	tc.tbmLock.Lock()
+	defer tc.tbmLock.Unlock()
+
+	if oldTask, ok := tc.tbm[tb.ID]; ok {
+		selfMetric.TaskNumController.Dec(
+			tb.Client.EngineName.String(), oldTask.Client.QueueName, string(oldTask.Status.Status), "")
+	}
+	tc.deleteTBFromQueue(tb)
+	delete(tc.tbm, tb.ID)
 }
 
 func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
@@ -420,17 +447,6 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 			tb.ID, tb.Status.Status, tb.Client.QueueName, tb.Client.EngineName)
 	}
 	tc.tbm[tb.ID] = tb
-}
-
-func (tc *taskBasicLayer) DeleteTB(tbRaw *engine.TaskBasic) {
-	blog.Debugf("layer: going to deleteTB(%s) status(%s) from cache and queue", tbRaw.ID, tbRaw.Status.Status)
-
-	tb := engine.CopyTaskBasic(tbRaw)
-	if oldTask, ok := tc.tbm[tb.ID]; ok {
-		selfMetric.TaskNumController.Dec(
-			tb.Client.EngineName.String(), oldTask.Client.QueueName, string(oldTask.Status.Status), "")
-	}
-	tc.deleteTB(tb)
 }
 
 // delete task basic from layer, both cache and queue

@@ -385,14 +385,31 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	}
 	tb.Status.Init()
 	tb.Status.Message = messageTaskInit
-
-	m.layer.PutTB(tb)
+	//creat task to cache, if task exsited, return error
+	if err = m.layer.InsertTB(tb); err != nil {
+		blog.Errorf("manager: create task basic(%s) insert db failed: %v", taskID, err)
+		m.layer.UnLockProject(param.ProjectID)
+		return nil, err
+	}
 	m.layer.UnLockProject(param.ProjectID)
 
-	if err = m.layer.InitTaskBasic(tb); err != nil {
+	ok, err = engine.CheckTaskIDValid(egn, taskID)
+	if !ok {
+		if err == nil {
+			err = fmt.Errorf("task %s is already exsit in db", taskID)
+		}
+		blog.Errorf("manager: check task valid(%s) for project(%s) in engine(%s) failed: %v",
+			taskID, param.ProjectID, pb.EngineName.String(), err)
+		//check task id failed, now task not in db, delete task from cache directly
 		m.layer.DeleteTB(tb)
+		return nil, err
+	}
+
+	if err = m.layer.InitTaskBasic(tb); err != nil {
 		blog.Errorf("manager: init task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
+		//insert task to db failed, delete task from cache directly
+		m.layer.DeleteTB(tb)
 		return nil, err
 	}
 	if err = egn.CreateTaskExtension(tb, []byte(param.Extra)); err != nil {
@@ -625,20 +642,7 @@ func (m *manager) invalidConcurrency(pb *engine.ProjectBasic) error {
 }
 
 func (m *manager) generateTaskID(egn engine.Engine, projectID string) (string, error) {
-	for i := 0; i < 3; i++ {
-		taskID := generateTaskID(egn.Name().String(), projectID)
-
-		ok, err := engine.CheckTaskIDValid(egn, taskID)
-		if err != nil {
-			return "", err
-		}
-
-		if ok {
-			return taskID, nil
-		}
-	}
-
-	return "", types.ErrorGenerateTaskIDFailed
+	return generateTaskID(egn.Name().String(), projectID), nil
 }
 
 func generateTaskID(egnName string, projectID string) string {
