@@ -44,8 +44,14 @@ type TaskBasicLayer interface {
 	// list task basic from cache, return a new pointer
 	ListTaskBasic(released bool, statusList ...engine.TaskStatusType) ([]*engine.TaskBasic, error)
 
-	// init task basic, create task basic table in database
-	InitTaskBasic(tb *engine.TaskBasic) error
+	// create task basic, create task basic table in database
+	CreateTaskBasic(tb *engine.TaskBasic) error
+
+	//insert task basic to cache first time
+	InsertTB(tb *engine.TaskBasic) error
+
+	//delete task basic from cache
+	DeleteTB(tb *engine.TaskBasic)
 
 	// update task basic, both database and cache, just update the field implements in task basic
 	UpdateTaskBasic(tb *engine.TaskBasic) error
@@ -237,9 +243,23 @@ func (tc *taskBasicLayer) ListTaskBasic(
 	return rl, nil
 }
 
-// InitTaskBasic init a task basic into layer cache and databases.
-func (tc *taskBasicLayer) InitTaskBasic(tb *engine.TaskBasic) error {
-	return tc.updateTaskBasic(tb, true)
+// CreateTaskBasic create a task basic in databases.
+func (tc *taskBasicLayer) CreateTaskBasic(tb *engine.TaskBasic) error {
+	egn, err := tc.GetEngineByTypeName(tb.Client.EngineName)
+	if err != nil {
+		blog.Errorf("layer: try updating task basic(%s), get engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+		return err
+	}
+	err = engine.CreateTaskBasic(egn, tb)
+
+	if err != nil {
+		blog.Errorf("layer: update task basic(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+		return err
+
+	}
+	blog.Infof("layer: success to init task basic(%s) in status(%s) with engine(%s) and queue(%s)",
+		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
+	return nil
 }
 
 // UpdateTaskBasic update a existing task basic into layer cache and databases.
@@ -337,11 +357,43 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) err
 	return nil
 }
 
+// InsertTB create a new record of init task in cache, do not need to create in queue
+func (tc *taskBasicLayer) InsertTB(tbRaw *engine.TaskBasic) error {
+	tb := engine.CopyTaskBasic(tbRaw)
+	blog.Infof("layer: going to insertTB(%s) status(%s) to cache", tb.ID, tb.Status.Status)
+	tc.tbmLock.Lock()
+	defer tc.tbmLock.Unlock()
+	if tb.Status.Status != engine.TaskStatusInit {
+		return fmt.Errorf("taskId %s is not init status,can not insert into cache", tb.ID)
+	}
+	if _, ok := tc.tbm[tb.ID]; ok {
+		return fmt.Errorf("taskId %s already exist in cache", tb.ID)
+	}
+	selfMetric.TaskNumController.Inc(
+		tb.Client.EngineName.String(), tb.Client.QueueName, string(tb.Status.Status), "")
+	tc.tbm[tb.ID] = tb
+	return nil
+}
+
+// DeleteTB delete task from cache and queue if task exsited
+func (tc *taskBasicLayer) DeleteTB(tb *engine.TaskBasic) {
+	blog.Infof("layer: going to deleteTB(%s) status(%s) from cache and queue", tb.ID, tb.Status.Status)
+	tc.tbmLock.Lock()
+	defer tc.tbmLock.Unlock()
+
+	if oldTask, ok := tc.tbm[tb.ID]; ok {
+		selfMetric.TaskNumController.Dec(
+			tb.Client.EngineName.String(), oldTask.Client.QueueName, string(oldTask.Status.Status), "")
+	}
+	tc.deleteTBFromQueue(tb)
+	delete(tc.tbm, tb.ID)
+}
+
 func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 	tc.tbmLock.Lock()
 	defer tc.tbmLock.Unlock()
 
-	blog.Debugf("layer: get lock and going to putTB(%s) to cache and queue", tb.ID)
+	blog.Debugf("layer: get lock and going to putTB(%s) status(%s) to cache and queue", tb.ID, tb.Status.Status)
 
 	// update metric data of task num
 	// decrease last status num and add current status num, if the status is same as last one, then do nothing

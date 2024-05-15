@@ -311,7 +311,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 
 	pb, egn, err := m.getBasicProject(param.ProjectID)
 	if err != nil {
-		blog.Errorf("manager: try creating task, get project(%s) failed: %v", param.ProjectID, err)
+		blog.Warnf("manager: try creating task, get project(%s) failed: %v", param.ProjectID, err)
 		return nil, err
 	}
 
@@ -332,11 +332,11 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 
 	// lock project when creating task for controlling concurrency
 	m.layer.LockProject(param.ProjectID)
-	defer m.layer.UnLockProject(param.ProjectID)
 
 	if err = m.invalidConcurrency(pb); err != nil {
 		blog.Errorf("manager: try creating task, check concurrency for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 
@@ -344,6 +344,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	if err != nil {
 		blog.Errorf("manager: try creating task, generate taskID for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 
@@ -379,14 +380,36 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	}
 	if err = tb.Check(); err != nil {
 		blog.Errorf("manager: create task basic(%s) check failed: %v", taskID, err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 	tb.Status.Init()
 	tb.Status.Message = messageTaskInit
+	//creat task to cache, if task exsited, return error
+	if err = m.layer.InsertTB(tb); err != nil {
+		blog.Errorf("manager: create task basic(%s) insert db failed: %v", taskID, err)
+		m.layer.UnLockProject(param.ProjectID)
+		return nil, err
+	}
+	m.layer.UnLockProject(param.ProjectID)
 
-	if err = m.layer.InitTaskBasic(tb); err != nil {
+	ok, err = engine.CheckTaskIDValid(egn, taskID)
+	if !ok {
+		if err == nil {
+			err = fmt.Errorf("task %s is already exsit in db", taskID)
+		}
+		blog.Errorf("manager: check task valid(%s) for project(%s) in engine(%s) failed: %v",
+			taskID, param.ProjectID, pb.EngineName.String(), err)
+		//check task id failed, now task not in db, delete task from cache directly
+		m.layer.DeleteTB(tb)
+		return nil, err
+	}
+
+	if err = m.layer.CreateTaskBasic(tb); err != nil {
 		blog.Errorf("manager: create task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
+		//insert task to db failed, delete task from cache directly
+		m.layer.DeleteTB(tb)
 		return nil, err
 	}
 	if err = egn.CreateTaskExtension(tb, []byte(param.Extra)); err != nil {
@@ -417,7 +440,7 @@ func (m *manager) sendProjectMessage(projectID string, data []byte) ([]byte, err
 
 	_, egn, err := m.getBasicProject(projectID)
 	if err != nil {
-		blog.Errorf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
+		blog.Warnf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
 		return nil, err
 	}
 
@@ -535,7 +558,7 @@ func (m *manager) getBasicProject(projectID string) (*engine.ProjectBasic, engin
 		return pb, egn, nil
 	}
 
-	blog.Errorf("manager: get project(%s) no found", projectID)
+	blog.Warnf("manager: get project(%s) no found", projectID)
 	return nil, nil, engine.ErrorProjectNoFound
 }
 
@@ -619,20 +642,7 @@ func (m *manager) invalidConcurrency(pb *engine.ProjectBasic) error {
 }
 
 func (m *manager) generateTaskID(egn engine.Engine, projectID string) (string, error) {
-	for i := 0; i < 3; i++ {
-		taskID := generateTaskID(egn.Name().String(), projectID)
-
-		ok, err := engine.CheckTaskIDValid(egn, taskID)
-		if err != nil {
-			return "", err
-		}
-
-		if ok {
-			return taskID, nil
-		}
-	}
-
-	return "", types.ErrorGenerateTaskIDFailed
+	return generateTaskID(egn.Name().String(), projectID), nil
 }
 
 func generateTaskID(egnName string, projectID string) string {

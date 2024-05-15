@@ -30,7 +30,7 @@ const (
 	trackerCheckGapTime = 1 * time.Second
 	trackerTrackGapTime = 1 * time.Second
 
-	keeperHealthCheckGapTime  = 10 * time.Second
+	keeperHealthCheckGapTime  = 5 * time.Second
 	keeperFirstStartGraceTime = 1 * time.Minute
 	keeperInitTimeout         = 20 * time.Second
 	keeperStartingTimeout     = 120 * time.Second
