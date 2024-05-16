@@ -186,6 +186,10 @@ func (m *mysql) GetTask(taskID string) (*TableTask, error) {
 		return nil, err
 	}
 
+	if len(tl) < 1 {
+		return nil, engine.ErrorTaskNoFound
+	}
+
 	return tl[0], nil
 }
 
@@ -349,6 +353,10 @@ func (m *mysql) GetProjectInfo(projectID string) (*TableProjectInfo, error) {
 		return nil, err
 	}
 
+	if len(pl) < 1 {
+		return nil, engine.ErrorProjectNoFound
+	}
+
 	return pl[0], nil
 }
 
@@ -491,6 +499,10 @@ func (m *mysql) GetProjectSetting(projectID string) (*TableProjectSetting, error
 		return nil, err
 	}
 
+	if len(pl) < 1 {
+		return nil, engine.ErrorProjectNoFound
+	}
+
 	return pl[0], nil
 }
 
@@ -621,6 +633,10 @@ func (m *mysql) GetWhitelist(key engine.WhiteListKey) (*TableWhitelist, error) {
 		return nil, err
 	}
 
+	if len(wll) < 1 {
+		return nil, engine.ErrorWhitelistNoFound
+	}
+
 	return wll[0], nil
 }
 
@@ -739,6 +755,10 @@ func (m *mysql) GetWorker(version, scene string) (*TableWorker, error) {
 		return nil, err
 	}
 
+	if len(gl) < 1 {
+		return nil, fmt.Errorf("worker no found")
+	}
+
 	return gl[0], nil
 }
 
@@ -846,6 +866,10 @@ func (m *mysql) GetWorkStats(id int) (*TableWorkStats, error) {
 	if err := db.Find(&tl).Error; err != nil {
 		blog.Errorf("engine(%s) mysql list work stats failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
+	}
+
+	if len(tl) < 1 {
+		return nil, fmt.Errorf("work stats no found")
 	}
 
 	return tl[0], nil
