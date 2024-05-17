@@ -263,13 +263,20 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 		}
 	}
 
+	hostlist := []string{}
+	extra := ""
+	if te != nil {
+		hostlist = te.WorkerList()
+		extra = string(te.Dump())
+	}
+
 	return &RespTaskInfo{
 		TaskID:      tb.ID,
 		Status:      tb.Status.Status,
-		HostList:    te.WorkerList(),
+		HostList:    hostlist,
 		QueueNumber: rank,
 		Message:     tb.Status.Message,
-		Extra:       string(te.Dump()),
+		Extra:       extra,
 	}, nil
 }
 

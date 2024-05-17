@@ -221,6 +221,12 @@ func (m *manager) GetTask(taskID string) (*engine.TaskBasic, engine.TaskExtensio
 		return nil, nil, err
 	}
 
+	// 临时对disttask加判断条件，减少数据库操作
+	if tb.Status.BeforeRunning() && tb.Client.EngineName == "disttask" {
+		blog.Infof("manager: get task basic(%s) before starting, do not get exetension", taskID)
+		return tb, nil, nil
+	}
+
 	task, err := egn.GetTaskExtension(taskID)
 	if err != nil {
 		blog.Errorf("manager: try getting task extension, get task(%s) from engine(%s) failed: %v",

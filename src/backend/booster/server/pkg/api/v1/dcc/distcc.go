@@ -310,12 +310,16 @@ func getTaskInfo(taskID string) (*commonTypes.DistccServerInfo, error) {
 		}
 	}
 
-	data, ok := te.CustomData(nil).(distcc.CustomData)
-	if !ok {
-		err = fmt.Errorf("custom data type error")
-		blog.Errorf("get apply param: get task(%s) custom data from engine(%s) failed: %v",
-			taskID, tb.Client.EngineName.String(), err)
-		return nil, err
+	data := distcc.CustomData{}
+	var ok bool
+	if te != nil {
+		data, ok = te.CustomData(nil).(distcc.CustomData)
+		if !ok {
+			err = fmt.Errorf("custom data type error")
+			blog.Errorf("get apply param: get task(%s) custom data from engine(%s) failed: %v",
+				taskID, tb.Client.EngineName.String(), err)
+			return nil, err
+		}
 	}
 
 	message := tb.Status.Message

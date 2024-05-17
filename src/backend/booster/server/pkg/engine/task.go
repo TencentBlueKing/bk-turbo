@@ -343,3 +343,10 @@ func (tbs *TaskBasicStatus) FailWithClientLost() {
 func now() time.Time {
 	return time.Now().Local()
 }
+
+// BeforeStarting check whether before running
+func (tbs *TaskBasicStatus) BeforeRunning() bool {
+	return tbs.Status == TaskStatusInit ||
+		tbs.Status == TaskStatusStaging ||
+		tbs.Status == TaskStatusStarting
+}

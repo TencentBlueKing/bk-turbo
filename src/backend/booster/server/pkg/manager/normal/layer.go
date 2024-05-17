@@ -19,6 +19,10 @@ import (
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 )
 
+const (
+	heartBeatSaveInterval = 20 * time.Second
+)
+
 // TaskBasicLayer or TaskCache maintains the unterminated task snapshot cache from all available engines
 type TaskBasicLayer interface {
 	// recover unterminated task from databases
@@ -286,8 +290,14 @@ func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) error {
 		return err
 	}
 
+	lastHeartBeatTime := tb.Status.LastHeartBeatTime
+	if lastHeartBeatTime.Add(heartBeatSaveInterval).After(time.Now()) {
+		blog.Infof("layer: try updating heartbeat (%s) less than 20 second since last,do nothing", taskID)
+		return nil
+	}
+
 	tb.Status.Beats()
-	return tc.updateTaskBasic(tb, false)
+	return tc.updateHeartbeat(tb)
 }
 
 // GetConcurrency return the current no-terminated number of task basic in layer cache under given projectID.
@@ -353,6 +363,31 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) err
 	tc.putTB(tb)
 
 	blog.Infof("layer: success to update task basic(%s) in status(%s) with engine(%s) and queue(%s)",
+		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
+	return nil
+}
+
+func (tc *taskBasicLayer) updateHeartbeat(tbRaw *engine.TaskBasic) error {
+	blog.Debugf("layer: try to update task heartbeat(%s) in status(%s) with engine(%s) and queue(%s)",
+		tbRaw.ID, tbRaw.Status.Status, tbRaw.Client.EngineName, tbRaw.Client.QueueName)
+
+	tb := engine.CopyTaskBasic(tbRaw)
+	egn, err := tc.GetEngineByTypeName(tb.Client.EngineName)
+	if err != nil {
+		blog.Errorf("layer: try updating task heartbeat(%s), get engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+		return err
+	}
+
+	err = engine.UpdateTaskBasic(egn, tb)
+	if err != nil {
+		blog.Errorf("layer: update task heartbeat(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+		return err
+	}
+
+	// task is un-released, should be in layer cache, waiting for handling
+	tc.putTB(tb)
+
+	blog.Infof("layer: success to update task heartbeat(%s) in status(%s) with engine(%s) and queue(%s)",
 		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
 	return nil
 }
