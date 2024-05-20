@@ -61,7 +61,8 @@ type MySQL interface {
 	DeleteWorker(version, scene string) error
 
 	ListWorkStats(opts commonMySQL.ListOptions) ([]*TableWorkStats, int64, error)
-	GetWorkStats(id int) (*TableWorkStats, error)
+	// GetWorkStats(id int) (*TableWorkStats, error)
+	GetWorkStats(taskID, workID string) (*TableWorkStats, error)
 	PutWorkStats(stats *TableWorkStats) error
 	UpdateWorkStats(id int, stats map[string]interface{}) error
 	DeleteWorkStats(id int) error
@@ -78,7 +79,8 @@ func NewMySQL(conf engine.MySQLConf) (MySQL, error) {
 
 	blog.Info("get a new engine(%s) mysql: %s, db: %s, user: %s",
 		EngineName, conf.MySQLStorage, conf.MySQLDatabase, conf.MySQLUser)
-	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local",
+	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local"+
+		"&timeout=30s&readTimeout=30s&writeTimeout=30s",
 		conf.MySQLUser, conf.MySQLPwd, conf.MySQLStorage, conf.MySQLDatabase, conf.Charset)
 	db, err := gorm.Open("mysql", source)
 	if err != nil {
@@ -837,13 +839,15 @@ func (m *mysql) ListWorkStats(opts commonMySQL.ListOptions) ([]*TableWorkStats, 
 }
 
 // GetWorkStats get work stats.
-func (m *mysql) GetWorkStats(id int) (*TableWorkStats, error) {
+func (m *mysql) GetWorkStats(taskID, workID string) (*TableWorkStats, error) {
 	defer timeMetricRecord("get_work_stats")()
 	defer logSlowFunc(time.Now().Unix(), "GetWorkStats", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
-	opts.Equal("id", id)
+	// opts.Equal("id", id)
+	opts.Equal("task_id", taskID)
+	opts.Equal("work_id", workID)
 
 	// tl, _, err := m.ListWorkStats(opts)
 	// if err != nil {
@@ -869,7 +873,8 @@ func (m *mysql) GetWorkStats(id int) (*TableWorkStats, error) {
 	}
 
 	if len(tl) < 1 {
-		return nil, fmt.Errorf("work stats no found")
+		// do not return error, same as ListWorkStats
+		return nil, nil
 	}
 
 	return tl[0], nil
