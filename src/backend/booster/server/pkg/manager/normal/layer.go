@@ -274,8 +274,9 @@ func (tc *taskBasicLayer) UpdateTaskBasic(tb *engine.TaskBasic) error {
 // UpdateHeartbeat update a new heartbeat to a task basic with given taskID.
 // Heartbeat info will be updated into layer cache and databases.
 func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) error {
-	tc.LockTask(taskID, "UpdateHeartbeat_of_taskBasicLayer")
-	defer tc.UnLockTask(taskID)
+	// do not lock for heart beat, It's okay even if it gets overwritten.
+	// tc.LockTask(taskID, "UpdateHeartbeat_of_taskBasicLayer")
+	// defer tc.UnLockTask(taskID)
 
 	tb, err := tc.getTaskBasic(taskID)
 	if err != nil {
@@ -378,7 +379,7 @@ func (tc *taskBasicLayer) updateHeartbeat(tbRaw *engine.TaskBasic) error {
 		return err
 	}
 
-	err = engine.UpdateTaskBasic(egn, tb)
+	err = engine.UpdateHeartBeat(egn, tb)
 	if err != nil {
 		blog.Errorf("layer: update task heartbeat(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
 		return err
