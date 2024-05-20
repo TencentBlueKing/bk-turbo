@@ -81,7 +81,8 @@ func NewMySQL(conf engine.MySQLConf) (MySQL, error) {
 
 	blog.Info("get a new engine(%s) mysql: %s, db: %s, user: %s",
 		EngineName, conf.MySQLStorage, conf.MySQLDatabase, conf.MySQLUser)
-	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local",
+	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local"+
+		"&timeout=30s&readTimeout=30s&writeTimeout=30s",
 		conf.MySQLUser, conf.MySQLPwd, conf.MySQLStorage, conf.MySQLDatabase, conf.Charset)
 	db, err := gorm.Open("mysql", source)
 	if err != nil {

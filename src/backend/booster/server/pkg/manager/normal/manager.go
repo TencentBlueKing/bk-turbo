@@ -14,6 +14,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -440,14 +441,51 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	return tb, nil
 }
 
+func tryGetTaskID(data []byte) string {
+	re := regexp.MustCompile(`"task_id":"([^"]+)"`)
+	matches1 := re.FindStringSubmatch(string(data))
+	if len(matches1) > 1 {
+		return matches1[1]
+	}
+
+	return ""
+}
+
+func (m *manager) tryGetEgnFromMessage(data []byte) (engine.Engine, error) {
+	taskID := tryGetTaskID(data)
+	if taskID == "" {
+		blog.Infof("manager: failed to get taskid(%s) from message data[%s]", taskID, data)
+		return nil, nil
+	}
+	blog.Infof("manager: succeed to get taskid(%s) from message data", taskID)
+
+	tb, err := m.getTaskBasic(taskID)
+	if err != nil {
+		blog.Infof("manager: failed to get tb(%s) from message data with err:%v", taskID, err)
+		return nil, err
+	}
+
+	egn, err := m.layer.GetEngineByTypeName(tb.Client.EngineName)
+	if err != nil {
+		blog.Infof("manager: failed to get egn(%s) from message data with err:%v", taskID, err)
+		return nil, err
+	}
+
+	return egn, err
+}
+
 func (m *manager) sendProjectMessage(projectID string, data []byte) ([]byte, error) {
 	m.layer.LockProject(projectID)
 	defer m.layer.UnLockProject(projectID)
 
-	_, egn, err := m.getBasicProject(projectID)
-	if err != nil {
-		blog.Warnf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
-		return nil, err
+	// TODO : 对统计上报特殊处理下，尽量减少数据库查询
+	egn, err := m.tryGetEgnFromMessage(data)
+	if egn == nil {
+		_, egn, err = m.getBasicProject(projectID)
+		if err != nil {
+			blog.Warnf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
+			return nil, err
+		}
 	}
 
 	var result []byte
