@@ -306,7 +306,7 @@ func (m *manager) recover() error {
 func (m *manager) getTaskBasic(taskID string) (*engine.TaskBasic, error) {
 	tb, err := m.layer.GetTaskBasic(taskID)
 	if err != nil {
-		blog.Errorf("manager: get task basic(%s) failed: %v", taskID, err)
+		//blog.Errorf("manager: get task basic(%s) failed: %v", taskID, err)
 		return nil, err
 	}
 
@@ -341,7 +341,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	m.layer.LockProject(param.ProjectID)
 
 	if err = m.invalidConcurrency(pb); err != nil {
-		blog.Errorf("manager: try creating task, check concurrency for project(%s) in engine(%s) failed: %v",
+		blog.Warnf("manager: try creating task, check concurrency for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
 		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
@@ -676,8 +676,6 @@ func (m *manager) invalidConcurrency(pb *engine.ProjectBasic) error {
 	}
 
 	if currentCCY >= ccy {
-		blog.Errorf("manager: project(%s) has current concurrency(%d) and is over limit(%d)",
-			pb.ProjectID, currentCCY, ccy)
 		return fmt.Errorf("%v for [project_id: %s] current(%d) over limit(%d)",
 			types.ErrorConcurrencyLimit, pb.ProjectID, currentCCY, ccy)
 	}
