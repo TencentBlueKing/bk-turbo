@@ -204,6 +204,13 @@ func UpdateTaskBasic(egn Engine, tb *TaskBasic) error {
 	return egn.GetTaskBasicTable().Where("task_id = ?", tb.ID).Updates(data).Error
 }
 
+// UpdateHeartBeat update task heart beat into database
+func UpdateHeartBeat(egn Engine, tb *TaskBasic) error {
+	defer timeMetricRecord(egn, "update_task_heatbeat")()
+
+	return egn.GetTaskBasicTable().Where("task_id = ?", tb.ID).UpdateColumn("update_at", time.Now()).Error
+}
+
 // UpdateProjectInfoBasic update the project info basic with delta data.
 func UpdateProjectInfoBasic(egn Engine, projectID string, delta DeltaProjectInfoBasic) error {
 	defer timeMetricRecord(egn, "update_project_info_basic")()
