@@ -208,7 +208,7 @@ func UpdateTaskBasic(egn Engine, tb *TaskBasic) error {
 func UpdateHeartBeat(egn Engine, tb *TaskBasic) error {
 	defer timeMetricRecord(egn, "update_task_heatbeat")()
 
-	return egn.GetTaskBasicTable().Where("task_id = ?", tb.ID).UpdateColumn("update_at", time.Now()).Error
+	return egn.GetTaskBasicTable().Where("task_id = ?", tb.ID).Update("last_heartbeat_time", time.Now().Unix()).Error
 }
 
 // UpdateProjectInfoBasic update the project info basic with delta data.
