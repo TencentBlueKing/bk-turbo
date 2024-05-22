@@ -69,11 +69,11 @@ func (k *keeper) Run(ctx context.Context) error {
 }
 
 func (k *keeper) start() {
+	k.startTime = time.Now()
+
 	blog.Infof("keeper start and sleep for status recover in grace time(%s)", keeperFirstStartGraceTime.String())
 	time.Sleep(keeperFirstStartGraceTime)
 	blog.Infof("keeper start working")
-
-	k.startTime = time.Now()
 
 	timeTicker := time.NewTicker(keeperHealthCheckGapTime)
 	defer timeTicker.Stop()
