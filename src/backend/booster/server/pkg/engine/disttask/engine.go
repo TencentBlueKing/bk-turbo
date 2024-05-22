@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -1300,21 +1301,36 @@ func (de *disttaskEngine) sendProjectMessage(projectID string, extra []byte) ([]
 }
 
 // EmptyJobs define
-var EmptyJobs = compress.ToBase64String([]byte("[]"))
+var (
+	EmptyJobs = compress.ToBase64String([]byte("[]"))
+
+	statIDLock sync.RWMutex
+	statID     map[string]int = make(map[string]int, 10000)
+)
+
+func getStatKey(taskid, workid string) string {
+	return fmt.Sprintf("%s|%s", taskid, workid)
+}
+
+func getStatID(taskid, workid string) (int, bool) {
+	statIDLock.RLock()
+	statid, ok := statID[getStatKey(taskid, workid)]
+	statIDLock.RUnlock()
+
+	return statid, ok
+}
+
+func putStatID(taskid, workid string, statid int) {
+	statIDLock.Lock()
+	statID[getStatKey(taskid, workid)] = statid
+	statIDLock.Unlock()
+
+	return
+}
+
+// TODO : statID 暂时没有清理机制，和layer里的task锁，以及资源锁等一样
 
 func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTaskStats) ([]byte, error) {
-	// opts := commonMySQL.NewListOptions()
-	// opts.Equal("task_id", stats.TaskID)
-	// opts.Equal("work_id", stats.WorkID)
-	// opts.Limit(1)
-	// l, _, err := de.mysql.ListWorkStats(opts)
-	l, err := de.mysql.GetWorkStats(stats.TaskID, stats.WorkID)
-	if err != nil {
-		blog.Errorf("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
-			"get work stats failed: %v", EngineName, projectID, stats.TaskID, stats.WorkID, err)
-		return nil, err
-	}
-
 	data := &TableWorkStats{
 		ProjectID:        projectID,
 		TaskID:           stats.TaskID,
@@ -1332,20 +1348,31 @@ func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTa
 		JobStats:         stats.Jobs,
 	}
 
-	// if work stats exists, just overwrite it.
-	// if len(l) != 0 {
-	if l != nil {
-		// data.ID = l[0].ID
-		data.ID = l.ID
-		// if l[0].JobStats != EmptyJobs {
-		if l.JobStats != EmptyJobs {
-			blog.Infof("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
-				"but the job stats already set, skip put", EngineName, projectID, stats.TaskID, stats.WorkID)
-			return nil, nil
+	statid, ok := getStatID(stats.TaskID, stats.WorkID)
+	if ok && statid > 0 {
+		data.ID = statid
+	} else {
+		l, err := de.mysql.GetWorkStats(stats.TaskID, stats.WorkID)
+		if err != nil {
+			blog.Errorf("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
+				"get work stats failed: %v", EngineName, projectID, stats.TaskID, stats.WorkID, err)
+			return nil, err
+		}
+
+		if l != nil {
+			if l.ID > 0 {
+				putStatID(stats.TaskID, stats.WorkID, l.ID)
+			}
+			data.ID = l.ID
+			if l.JobStats != EmptyJobs {
+				blog.Infof("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
+					"but the job stats already set, skip put", EngineName, projectID, stats.TaskID, stats.WorkID)
+				return nil, nil
+			}
 		}
 	}
 
-	if err = de.mysql.PutWorkStats(data); err != nil {
+	if err := de.mysql.PutWorkStats(data); err != nil {
 		blog.Errorf("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
 			"put work stats failed: %v", EngineName, projectID, stats.TaskID, stats.WorkID, err)
 		return nil, err

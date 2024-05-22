@@ -885,9 +885,20 @@ func (m *mysql) PutWorkStats(stats *TableWorkStats) error {
 	defer timeMetricRecord("put_work_stats")()
 	defer logSlowFunc(time.Now().Unix(), "PutWorkStats", 2)
 
-	if err := m.db.Model(&TableWorkStats{}).Save(stats).Error; err != nil {
-		blog.Errorf("engine(%s) mysql put work stats(%d) failed: %v", EngineName, stats.ID, err)
-		return err
+	if stats.ID > 0 {
+		// 增加更新条件，只有新的JobStats 长度不小于老的JobStats长度才更新
+		newstatlen := len(stats.JobStats)
+		if err := m.db.Model(&TableWorkStats{}).Where("id = ?", stats.ID).
+			Where("? >= CHAR_LENGTH(job_stats)", newstatlen).
+			Updates(stats).Error; err != nil {
+			blog.Errorf("engine(%s) mysql put work stats(%d)(%+v) failed: %v", EngineName, stats.ID, stats, err)
+			return err
+		}
+	} else {
+		if err := m.db.Model(&TableWorkStats{}).Save(stats).Error; err != nil {
+			blog.Errorf("engine(%s) mysql put work stats(%s) failed: %v", EngineName, stats.TaskID, err)
+			return err
+		}
 	}
 	return nil
 }
