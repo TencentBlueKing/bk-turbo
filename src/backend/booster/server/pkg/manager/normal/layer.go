@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	heartBeatSaveInterval = 20 * time.Second
+// heartBeatSaveInterval = 20 * time.Second
 )
 
 // TaskBasicLayer or TaskCache maintains the unterminated task snapshot cache from all available engines
@@ -60,7 +60,7 @@ type TaskBasicLayer interface {
 	// update task basic, both database and cache, just update the field implements in task basic
 	UpdateTaskBasic(tb *engine.TaskBasic) error
 
-	// update heartbeat to task basic, both database and cache
+	// update heartbeat to task basic
 	UpdateHeartbeat(taskID string) error
 
 	// get current unterminated task number of the specific projectID
@@ -272,32 +272,8 @@ func (tc *taskBasicLayer) UpdateTaskBasic(tb *engine.TaskBasic) error {
 }
 
 // UpdateHeartbeat update a new heartbeat to a task basic with given taskID.
-// Heartbeat info will be updated into layer cache and databases.
 func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) error {
-	tc.LockTask(taskID, "UpdateHeartbeat_of_taskBasicLayer")
-	defer tc.UnLockTask(taskID)
-
-	tb, err := tc.getTaskBasic(taskID)
-	if err != nil {
-		blog.Warnf("layer: try updating heartbeat, get task basic(%s) failed: %v", taskID, err)
-		return err
-	}
-
-	// already terminated, do not accept heartbeat
-	if tb.Status.Status.Terminated() {
-		err = fmt.Errorf("task(%s) is already terminated", taskID)
-		blog.Warnf("layer: try updating heartbeat failed: %v", err)
-		return err
-	}
-
-	lastHeartBeatTime := tb.Status.LastHeartBeatTime
-	if lastHeartBeatTime.Add(heartBeatSaveInterval).After(time.Now()) {
-		blog.Infof("layer: try updating heartbeat (%s) less than 20 second since last,do nothing", taskID)
-		return nil
-	}
-
-	tb.Status.Beats()
-	return tc.updateHeartbeat(tb)
+	return tc.updateHeartbeat(taskID)
 }
 
 // GetConcurrency return the current no-terminated number of task basic in layer cache under given projectID.
@@ -367,28 +343,19 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) err
 	return nil
 }
 
-func (tc *taskBasicLayer) updateHeartbeat(tbRaw *engine.TaskBasic) error {
-	blog.Debugf("layer: try to update task heartbeat(%s) in status(%s) with engine(%s) and queue(%s)",
-		tbRaw.ID, tbRaw.Status.Status, tbRaw.Client.EngineName, tbRaw.Client.QueueName)
+func (tc *taskBasicLayer) updateHeartbeat(taskID string) error {
+	blog.Infof("layer: ready update heart beat for task(%s)", taskID)
 
-	tb := engine.CopyTaskBasic(tbRaw)
-	egn, err := tc.GetEngineByTypeName(tb.Client.EngineName)
-	if err != nil {
-		blog.Errorf("layer: try updating task heartbeat(%s), get engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
-		return err
+	tc.tbmLock.Lock()
+	defer tc.tbmLock.Unlock()
+
+	tb, ok := tc.tbm[taskID]
+	if !ok {
+		blog.Infof("layer: task(%s) not in layer when update heart beat", taskID)
+		return engine.ErrorUnterminatedTaskNoFound
 	}
 
-	err = engine.UpdateTaskBasic(egn, tb)
-	if err != nil {
-		blog.Errorf("layer: update task heartbeat(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
-		return err
-	}
-
-	// task is un-released, should be in layer cache, waiting for handling
-	tc.putTB(tb)
-
-	blog.Infof("layer: success to update task heartbeat(%s) in status(%s) with engine(%s) and queue(%s)",
-		tb.ID, tb.Status.Status, tb.Client.EngineName, tb.Client.QueueName)
+	tb.Status.Beats()
 	return nil
 }
 

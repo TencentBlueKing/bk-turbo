@@ -21,6 +21,10 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric/controllers"
 )
 
+const (
+	waitHeartBeatRecoverInterval = 180 * time.Second
+)
+
 // Keeper monitor the tasks since creating, until terminated status(failed or finish). Include following checks:
 // taskHealthCheck:
 //    - if the client heartbeat is timeout, the task will be deemed to be lost, then release it as failed.
@@ -52,6 +56,9 @@ type keeper struct {
 	layer     TaskBasicLayer
 	conf      commonEngineConfig
 	debugMode bool
+
+	startTime          time.Time
+	heartBeatRecovered bool
 }
 
 // Run the keeper handler with context.
@@ -62,6 +69,8 @@ func (k *keeper) Run(ctx context.Context) error {
 }
 
 func (k *keeper) start() {
+	k.startTime = time.Now()
+
 	blog.Infof("keeper start and sleep for status recover in grace time(%s)", keeperFirstStartGraceTime.String())
 	time.Sleep(keeperFirstStartGraceTime)
 	blog.Infof("keeper start working")
@@ -108,6 +117,20 @@ func (k *keeper) check() {
 	wg.Wait()
 }
 
+func (k *keeper) isHeartBeatRecovered() bool {
+	if k.heartBeatRecovered {
+		return true
+	}
+
+	if k.startTime.Add(waitHeartBeatRecoverInterval).Before(time.Now()) {
+		k.heartBeatRecovered = true
+		return true
+	}
+
+	blog.Infof("keeper: start time:%v now:%v,wait heart beat recover...", k.startTime, time.Now())
+	return false
+}
+
 func (k *keeper) checkTaskBasic(taskID string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -136,22 +159,25 @@ func (k *keeper) checkTaskBasic(taskID string, wg *sync.WaitGroup) {
 		return
 	}
 
-	// timeout after last received heartbeat
-	heartBeatTimeout := time.Duration(egn.GetPreferences().HeartbeatTimeoutTickTimes) * clientHeartBeatTickTime
-	if tb.Status.LastHeartBeatTime.Add(heartBeatTimeout).Before(nowTime) {
-		blog.Errorf("keeper: check and find task(%s) heartbeat timeout(over %s) "+
-			"since last beat(%s) from ip(%s), will be canceled",
-			tb.ID, heartBeatTimeout.String(), tb.Status.LastHeartBeatTime.String(), tb.Client.ClientIP)
+	// TODO : 刚启动时，等待心跳恢复
+	if k.isHeartBeatRecovered() {
+		// timeout after last received heartbeat
+		heartBeatTimeout := time.Duration(egn.GetPreferences().HeartbeatTimeoutTickTimes) * clientHeartBeatTickTime
+		if tb.Status.LastHeartBeatTime.Add(heartBeatTimeout).Before(nowTime) {
+			blog.Errorf("keeper: check and find task(%s) heartbeat timeout(over %s) "+
+				"since last beat(%s) from ip(%s), will be canceled",
+				tb.ID, heartBeatTimeout.String(), tb.Status.LastHeartBeatTime.String(), tb.Client.ClientIP)
 
-		if tb.Status.Status == engine.TaskStatusRunning {
-			tb.Status.End()
+			if tb.Status.Status == engine.TaskStatusRunning {
+				tb.Status.End()
+			}
+			tb.Status.FailWithClientLost()
+			tb.Status.Message = messageHeartBeatTimeoutAndLost
+			k.updateTaskBasic(tb)
+			selfMetric.CheckFailController.Inc(
+				tb.Client.EngineName.String(), tb.Client.QueueName, controllers.CheckFailHeartbeatTimeout)
+			return
 		}
-		tb.Status.FailWithClientLost()
-		tb.Status.Message = messageHeartBeatTimeoutAndLost
-		k.updateTaskBasic(tb)
-		selfMetric.CheckFailController.Inc(
-			tb.Client.EngineName.String(), tb.Client.QueueName, controllers.CheckFailHeartbeatTimeout)
-		return
 	}
 
 	switch tb.Status.Status {
