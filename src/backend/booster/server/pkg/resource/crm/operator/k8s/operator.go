@@ -509,20 +509,26 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 	availableEndpoint := make([]*op.Endpoint, 0, 100)
 	for _, pod := range podList.Items {
 		if pod.Status.Phase != coreV1.PodRunning {
+			if info.Status != op.ServiceStatusStaging {
+				blog.Warnf("k8s-operator: pod(%s) of %s in wrong status(%s):[%+v]", pod.Name, name, pod.Status.Phase, pod)
+			}
 			if (info.Status != op.ServiceStatusStaging) && (pod.Status.Phase == coreV1.PodPending) {
-				blog.Warnf("k8s-operator: there is still a pod(%s) in status(%s), "+
-					"server status will be set to staging by force", pod.Name, pod.Status.Phase)
+				blog.Warnf("k8s-operator: there is still a pod(%s) of %s in status(%s), "+
+					"server status will be set to staging by force", pod.Name, name, pod.Status.Phase)
 				info.Status = op.ServiceStatusStaging
 			}
 			continue
 		}
 
 		if len(pod.Status.ContainerStatuses) <= 0 || len(pod.Spec.Containers) <= 0 {
-			blog.Warnf("k8s-operator: found exception pod:[%+v]", pod)
+			blog.Warnf("k8s-operator: found exception pod of %s:[%+v]", name, pod)
 			continue
 		}
 
 		ports := make(map[string]int)
+		if len(pod.Spec.Containers[0].Ports) == 0 {
+			blog.Warnf("k8s-operator: found empty port info in pod %s of %s:[%+v]", pod.Name, name, pod)
+		}
 		for _, port := range pod.Spec.Containers[0].Ports {
 			ports[k8sPort2EnginePort(port.Name)] = int(port.HostPort)
 		}
@@ -532,9 +538,12 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 			Ports: ports,
 		})
 	}
-
+	if len(podList.Items) == 0 && info.Status != op.ServiceStatusStaging {
+		blog.Warnf("k8s-operator: found pods of %s num(%d) in status %s", name, len(podList.Items), info.Status)
+	}
 	// if taskgroup are not all built, just means that the application is staging yet.
 	if (info.RequestInstances < len(podList.Items)) && info.Status != op.ServiceStatusStaging {
+		blog.Warnf("k8s-operator: found RequestInstances(%d) less than pods num(%d) of %s in status %s", info.RequestInstances, len(podList.Items), name, info.Status)
 		info.Status = op.ServiceStatusStaging
 	}
 
