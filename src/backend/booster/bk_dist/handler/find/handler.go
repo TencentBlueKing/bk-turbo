@@ -265,6 +265,11 @@ func (c *Finder) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (c *Finder) NeedRetryOnRemoteFail(command []string) bool {
+	return false
+}
+
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (c *Finder) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 	return nil, nil
