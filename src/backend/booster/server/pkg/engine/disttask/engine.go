@@ -1362,6 +1362,8 @@ func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTa
 		if l != nil {
 			if l.ID > 0 {
 				putStatID(stats.TaskID, stats.WorkID, l.ID)
+			} else {
+				blog.Warnf("engine(%s) got statid(%d) with task(%s) data(%+v)", EngineName, l.ID, stats.TaskID, *l)
 			}
 			data.ID = l.ID
 			if l.JobStats != EmptyJobs {
