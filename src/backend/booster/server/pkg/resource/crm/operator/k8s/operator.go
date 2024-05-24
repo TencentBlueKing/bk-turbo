@@ -538,12 +538,9 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 			Ports: ports,
 		})
 	}
-	if len(podList.Items) == 0 && info.Status != op.ServiceStatusStaging {
-		blog.Warnf("k8s-operator: found pods of %s num(%d) in status %s", name, len(podList.Items), info.Status)
-	}
 	// if taskgroup are not all built, just means that the application is staging yet.
 	if (info.RequestInstances > len(podList.Items)) && info.Status != op.ServiceStatusStaging {
-		blog.Warnf("k8s-operator: found RequestInstances(%d) less than pods num(%d) of %s in status %s", info.RequestInstances, len(podList.Items), name, info.Status)
+		blog.Warnf("k8s-operator: found RequestInstances(%d) greater than pods num(%d) of %s in status %s", info.RequestInstances, len(podList.Items), name, info.Status)
 		info.Status = op.ServiceStatusStaging
 	}
 
