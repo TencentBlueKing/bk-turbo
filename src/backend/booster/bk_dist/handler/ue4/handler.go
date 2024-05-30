@@ -259,6 +259,15 @@ func (u *UE4) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (u *UE4) NeedRetryOnRemoteFail(command []string) bool {
+	if u.innerhandler != nil {
+		return u.innerhandler.NeedRetryOnRemoteFail(command)
+	}
+
+	return false
+}
+
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (u *UE4) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 	if u.innerhandler != nil {

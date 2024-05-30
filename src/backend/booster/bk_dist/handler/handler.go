@@ -64,6 +64,9 @@ type Handler interface {
 	// RemoteRetryTimes will return the remote retry times
 	RemoteRetryTimes() int
 
+	// NeedRetryOnRemoteFail check whether need retry on remote fail
+	NeedRetryOnRemoteFail(command []string) bool
+
 	// OnRemoteFail give chance to try other way if failed to remote execute
 	OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error)
 

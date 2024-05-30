@@ -212,6 +212,11 @@ func (tc *TextureCompressor) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (tc *TextureCompressor) NeedRetryOnRemoteFail(command []string) bool {
+	return false
+}
+
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (tc *TextureCompressor) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 	return nil, nil

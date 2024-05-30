@@ -164,6 +164,11 @@ func (cc *TaskCC) RemoteRetryTimes() int {
 	return 1
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (cc *TaskCC) NeedRetryOnRemoteFail(command []string) bool {
+	return cc.pumpremote
+}
+
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute
 func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("cc: start OnRemoteFail for: %v", command)
