@@ -14,12 +14,15 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -248,4 +251,151 @@ func LinkResultFile(env *env.Sandbox) string {
 // 是否支持通过搜索目录来获取文件的stat信息
 func SupportPumpLstatByDir(env *env.Sandbox) bool {
 	return env.GetEnv(dcEnv.KeyExecutorPumpLstatByDir) != "" && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
+}
+
+// -----------------------------------------------------------------------
+
+var (
+	pchDependLock       sync.RWMutex
+	pchDependResultFile string
+	pchDepend           map[string]*[]string = make(map[string]*[]string, 1000)
+)
+
+func init() {
+	pchDependResultFile = ""
+	pchDependResultFile = getPchDependResultFile()
+	if pchDependResultFile != "" {
+		resolvePchDepend(pchDependResultFile)
+		return
+	}
+
+	// blog.Warnf("pump: not found pch depend result file")
+}
+
+func getPchDependResultFile() string {
+	pumpdir := env.GetEnv(dcEnv.KeyExecutorPumpCacheDir)
+	if pumpdir == "" {
+		pumpdir = dcUtil.GetPumpCacheDir()
+	}
+
+	if pumpdir != "" {
+		return filepath.Join(pumpdir, fmt.Sprintf("pch_depends.txt"))
+	}
+
+	return ""
+}
+
+// 保存预编译头文件之间的依赖关系
+func savePchDepend(data map[string]*[]string, f string) error {
+	temparr := make([]string, 0, len(data))
+	for k, v := range data {
+		for _, v1 := range *v {
+			temparr = append(temparr, fmt.Sprintf("%s->%s", k, v1))
+		}
+	}
+
+	newdata := strings.Join(temparr, "\n")
+	return os.WriteFile(f, []byte(newdata), os.ModePerm)
+}
+
+// a.pch->b.pch means a depend b
+// a.pch->c.pch means a depend c too
+func resolvePchDepend(f string) error {
+	data, err := os.ReadFile(f)
+	if err != nil {
+		// blog.Warnf("pump: read pch depend file %s with err:%v", f, err)
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, l := range lines {
+		l = strings.Trim(l, " \r\n")
+		fields := strings.Split(l, "->")
+		if len(fields) == 2 {
+			// blog.Infof("pump: resolve get pch depend %s->%s", fields[0], fields[1])
+			arr, ok := pchDepend[fields[0]]
+			if !ok {
+				arr := []string{fields[1]}
+				pchDepend[fields[0]] = &arr
+			} else {
+				*arr = append(*arr, fields[1])
+			}
+		}
+	}
+
+	return nil
+}
+
+func SetPchDepend(f string, depends []string) {
+	pchDependLock.Lock()
+	defer pchDependLock.Unlock()
+
+	changed := false
+
+	arr, ok := pchDepend[f]
+	if !ok {
+		changed = true
+		pchDepend[f] = &depends
+	} else {
+		for _, v := range depends {
+			found := false
+			for _, v1 := range *arr {
+				if v == v1 {
+					found = true
+					break
+				}
+			}
+			if !found {
+				changed = true
+				*arr = append(*arr, v)
+			}
+		}
+	}
+
+	if changed && pchDependResultFile != "" {
+		savePchDepend(pchDepend, pchDependResultFile)
+	}
+}
+
+// 返回依赖列表，需要注意有嵌套关系
+func GetPchDepend(f string) []string {
+	pchDependLock.RLock()
+	defer pchDependLock.RUnlock()
+
+	arr, ok := pchDepend[f]
+	if ok {
+		result := make([]string, len(*arr))
+		copy(result, *arr)
+		for _, v := range *arr {
+			getPchDepend(v, &result)
+		}
+
+		blog.Infof("pump: got pch depend %s->%v", f, result)
+		return result
+	}
+
+	return nil
+}
+
+// 递归获取所有依赖列表
+func getPchDepend(f string, result *[]string) {
+	arr, ok := pchDepend[f]
+	if ok {
+		for _, v := range *arr {
+			newfile := true
+			for _, v1 := range *result {
+				if v == v1 {
+					newfile = true
+					break
+				}
+			}
+
+			if newfile {
+				*result = append(*result, v)
+				getPchDepend(v, result)
+			}
+		}
+	}
+
+	return
 }
