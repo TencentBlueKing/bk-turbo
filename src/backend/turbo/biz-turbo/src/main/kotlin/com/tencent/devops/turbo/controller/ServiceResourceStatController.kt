@@ -31,7 +31,7 @@ class ServiceResourceStatController @Autowired constructor(
     override fun triggerAutoUpload(
         userId: String,
         projectId: String,
-        summary: ResourceCostSummary,
+        month: String,
         startDate: String?,
         endDate: String?
     ): Response<Boolean> {
@@ -39,7 +39,7 @@ class ServiceResourceStatController @Autowired constructor(
         if (!turboAuthService.getAuthResult(projectId, userId)) {
             throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
         }
-        return Response.success(projectResourcesService.triggerStatAndUpload(summary.month, startDate, endDate))
+        return Response.success(projectResourcesService.triggerStatAndUpload(month, startDate, endDate))
     }
 
     override fun triggerManualUpload(

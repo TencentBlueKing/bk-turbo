@@ -46,7 +46,7 @@ interface IServiceResourceStatController {
     ): Response<Page<ProjectResourceUsageVO>>
 
     @ApiOperation("触发项目资源统计上报任务")
-    @PutMapping("/triggerAutoUpload", produces = [MediaType.APPLICATION_JSON_VALUE])
+    @PutMapping("/triggerAutoUpload/{month}", produces = [MediaType.APPLICATION_JSON_VALUE])
     fun triggerAutoUpload(
         @ApiParam(value = "用户信息", required = true)
         @RequestHeader(AUTH_HEADER_DEVOPS_USER_ID)
@@ -55,8 +55,8 @@ interface IServiceResourceStatController {
         @RequestHeader(AUTH_HEADER_DEVOPS_PROJECT_ID)
         projectId: String,
         @ApiParam("所属周期月份")
-        @RequestBody(required = true)
-        summary: ResourceCostSummary,
+        @PathVariable("month")
+        month: String,
         @ApiParam("起始统计日期")
         @RequestParam("startDate")
         startDate: String?,
