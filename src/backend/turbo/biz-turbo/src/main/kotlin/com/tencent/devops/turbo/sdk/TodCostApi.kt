@@ -18,42 +18,25 @@ object TodCostApi {
 
     /**
      * 上报数据
-     *
-     * @param isOverwrite 是否清空再写入
      */
-    private fun postData(month: String, isOverwrite: Boolean, dataList: List<ProjectResourceCostVO>): Boolean {
+    fun postData(month: String, dataList: List<ProjectResourceCostVO>): Boolean {
         val properties = SpringContextHolder.getBean<TodCostProperties>()
         val body = ResourceCostSummary(
             dataSourceName = properties.dataSourceName,
             month = month,
-            isOverwrite = isOverwrite,
+            isOverwrite = false,
             bills = dataList
         )
         val responseStr = OkhttpUtil.doHttpPost(
             url = properties.host + UPLOAD_URL,
-            jsonBody = JsonUtil.toJson(body),
+            jsonBody = JsonUtil.toJson(mapOf("data_source_bills" to body)),
             headers = mapOf(
                 "Content-Type" to "application/json",
                 "Platform-Key" to properties.platformKey
             )
         )
-        val action = if (isOverwrite) "clean" else "upload"
-        logger.info("$action data for month: $month, size: ${dataList.size}, result: $responseStr")
+        logger.info("upload data for month: $month, size: ${dataList.size}, result: $responseStr")
         val resMap = JsonUtil.to(responseStr, object : TypeReference<Response<Map<String, String>>>() {})
         return resMap.code == 200
-    }
-
-    /**
-     * 清空指定月份的数据
-     */
-    fun cleanDataByMonth(month: String): Boolean {
-        return postData(month, true, emptyList())
-    }
-
-    /**
-     * 上报数据（追加）
-     */
-    fun uploadByPage(month: String, dataList: List<ProjectResourceCostVO>): Boolean {
-        return postData(month, false, dataList)
     }
 }

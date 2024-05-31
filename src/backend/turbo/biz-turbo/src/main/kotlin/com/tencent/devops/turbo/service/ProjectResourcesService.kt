@@ -197,7 +197,11 @@ class ProjectResourcesService @Autowired constructor(
             }
             if (data.isNotEmpty()) {
                 logger.info("upload $kind by page: ${pageNum + 1}, size: ${data.size}")
-                TodCostApi.uploadByPage(month = month, data)
+                val uploadSuccess = TodCostApi.postData(month = month, data)
+                if (!uploadSuccess) {
+                    logger.error("upload $kind failed!!")
+                    break
+                }
             }
             pageNum++
         } while (entityList.size == UPLOAD_PAGE_SIZE)
@@ -208,6 +212,6 @@ class ProjectResourcesService @Autowired constructor(
      * 手动上报指定的数据
      */
     fun manualUploadCostData(summary: ResourceCostSummary): Boolean {
-        return TodCostApi.uploadByPage(summary.month, summary.bills)
+        return TodCostApi.postData(summary.month, summary.bills)
     }
 }
