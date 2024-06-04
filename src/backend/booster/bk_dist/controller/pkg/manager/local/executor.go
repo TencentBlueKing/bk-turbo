@@ -192,6 +192,11 @@ func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
 	// defer dcSDK.StatsTimeNow(&e.stats.PreWorkLeaveTime)
 	// e.mgr.work.Basic().UpdateJobStats(e.stats)
 
+	if !e.handler.NeedRetryOnRemoteFail(e.req.Commands) {
+		blog.Infof("executor: handle do not support retry on remote fail, do nothing")
+		return nil, nil
+	}
+
 	if e.handler.PreExecuteNeedLock(e.req.Commands) {
 		weight := e.handler.PreLockWeight(e.req.Commands)
 		blog.Infof("executor: try to execute onRemoteFail from pid(%d) lockweight(%d)", e.req.Pid, weight)

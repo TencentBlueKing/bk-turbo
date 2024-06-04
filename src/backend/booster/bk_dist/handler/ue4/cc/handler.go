@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -88,6 +89,11 @@ type TaskCC struct {
 	pumpremote           bool
 	needcopypumpheadfile bool
 	pumpremotefailed     bool
+
+	// 当前是pch/gch的生成，pump模式下我们需要关注并保存其依赖关系
+	// 方便在后续pump模式下，发送完整的pch/gch列表
+	needresolvepchdepend bool
+	objectpchfile        string
 
 	pchFileDesc *dcSDK.FileDesc
 
@@ -162,6 +168,11 @@ func (cc *TaskCC) NeedRemoteResource(command []string) bool {
 // RemoteRetryTimes will return the remote retry times
 func (cc *TaskCC) RemoteRetryTimes() int {
 	return 1
+}
+
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (cc *TaskCC) NeedRetryOnRemoteFail(command []string) bool {
+	return cc.pumpremote
 }
 
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute
@@ -260,42 +271,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 	uniqlines := uniqArr(lines)
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
-	// if dcPump.SupportPumpStatCache(cc.sandbox.Env) {
-	// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
-	// } else {
-	// 	includes := []*dcFile.Info{}
-	// 	for _, l := range uniqlines {
-	// 		if !filepath.IsAbs(l) {
-	// 			l, _ = filepath.Abs(filepath.Join(workdir, l))
-	// 		}
-	// 		fstat := dcFile.Lstat(l)
-	// 		if fstat.Exist() && !fstat.Basic().IsDir() {
-	// 			if fstat.Basic().Mode()&os.ModeSymlink != 0 {
-	// 				originFile, err := os.Readlink(l)
-	// 				if err == nil {
-	// 					if !filepath.IsAbs(originFile) {
-	// 						originFile, err = filepath.Abs(filepath.Join(filepath.Dir(l), originFile))
-	// 						if err == nil {
-	// 							fstat.LinkTarget = originFile
-	// 							blog.Infof("cc: symlink %s to %s", l, originFile)
-	// 						}
-	// 					} else {
-	// 						fstat.LinkTarget = originFile
-	// 						blog.Infof("cc: symlink %s to %s", l, originFile)
-	// 					}
-	// 				}
-	// 			}
-	// 			includes = append(includes, fstat)
-	// 		} else {
-	// 			blog.Warnf("cc: do not deal include file: %s in file:%s for not existed or is dir", l, dependf)
-	// 			// return fail if not existed
-	// 			return nil, fmt.Errorf("%s not existed", dependf)
-	// 		}
-	// 	}
-
-	// 	return includes, nil
-	// }
 }
 
 func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -332,20 +308,19 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 // 	return f
 // }
 
-func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
-	blog.Infof("cc: copy pump head file: %s to: %s", cc.sourcedependfile, cc.pumpHeadFile)
-	data, err := ioutil.ReadFile(cc.sourcedependfile)
+func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) error {
+	data, err := os.ReadFile(cc.sourcedependfile)
 	if err != nil {
 		blog.Warnf("cc: copy pump head failed to read depned file: %s with err:%v", cc.sourcedependfile, err)
 		return err
 	}
 
-	sep := "\n"
-	if runtime.GOOS == osWindows {
-		sep = "\r\n"
-	}
+	// sep := "\n"
+	// if runtime.GOOS == osWindows {
+	// 	sep = "\r\n"
+	// }
 	lines := strings.Split(string(data), sep)
-	includes := []string{}
+	// includes := []string{}
 	for _, l := range lines {
 		l = strings.Trim(l, " \r\n\\")
 		// TODO : the file path maybe contains space, should support this condition
@@ -372,17 +347,80 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 					continue
 				}
 
-				if strings.HasSuffix(targetf, ".o:") {
+				if strings.HasSuffix(targetf, ".o:") || strings.HasSuffix(targetf, ".gch:") {
 					continue
 				}
 				if !filepath.IsAbs(targetf) {
 					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
 				}
 
-				includes = append(includes, commonUtil.FormatFilePath(targetf))
+				*includes = append(*includes, commonUtil.FormatFilePath(targetf))
 			}
 		}
 	}
+
+	return nil
+}
+
+func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
+	blog.Infof("cc: copy pump head file: %s to: %s", cc.sourcedependfile, cc.pumpHeadFile)
+
+	sep := "\n"
+	if runtime.GOOS == osWindows {
+		sep = "\r\n"
+	}
+
+	includes := []string{}
+	err := cc.resolveDependFile(sep, workdir, &includes)
+	if err != nil {
+		return err
+	}
+
+	// data, err := ioutil.ReadFile(cc.sourcedependfile)
+	// if err != nil {
+	// 	blog.Warnf("cc: copy pump head failed to read depned file: %s with err:%v", cc.sourcedependfile, err)
+	// 	return err
+	// }
+
+	// lines := strings.Split(string(data), sep)
+	// // includes := []string{}
+	// for _, l := range lines {
+	// 	l = strings.Trim(l, " \r\n\\")
+	// 	// TODO : the file path maybe contains space, should support this condition
+	// 	fields := strings.Split(l, " ")
+	// 	if len(fields) >= 1 {
+	// 		// for i, f := range fields {
+	// 		for index := len(fields) - 1; index >= 0; index-- {
+	// 			var targetf string
+	// 			// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
+	// 			// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
+	// 			// 向前依附到不为空的字符串为止
+	// 			if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
+	// 				for targetindex := index - 1; targetindex >= 0; targetindex-- {
+	// 					if len(fields[targetindex]) > 0 {
+	// 						fields[targetindex] = strings.Trim(fields[targetindex], "\\")
+	// 						targetf = strings.Join(fields[targetindex:index+1], " ")
+	// 						index = targetindex
+	// 						break
+	// 					}
+	// 				}
+	// 			} else if len(fields[index]) > 0 {
+	// 				targetf = fields[index]
+	// 			} else {
+	// 				continue
+	// 			}
+
+	// 			if strings.HasSuffix(targetf, ".o:") {
+	// 				continue
+	// 			}
+	// 			if !filepath.IsAbs(targetf) {
+	// 				targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
+	// 			}
+
+	// 			includes = append(includes, commonUtil.FormatFilePath(targetf))
+	// 		}
+	// 	}
+	// }
 
 	// copy includeRspFiles
 	if len(cc.includeRspFiles) > 0 {
@@ -420,7 +458,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
 
 	if len(includes) == 0 {
-		blog.Warnf("cc: depend file: %s data:[%s] is invalid", cc.sourcedependfile, string(data))
+		blog.Warnf("cc: depend file: %s is invalid", cc.sourcedependfile)
 		return ErrorInvalidDependFile
 	}
 
@@ -448,21 +486,41 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	return nil
 }
 
-// search all include files for this compile command
-func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, forcefresh bool) ([]*dcFile.Info, error) {
-	pumpdir := dcPump.PumpCacheDir(cc.sandbox.Env)
+func (cc *TaskCC) getPumpDir(env *env.Sandbox) (string, error) {
+	pumpdir := dcPump.PumpCacheDir(env)
 	if pumpdir == "" {
 		pumpdir = dcUtil.GetPumpCacheDir()
 	}
 
 	if !dcFile.Stat(pumpdir).Exist() {
 		if err := os.MkdirAll(pumpdir, os.ModePerm); err != nil {
-			return nil, err
+			return "", err
 		}
 	}
 
+	return pumpdir, nil
+}
+
+// search all include files for this compile command
+func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, forcefresh bool) ([]*dcFile.Info, error) {
+	// pumpdir := dcPump.PumpCacheDir(cc.sandbox.Env)
+	// if pumpdir == "" {
+	// 	pumpdir = dcUtil.GetPumpCacheDir()
+	// }
+
+	// if !dcFile.Stat(pumpdir).Exist() {
+	// 	if err := os.MkdirAll(pumpdir, os.ModePerm); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+
+	pumpdir, err := cc.getPumpDir(cc.sandbox.Env)
+	if err != nil {
+		return nil, err
+	}
+
 	// TOOD : maybe we should pass responseFile to calc md5, to ensure unique
-	var err error
+	// var err error
 	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
 		blog.Errorf("cc: do includes get output file failed: %v", err)
@@ -513,6 +571,101 @@ func (cc *TaskCC) inPumpBlack(responseFile string, args []string) (bool, error) 
 	return false, nil
 }
 
+var (
+	// 缓存单个pch文件的依赖列表
+	pchDependHeadLock sync.RWMutex
+	pchDependHead     map[string][]*dcFile.Info = make(map[string][]*dcFile.Info, 20)
+)
+
+func setPchDependHead(f string, heads []*dcFile.Info) {
+	pchDependHeadLock.Lock()
+	defer pchDependHeadLock.Unlock()
+
+	pchDependHead[f] = heads
+}
+
+func getPchDependHead(f string) []*dcFile.Info {
+	pchDependHeadLock.RLock()
+	defer pchDependHeadLock.RUnlock()
+
+	heads, ok := pchDependHead[f]
+	if ok {
+		return heads
+	}
+
+	return nil
+}
+
+func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
+	// 取出依赖的所有gch文件
+	gchfiles := []string{}
+	for _, v := range fs {
+		if strings.HasSuffix(v.Path(), ".gch") {
+			gchfiles = append(gchfiles, v.Path())
+		}
+	}
+
+	if len(gchfiles) > 0 {
+		blog.Infof("cc: got pch files:%v", gchfiles)
+
+		gchdependfiles := []string{}
+		// 再得到这些gch文件的依赖的其它gch文件
+		for _, v := range gchfiles {
+			dfs := dcPump.GetPchDepend(v)
+			if len(dfs) > 0 {
+				for _, v1 := range dfs {
+					newfile := true
+					for _, v2 := range gchdependfiles {
+						if v1 == v2 {
+							newfile = false
+							break
+						}
+					}
+
+					if newfile {
+						gchdependfiles = append(gchdependfiles, v1)
+					}
+				}
+			}
+		}
+
+		// 得到最终的 文件信息列表
+		if len(gchdependfiles) > 0 {
+			blog.Infof("cc: got pch depends files:%v", gchdependfiles)
+			fs, err := commonUtil.GetFileInfo(gchdependfiles, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+			if err != nil {
+				return nil, err
+			}
+
+			// 获取每个pch的依赖列表
+			for _, v := range gchdependfiles {
+				df, err := cc.getPumpFileByPCHFullPath(v)
+				if err != nil {
+					continue
+				}
+
+				// 尝试从缓存取
+				fsv := getPchDependHead(df)
+				if fsv != nil && len(fsv) > 0 {
+					fs = append(fs, fsv...)
+				} else {
+					fsv, err := cc.analyzeIncludes(df, cc.sandbox.Dir)
+					if err == nil && len(fsv) > 0 {
+						fs = append(fs, fsv...)
+						// 添加到缓存
+						setPchDependHead(df, fsv)
+					}
+				}
+			}
+
+			blog.Infof("cc: got pch total %d depends files", len(fs))
+			return fs, nil
+		}
+	}
+
+	return nil, nil
+}
+
 // first error means real error when try pump, second is notify error
 func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error) {
 	blog.Infof("cc: trypump: %v", command)
@@ -536,6 +689,14 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	// }
 
 	tstart = tend
+
+	// TODO : 关注 gch 文件的依赖列表
+	if strings.HasSuffix(objectfile, ".gch") && sourcedependfile != "" {
+		cc.needresolvepchdepend = true
+		cc.sourcedependfile = sourcedependfile
+		cc.objectpchfile = objectfile
+		blog.Infof("cc: need resolve dpend for gch file:%s", objectfile)
+	}
 
 	_, err = scanArgs(args)
 	if err != nil {
@@ -570,6 +731,14 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	cc.pumpArgs = args
 
 	includes, err := cc.Includes(responseFile, args, cc.sandbox.Dir, false)
+
+	// TODO : 添加pch的依赖列表
+	if len(includes) > 0 {
+		pchdepends, err := cc.getPchDepends(includes)
+		if err == nil && len(pchdepends) > 0 {
+			includes = append(includes, pchdepends...)
+		}
+	}
 
 	tend = time.Now().Local()
 	blog.Debugf("cc: trypump time record: %s for Includes for rsp file:%s", tend.Sub(tstart), responseFile)
@@ -912,10 +1081,81 @@ ERROREND:
 		r.Results[0].OutputMessage)
 }
 
+func (cc *TaskCC) resolvePchDepend(workdir string) error {
+	blog.Infof("cc: ready resolve pch depend file: %s", cc.sourcedependfile)
+
+	sep := "\n"
+	if runtime.GOOS == osWindows {
+		sep = "\r\n"
+	}
+
+	includes := []string{}
+	err := cc.resolveDependFile(sep, workdir, &includes)
+	if err != nil {
+		return err
+	}
+
+	if len(includes) > 0 {
+		if !filepath.IsAbs(cc.objectpchfile) {
+			cc.objectpchfile, _ = filepath.Abs(filepath.Join(workdir, cc.objectpchfile))
+		}
+
+		gchfile := []string{}
+		for _, v := range includes {
+			if strings.HasSuffix(v, ".gch") {
+				newfile := true
+				for _, v1 := range gchfile {
+					if v == v1 {
+						newfile = false
+						break
+					}
+				}
+
+				if newfile {
+					blog.Infof("cc: found pch depend %s->%s", cc.objectpchfile, v)
+					gchfile = append(gchfile, v)
+				}
+			}
+		}
+
+		if len(gchfile) > 0 {
+			dcPump.SetPchDepend(cc.objectpchfile, gchfile)
+		}
+	}
+
+	return nil
+}
+
+func (cc *TaskCC) getPumpFileByPCHFullPath(f string) (string, error) {
+	pumpdir, err := cc.getPumpDir(cc.sandbox.Env)
+	if err == nil {
+		args := []string{f}
+		return getPumpIncludeFile(pumpdir, "pch_depend", ".txt", args, cc.sandbox.Dir)
+	}
+
+	blog.Warnf("cc: got pch:%s depend file with err:%v", f, err)
+	return "", err
+}
+
 func (cc *TaskCC) finalExecute([]string) {
 	go func() {
 		if cc.needcopypumpheadfile {
 			cc.copyPumpHeadFile(cc.sandbox.Dir)
+		}
+
+		// TODO : 解析pch的依赖关系，并将该gch的依赖列表保存起来
+		if cc.needresolvepchdepend {
+			// 解析并保存pch的依赖关系
+			cc.resolvePchDepend(cc.sandbox.Dir)
+
+			// 并将该gch的依赖列表保存起来
+			var err error
+			cc.pumpHeadFile, err = cc.getPumpFileByPCHFullPath(cc.objectpchfile)
+			if err != nil {
+				blog.Warnf("cc: failed to get pump head file with pch file:%s err:%v", cc.objectpchfile, err)
+			} else {
+				cc.copyPumpHeadFile(cc.sandbox.Dir)
+			}
 		}
 
 		if cc.saveTemp() {

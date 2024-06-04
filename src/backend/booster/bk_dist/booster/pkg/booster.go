@@ -1356,7 +1356,7 @@ func (b *Booster) checkPumpCache(pumpdir string) {
 		if b.config.Works.PumpCacheRemoveAll {
 			os.RemoveAll(pumpdir)
 		} else {
-			limitsize := int64(b.config.Works.PumpCacheSizeMaxMB * 1024 * 1024)
+			limitsize := int64(b.config.Works.PumpCacheSizeMaxMB) * 1024 * 1024
 			cleanDirByTime(pumpdir, limitsize)
 		}
 	}

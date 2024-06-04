@@ -123,6 +123,15 @@ func (cf *TaskCLFilter) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (cf *TaskCLFilter) NeedRetryOnRemoteFail(command []string) bool {
+	if cf.clhandle != nil {
+		return cf.clhandle.NeedRetryOnRemoteFail(cf.cldArgs)
+	}
+
+	return false
+}
+
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (cf *TaskCLFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 	if cf.clhandle != nil {
