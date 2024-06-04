@@ -202,6 +202,7 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 		config.Works.Environments[env.GetEnvKey(env.KeyExecutorEnvProfile)] = profile
 
 		targetDir := dcConfig.GetRunFile(config.Works.RunDir, "")
+		blog.Info("booster: copy launcher files from %s to %s", launcherTemplateDir, targetDir)
 		if err := cp.Copy(launcherTemplateDir+"/", targetDir); err != nil {
 			blog.Warnf("booster: copy launcher files from %s to %s failed: %v",
 				launcherTemplateDir, targetDir, err)
@@ -214,6 +215,7 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 		}
 
 		target := dcConfig.GetRunFile(config.Works.RunDir, launcherFile)
+		blog.Info("booster: replace launcher file content in %s", target)
 		if err := replaceFileContent(target, launcherMark, launcher); err != nil {
 			blog.Warnf("booster: replace launcher file content in %s failed: %v", target, err)
 		}
@@ -226,11 +228,11 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 		}
 
 		target := dcConfig.GetRunFile(config.Works.RunDir, hookConfigPathCCLauncher)
-
+		blog.Info("booster: copy launcher hook config from %s to %s", source, target)
 		if err := cp.Copy(source, target); err != nil {
 			blog.Warnf("booster: copy launcher hook config from %s to %s failed: %v", source, target, err)
 		}
-
+		blog.Info("booster: replace launcher hook config in %s", target)
 		if err := replaceFileContent(
 			target, launcherHookMark, dcConfig.GetRunFile(config.Works.RunDir, launcherFile)); err != nil {
 			blog.Warnf("booster: replace launcher file content in %s failed: %v", target, err)
@@ -260,7 +262,9 @@ func (cc *TaskCC) PostWork(config *dcType.BoosterConfig) error {
 
 // GetPreloadConfig 获取preload配置
 func (cc *TaskCC) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.PreloadConfig, error) {
-	return getPreloadConfig(cc.getPreLoadConfigPath(config))
+	configPath := cc.getPreLoadConfigPath(config)
+	blog.Info("booster: get preload config from %s", configPath)
+	return getPreloadConfig(configPath)
 }
 
 func (cc *TaskCC) getPreLoadConfigPath(config dcType.BoosterConfig) string {
