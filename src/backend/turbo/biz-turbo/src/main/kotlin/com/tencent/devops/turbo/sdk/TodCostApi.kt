@@ -27,6 +27,12 @@ object TodCostApi {
             isOverwrite = false,
             bills = dataList
         )
+        return upload(body = body)
+    }
+
+    fun upload(body: ResourceCostSummary): Boolean {
+        val properties = SpringContextHolder.getBean<TodCostProperties>()
+
         val responseStr = OkhttpUtil.doHttpPost(
             url = properties.host + UPLOAD_URL,
             jsonBody = JsonUtil.toJson(mapOf("data_source_bills" to body)),
@@ -35,7 +41,7 @@ object TodCostApi {
                 "Platform-Key" to properties.platformKey
             )
         )
-        logger.info("upload data for month: $month, size: ${dataList.size}, result: $responseStr")
+        logger.info("upload data for month: ${body.month}, size: ${body.bills.size}, result: $responseStr")
         val resMap = JsonUtil.to(responseStr, object : TypeReference<Response<Map<String, String>>>() {})
         return resMap.code == 200
     }

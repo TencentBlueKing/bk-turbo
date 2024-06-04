@@ -3,6 +3,7 @@ package com.tencent.devops.turbo.service
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.pojo.Page
+import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PROJECT_ID_LIST
@@ -212,6 +213,7 @@ class ProjectResourcesService @Autowired constructor(
      * 手动上报指定的数据
      */
     fun manualUploadCostData(summary: ResourceCostSummary): Boolean {
-        return TodCostApi.postData(summary.month, summary.bills)
+        logger.info("manualUploadCostData: ${JsonUtil.toJson(summary)}")
+        return TodCostApi.upload(body = summary)
     }
 }
