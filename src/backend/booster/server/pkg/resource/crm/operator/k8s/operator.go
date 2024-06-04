@@ -523,7 +523,7 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 		}
 
 		if len(pod.Status.ContainerStatuses) <= 0 || len(pod.Spec.Containers) <= 0 {
-			blog.Warnf("k8s-operator: found exception pod of %s containerStatuses len(%d), containers len(%d)", name, len(pod.Status.ContainerStatuses), len(pod.Spec.Containers))
+			blog.Warnf("k8s-operator: found exception pod of %s:[%+v]", name, pod)
 			continue
 		}
 
