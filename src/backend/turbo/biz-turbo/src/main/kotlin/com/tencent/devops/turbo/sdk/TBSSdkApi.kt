@@ -3,7 +3,7 @@ package com.tencent.devops.turbo.sdk
 import com.fasterxml.jackson.core.type.TypeReference
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
-import com.tencent.devops.common.api.util.OkhttpUtils
+import com.tencent.devops.common.api.util.OkhttpUtil
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.turbo.config.TBSProperties
 import com.tencent.devops.turbo.dto.DistccRequestBody
@@ -165,7 +165,7 @@ object TBSSdkApi {
             }
         }
 
-        OkhttpUtils.doHttp(request).use { response ->
+        OkhttpUtil.doHttp(request).use { response ->
             val responseBody = response.body!!.string()
             if (!response.isSuccessful) {
                 logger.info(
