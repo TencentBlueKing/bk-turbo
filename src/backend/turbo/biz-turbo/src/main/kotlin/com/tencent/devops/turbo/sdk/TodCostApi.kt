@@ -33,7 +33,7 @@ object TodCostApi {
     fun upload(body: ResourceCostSummary): Boolean {
         val properties = SpringContextHolder.getBean<TodCostProperties>()
 
-        val responseStr = OkhttpUtil.doHttpPost(
+        val responseStr = OkhttpUtil.doLongTimeHttpPost(
             url = properties.host + UPLOAD_URL,
             jsonBody = JsonUtil.toJson(mapOf("data_source_bills" to body)),
             headers = mapOf(

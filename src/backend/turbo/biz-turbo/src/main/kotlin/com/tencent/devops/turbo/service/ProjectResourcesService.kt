@@ -1,5 +1,6 @@
 package com.tencent.devops.turbo.service
 
+import com.google.common.collect.Lists
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.pojo.Page
@@ -15,6 +16,8 @@ import com.tencent.devops.turbo.vo.ProjectResourceCostVO
 import com.tencent.devops.turbo.vo.ProjectResourceUsageVO
 import com.tencent.devops.turbo.vo.ResourceCostSummary
 import com.tencent.devops.web.util.SpringContextHolder
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
@@ -121,25 +124,23 @@ class ProjectResourcesService @Autowired constructor(
         val filterProjectIds = getFilterIds(BASE_EXCLUDED_PROJECT_ID_LIST)
         val properties = SpringContextHolder.getBean<TodCostProperties>()
 
-        this.uploadDataByType(
-            start = start.toString(),
-            end = end.toString(),
-            month = month,
-            filterPlanIds = filterPlanIds,
-            filterProjectIds = filterProjectIds,
-            kind = KIND_C_PLUS,
-            serviceType = properties.serviceType
-        )
-
-        this.uploadDataByType(
-            start = start.toString(),
-            end = end.toString(),
-            month = month,
-            filterPlanIds = filterPlanIds,
-            filterProjectIds = filterProjectIds,
-            kind = KIND_UE_CLIENT,
-            serviceType = properties.serviceType
-        )
+        Lists.newArrayList(KIND_C_PLUS, KIND_UE_CLIENT).forEach {
+            GlobalScope.launch {
+                try {
+                    uploadDataByType(
+                        start.toString(),
+                        end.toString(),
+                        month,
+                        filterPlanIds,
+                        filterProjectIds,
+                        it,
+                        properties.serviceType
+                    )
+                } catch (e: Throwable) {
+                    logger.error(e.message, e)
+                }
+            }
+        }
         return true
     }
 

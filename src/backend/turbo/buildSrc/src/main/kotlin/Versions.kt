@@ -10,4 +10,5 @@ object Versions {
     const val micrometerVersion = "1.6.6"
     const val okHttpVersion = "4.9.0"
     const val Kotlin = "1.6.0"
+    const val coroutinesCore = "1.3.1"
 }
