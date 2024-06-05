@@ -217,6 +217,13 @@ class ProjectResourcesService @Autowired constructor(
      */
     fun manualUploadCostData(summary: ResourceCostSummary): Boolean {
         logger.info("manualUploadCostData: ${JsonUtil.toJson(summary)}")
-        return TodCostApi.upload(body = summary)
+        GlobalScope.launch {
+            try {
+                TodCostApi.upload(body = summary)
+            } catch (e: Throwable) {
+                logger.error(e.message, e)
+            }
+        }
+        return true
     }
 }
