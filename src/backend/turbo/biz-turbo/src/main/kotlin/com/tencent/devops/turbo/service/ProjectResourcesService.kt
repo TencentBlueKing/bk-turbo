@@ -178,6 +178,8 @@ class ProjectResourcesService @Autowired constructor(
                 )
                 else -> emptyList()
             }
+            logger.info("$kind entity list size: ${entityList.size}")
+
             val data = entityList.filter { it.projectId?.isNotBlank() == true }.map {
                 with(it) {
                     val usageNum = if (kind == KIND_C_PLUS) {
