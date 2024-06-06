@@ -28,6 +28,19 @@ object OkhttpUtil {
         .writeTimeout(3L, TimeUnit.SECONDS)
         .build()
 
+    private val okHttpLongTimeClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(10L, TimeUnit.SECONDS)
+        .readTimeout(30L, TimeUnit.MINUTES)
+        .writeTimeout(30L, TimeUnit.MINUTES)
+        .build()
+
+    private fun buildUrlWithQueryParams(url: String, queryParams: Map<String, Any>): String {
+        if (queryParams.isEmpty()) return url
+        val queryString = queryParams.entries.joinToString("&") { (key, value) -> "$key=$value" }
+        return "$url?$queryString"
+    }
+
+
     private fun addHeadersToRequest(requestBuilder: Request.Builder, headers: Map<String, String>) {
         headers.forEach { (key, value) ->
             requestBuilder.addHeader(key, value)
@@ -86,20 +99,20 @@ object OkhttpUtil {
         url: String,
         body: String = "",
         queryParam: Map<String, Any> = mutableMapOf(),
-        headers: Map<String, String> = mutableMapOf()
+        headers: Map<String, String> = mutableMapOf(),
+        useLongTimeClient: Boolean = false
     ): String {
-        // 查询参数统一优先处理
-        val urlWithQueryParam = if (queryParam.isNotEmpty()) {
-            "$url?${queryParam.entries.joinToString("&") { (key, value) -> "$key=$value" }}"
-        } else {
-            url
-        }
-        val request = buildRequest(method, urlWithQueryParam, body, headers)
         var retryCount = 0
         var responseContent: String
-        var response: Response
+        lateinit var response: Response
         do {
-            response = okHttpClient.newCall(request).execute()
+            // 查询参数统一优先处理
+            val urlWithQueryParam = buildUrlWithQueryParams(url = url, queryParams = queryParam)
+            val request = buildRequest(method, urlWithQueryParam, body, headers)
+
+            val client = if (useLongTimeClient) okHttpLongTimeClient else okHttpClient
+            response = client.newCall(request).execute()
+
             responseContent = response.body!!.string()
             if (!response.isSuccessful) {
                 retryCount++
@@ -125,6 +138,12 @@ object OkhttpUtil {
 
     fun doHttpPost(url: String, jsonBody: String, headers: Map<String, String> = mapOf()): String {
         return executeRequest(method = HttpMethod.POST, url = url, body = jsonBody, headers = headers)
+    }
+
+    fun doLongTimeHttpPost(url: String, jsonBody: String, headers: Map<String, String> = mapOf()): String {
+        return executeRequest(
+            method = HttpMethod.POST, url = url, body = jsonBody, headers = headers, useLongTimeClient = true
+        )
     }
 
     fun doHttpPut(url: String, body: String, headers: Map<String, String> = mapOf()): String {
