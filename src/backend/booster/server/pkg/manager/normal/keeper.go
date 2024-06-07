@@ -27,11 +27,12 @@ const (
 
 // Keeper monitor the tasks since creating, until terminated status(failed or finish). Include following checks:
 // taskHealthCheck:
-//    - if the client heartbeat is timeout, the task will be deemed to be lost, then release it as failed.
-//    - if the task is in status starting for a long time much than status-changed timeout, then release it as failed.
+//   - if the client heartbeat is timeout, the task will be deemed to be lost, then release it as failed.
+//   - if the task is in status starting for a long time much than status-changed timeout, then release it as failed.
+//
 // serverHealthCheck:
-//    - if the server running taskGroups are less than the least instance of this task, the server will be deemed to be
-//      unhealthy, and the task will be released as failed.
+//   - if the server running taskGroups are less than the least instance of this task, the server will be deemed to be
+//     unhealthy, and the task will be released as failed.
 type Keeper interface {
 	Run(pCtx context.Context) error
 }
@@ -265,7 +266,7 @@ func (k *keeper) checkTaskBasic(taskID string, wg *sync.WaitGroup) {
 }
 
 func (k *keeper) updateTaskBasic(tb *engine.TaskBasic) {
-	if err := k.layer.UpdateTaskBasic(tb); err != nil {
+	if err := k.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("keeper: update basic task(%s) failed: %v", tb.ID, err)
 	}
 }

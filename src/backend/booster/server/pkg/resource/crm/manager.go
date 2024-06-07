@@ -634,11 +634,13 @@ func (rm *resourceManager) init(resourceID, user string, param ResourceParam) er
 		brokerName: param.BrokerName,
 		initTime:   time.Now().Local(),
 	}
-	if err := rm.createResources(r); err != nil {
-		blog.Errorf("crm: create resource(%s) failed: %v", resourceID, err)
 
-		return err
-	}
+	// 初始数据先屏蔽掉，减少db操作
+	// if err := rm.createResources(r); err != nil {
+	// 	blog.Errorf("crm: create resource(%s) failed: %v", resourceID, err)
+
+	// 	return err
+	// }
 
 	rm.registeredResourceMap[resourceID] = r
 	return nil

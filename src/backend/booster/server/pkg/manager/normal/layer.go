@@ -58,7 +58,7 @@ type TaskBasicLayer interface {
 	DeleteTB(tb *engine.TaskBasic)
 
 	// update task basic, both database and cache, just update the field implements in task basic
-	UpdateTaskBasic(tb *engine.TaskBasic) error
+	UpdateTaskBasic(tb *engine.TaskBasic, rawWhere []string, delaySaveDB bool) error
 
 	// update heartbeat to task basic
 	UpdateHeartbeat(taskID string) error
@@ -267,8 +267,9 @@ func (tc *taskBasicLayer) CreateTaskBasic(tb *engine.TaskBasic) error {
 }
 
 // UpdateTaskBasic update a existing task basic into layer cache and databases.
-func (tc *taskBasicLayer) UpdateTaskBasic(tb *engine.TaskBasic) error {
-	return tc.updateTaskBasic(tb, false)
+func (tc *taskBasicLayer) UpdateTaskBasic(tb *engine.TaskBasic, rawWhere []string, delaySaveDB bool) error {
+	// return tc.updateTaskBasic(tb, false, rawWhere)
+	return tc.updateTaskBasic(tb, rawWhere, delaySaveDB)
 }
 
 // UpdateHeartbeat update a new heartbeat to a task basic with given taskID.
@@ -313,7 +314,8 @@ func (tc *taskBasicLayer) getTaskBasic(taskID string) (*engine.TaskBasic, error)
 	return engine.CopyTaskBasic(tb), nil
 }
 
-func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) error {
+// func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool, rawWhere []string) error {
+func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, rawWhere []string, delaySaveDB bool) error {
 	blog.Debugf("layer: try to update task basic(%s) in status(%s) with engine(%s) and queue(%s)",
 		tbRaw.ID, tbRaw.Status.Status, tbRaw.Client.EngineName, tbRaw.Client.QueueName)
 
@@ -324,15 +326,14 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, new bool) err
 		return err
 	}
 
-	if new {
-		err = engine.CreateTaskBasic(egn, tb)
+	if delaySaveDB {
+		go engine.UpdateTaskBasic(egn, tb, rawWhere)
 	} else {
-		err = engine.UpdateTaskBasic(egn, tb)
-	}
-
-	if err != nil {
-		blog.Errorf("layer: update task basic(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
-		return err
+		err = engine.UpdateTaskBasic(egn, tb, rawWhere)
+		if err != nil {
+			blog.Errorf("layer: update task basic(%s) via engine(%s) failed: %v", tb.ID, tb.Client.EngineName, err)
+			return err
+		}
 	}
 
 	// task is un-released, should be in layer cache, waiting for handling

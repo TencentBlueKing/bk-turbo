@@ -176,7 +176,7 @@ func (c *cleaner) clean(taskID string, egn engine.Engine) {
 
 	blog.Infof("cleaner: success to release task(%s)", taskID)
 	tb.Status.ShutDown()
-	if err = c.layer.UpdateTaskBasic(tb); err != nil {
+	if err = c.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("cleaner: update task basic(%s) failed: %v", taskID, err)
 		return
 	}
