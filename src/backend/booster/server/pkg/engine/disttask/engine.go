@@ -814,7 +814,12 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 	// 	blog.Errorf("engine(%s) try launching crm task, update task(%s) failed: %v", EngineName, tb.ID, err)
 	// 	return err
 	// }
-	go de.updateTask(task)
+	go func() {
+		if task.InheritSetting.QueueName != queueName {
+			task.InheritSetting.QueueName = queueName
+		}
+		de.updateTask(task)
+	}()
 
 	blog.Infof("engine(%s) success to launch crm task(%s)", EngineName, tb.ID)
 	return nil
