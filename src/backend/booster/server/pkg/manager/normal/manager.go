@@ -427,7 +427,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	tb.Status.Create()
 	tb.Status.Message = messageTaskStaging
 
-	if err = m.layer.UpdateTaskBasic(tb); err != nil {
+	if err = m.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("manager: update task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
 		return nil, err
@@ -571,7 +571,7 @@ func (m *manager) releaseTask(param *mgr.TaskReleaseParam) error {
 			param.TaskID, tb.Client.EngineName.String(), err)
 	}
 
-	if err = m.layer.UpdateTaskBasic(tb); err != nil {
+	if err = m.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("manager: update basic task(%s) failed: %v", param.TaskID, err)
 		return err
 	}

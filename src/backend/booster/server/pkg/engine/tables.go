@@ -193,7 +193,7 @@ func CreateTaskBasic(egn Engine, tb *TaskBasic) error {
 }
 
 // UpdateTaskBasic update task basic into database
-func UpdateTaskBasic(egn Engine, tb *TaskBasic) error {
+func UpdateTaskBasic(egn Engine, tb *TaskBasic, rawWhere []string) error {
 	defer timeMetricRecord(egn, "update_task_basic")()
 
 	var tmp []byte
@@ -201,7 +201,13 @@ func UpdateTaskBasic(egn Engine, tb *TaskBasic) error {
 	var data map[string]interface{}
 	_ = codec.DecJSON(tmp, &data)
 	delete(data, "task_id")
-	return egn.GetTaskBasicTable().Where("task_id = ?", tb.ID).Updates(data).Error
+	db := egn.GetTaskBasicTable().Where("task_id = ?", tb.ID)
+	if len(rawWhere) > 0 {
+		for _, r := range rawWhere {
+			db = db.Where(r)
+		}
+	}
+	return db.Updates(data).Error
 }
 
 // UpdateProjectInfoBasic update the project info basic with delta data.

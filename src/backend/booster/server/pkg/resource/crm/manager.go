@@ -634,11 +634,13 @@ func (rm *resourceManager) init(resourceID, user string, param ResourceParam) er
 		brokerName: param.BrokerName,
 		initTime:   time.Now().Local(),
 	}
-	if err := rm.createResources(r); err != nil {
-		blog.Errorf("crm: create resource(%s) failed: %v", resourceID, err)
 
-		return err
-	}
+	// 初始数据先屏蔽掉，减少db操作
+	// if err := rm.createResources(r); err != nil {
+	// 	blog.Errorf("crm: create resource(%s) failed: %v", resourceID, err)
+
+	// 	return err
+	// }
 
 	rm.registeredResourceMap[resourceID] = r
 	return nil
@@ -812,17 +814,17 @@ func (rm *resourceManager) launch(
 	}
 
 	hasBroker := false
-	needTrace := false
+	// needTrace := false
 
 	rm.lockResource(resourceID)
 	defer func() {
 		rm.unlockResource(resourceID)
-		if needTrace {
-			if !hasBroker || !rm.isFinishDeploying(resourceID, user) {
-				// begin to trace resource until it finish deploying
-				go rm.trace(resourceID, user)
-			}
-		}
+		// if needTrace {
+		// 	if !hasBroker || !rm.isFinishDeploying(resourceID, user) {
+		// 		// begin to trace resource until it finish deploying
+		// 		go rm.trace(resourceID, user)
+		// 	}
+		// }
 	}()
 
 	r, err := rm.getResources(resourceID)
@@ -858,12 +860,15 @@ func (rm *resourceManager) launch(
 		return ErrorBrokerNotEnoughResources
 	}
 
+	var condition map[string]string
+	var instance int
+	var key string
 	if !hasBroker {
-		condition := map[string]string{
+		condition = map[string]string{
 			op.AttributeKeyCity:     r.param.City,
 			op.AttributeKeyPlatform: r.param.Platform,
 		}
-		instance, key, err := rm.getFreeInstances(condition, function)
+		instance, key, err = rm.getFreeInstances(condition, function)
 		if err == engine.ErrorNoEnoughResources || err == ErrorBrokerNotEnoughResources {
 			return err
 		}
@@ -879,9 +884,65 @@ func (rm *resourceManager) launch(
 
 		r.noReadyInstance = instance
 		r.resourceBlockKey = key
+		r.requestInstance = instance
 
-		blog.Infof("crm: try to launch service with resource(%s) instance(%d) for user(%s)",
-			resourceID, instance, user)
+		// 	blog.Infof("crm: try to launch service with resource(%s) instance(%d) for user(%s)",
+		// 		resourceID, instance, user)
+		// 	if err = rm.operator.LaunchServer(rm.conf.BcsClusterID, op.BcsLaunchParam{
+		// 		Name:               resourceID,
+		// 		Namespace:          rm.handlerMap[user].GetNamespace(),
+		// 		AttributeCondition: condition,
+		// 		Env:                r.param.Env,
+		// 		Ports:              r.param.Ports,
+		// 		Volumes:            r.param.Volumes,
+		// 		Image:              r.param.Image,
+		// 		Instance:           instance,
+		// 	}); err != nil {
+		// 		blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
+
+		// 		// if launch failed, clean the dirty data in noReadyInstance
+		// 		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		// 		return err
+		// 	}
+	}
+
+	// r.status = resourceStatusDeploying
+	// if err = rm.saveResources(r); err != nil {
+	// 	blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
+	// 		resourceID, user, err)
+
+	// 	// if save resource failed, clean the dirty data in noReadyInstance
+	// 	go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+	// 	return err
+	// }
+
+	// needTrace = true
+
+	// blog.Infof(
+	// 	"crm: success to launch service with resource(%s) instance(%d) "+
+	// 		"for user(%s) in city(%s) from originCity(%s)",
+	// 	resourceID, r.requestInstance, user, r.param.City, originCity,
+	// )
+
+	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
+	go rm.realLaunch(hasBroker, resourceID, user, r, condition, instance, originCity)
+
+	return nil
+}
+
+func (rm *resourceManager) realLaunch(
+	hasBroker bool,
+	resourceID, user string,
+	r *resource,
+	condition map[string]string,
+	instance int,
+	originCity string) error {
+
+	blog.Infof("crm: try to real launch service with resource(%s) instance(%d) for user(%s)",
+		resourceID, instance, user)
+
+	var err error
+	if !hasBroker {
 		if err = rm.operator.LaunchServer(rm.conf.BcsClusterID, op.BcsLaunchParam{
 			Name:               resourceID,
 			Namespace:          rm.handlerMap[user].GetNamespace(),
@@ -898,27 +959,33 @@ func (rm *resourceManager) launch(
 			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
 			return err
 		}
-
-		r.requestInstance = instance
 	}
 
+	// TODO : 这个地方可能会导致资源泄漏（远程资源创建了，但是记录db失败，如果这时server重启，则没办法跟踪和释放）；
+	//        概率比较小，先不处理
 	r.status = resourceStatusDeploying
 	if err = rm.saveResources(r); err != nil {
 		blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
 			resourceID, user, err)
 
+		// 不从这儿返回失败，后续的 rm.trace 还有机会继续写db
 		// if save resource failed, clean the dirty data in noReadyInstance
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-		return err
+		// go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+
+		// return err
 	}
 
-	needTrace = true
+	if !hasBroker || !rm.isFinishDeploying(resourceID, user) {
+		// begin to trace resource until it finish deploying
+		go rm.trace(resourceID, user)
+	}
 
 	blog.Infof(
 		"crm: success to launch service with resource(%s) instance(%d) "+
 			"for user(%s) in city(%s) from originCity(%s)",
 		resourceID, r.requestInstance, user, r.param.City, originCity,
 	)
+
 	return nil
 }
 
