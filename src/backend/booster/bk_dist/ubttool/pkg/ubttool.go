@@ -423,9 +423,17 @@ func (h *UBTTool) selectReadyAction() int {
 func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.Actionresult) error {
 	blog.Infof("UBTTool: ready execute actions:%+v", action)
 
+	blog.Infof("UBTTool: raw cmd:[%s %s]", action.Cmd, action.Arg)
+
 	fullargs := []string{action.Cmd}
-	args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
-	fullargs = append(fullargs, args...)
+	if strings.HasSuffix(action.Cmd, "cmd.exe") || strings.HasSuffix(action.Cmd, "Cmd.exe") {
+		fullargs = append(fullargs, action.Arg)
+	} else {
+		args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
+		fullargs = append(fullargs, args...)
+	}
+
+	blog.Infof("UBTTool: sent cmd:[%s]", strings.Join(fullargs, " "))
 
 	//exitcode, err := h.executor.Run(fullargs, action.Workdir)
 	// try again if failed after sleep some time
