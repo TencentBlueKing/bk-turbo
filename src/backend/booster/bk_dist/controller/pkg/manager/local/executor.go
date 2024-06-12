@@ -317,11 +317,8 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		blog.Infof("executor:ready run cmd:%v", e.req.Commands)
 		cmd := e.req.Commands[0]
 		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") {
-			arg := strings.Join(e.req.Commands[1:], " ")
-			arg = strings.TrimPrefix(arg, "/C ")
-			arg = strings.TrimPrefix(arg, "/c ")
-			arg = strings.Trim(arg, " \"")
-			code, err = sandbox.ExecScripts(arg)
+			arg := strings.Join(e.req.Commands, " ")
+			code, err = sandbox.ExecScriptsRaw(arg)
 		} else {
 			code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
 		}
