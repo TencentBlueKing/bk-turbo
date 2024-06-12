@@ -505,12 +505,14 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 	podList, err := client.clientSet.CoreV1().Pods(namespace).List(context.TODO(), metaV1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", appLabel, name),
 	})
-
+	if err != nil {
+		blog.Errorf("k8s-operator: try to get podList clusterID(%s) namespace(%s) name(%s) failed: %v", clusterID, namespace, name, err)
+	}
 	availableEndpoint := make([]*op.Endpoint, 0, 100)
 	for _, pod := range podList.Items {
 		if pod.Status.Phase != coreV1.PodRunning {
-			if info.Status != op.ServiceStatusStaging {
-				blog.Warnf("k8s-operator: pod(%s) of %s in wrong status(%s):[%+v]", pod.Name, name, pod.Status.Phase, pod)
+			if info.Status != op.ServiceStatusStaging && pod.Status.Phase != coreV1.PodPending {
+				blog.Warnf("k8s-operator: pod(%s) of %s in wrong status(%s)", pod.Name, name, pod.Status.Phase)
 			}
 			if (info.Status != op.ServiceStatusStaging) && (pod.Status.Phase == coreV1.PodPending) {
 				blog.Warnf("k8s-operator: there is still a pod(%s) of %s in status(%s), "+
