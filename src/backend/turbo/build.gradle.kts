@@ -61,6 +61,7 @@ allprojects {
                 entry("bcprov-jdk15on")
                 entry("bcprov-ext-jdk15on")
             }
+            dependency("org.jetbrains.kotlinx:kotlinx-coroutines-core:${Versions.coroutinesCore}")
             dependencySet("org.jetbrains.kotlin:${Versions.Kotlin}") {
                 entry("kotlin-stdlib-jdk8")
                 entry("kotlin-reflect")
