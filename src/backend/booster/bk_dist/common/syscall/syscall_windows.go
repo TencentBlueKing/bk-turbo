@@ -160,6 +160,18 @@ func (s *Sandbox) ExecScripts(src string) (int, error) {
 	return s.execCommand(caller)
 }
 
+func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
+	blog.Infof("sanbox:ready exec raw script:%s", src)
+
+	caller, _ := GetCallerAndOptions()
+
+	s.spa = &syscall.SysProcAttr{
+		CmdLine:    src,
+		HideWindow: true,
+	}
+	return s.execCommand(caller)
+}
+
 // ExecScriptsWithMessage run the scripts and return the output
 func (s *Sandbox) ExecScriptsWithMessage(src string) (int, []byte, []byte, error) {
 	caller, options := GetCallerAndOptions()
