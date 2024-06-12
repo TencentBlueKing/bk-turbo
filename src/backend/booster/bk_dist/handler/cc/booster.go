@@ -179,7 +179,7 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 		return originArgs
 
 	}
-	blog.Info("booster: [%s] render args: %s", cc.getCacheLog(), originArgs)
+	blog.Info("booster: [%s | %s] render args: %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), originArgs)
 	return originArgs
 }
 
