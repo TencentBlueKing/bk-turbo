@@ -314,7 +314,14 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
+		blog.Infof("executor:ready run cmd:%v", e.req.Commands)
+		cmd := e.req.Commands[0]
+		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") {
+			arg := strings.Join(e.req.Commands, " ")
+			code, err = sandbox.ExecScriptsRaw(arg)
+		} else {
+			code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
+		}
 		stdout, stderr = outBuf.Bytes(), errBuf.Bytes()
 	}
 

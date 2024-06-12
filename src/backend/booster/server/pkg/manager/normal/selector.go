@@ -153,6 +153,9 @@ func (s *selector) picker(info engine.QueueBriefInfo, c chan bool) {
 		return
 	}
 
+	tickerdefault := time.NewTicker(selectorSelectSleepTime)
+	defer tickerdefault.Stop()
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -162,9 +165,11 @@ func (s *selector) picker(info engine.QueueBriefInfo, c chan bool) {
 		case <-c:
 			blog.Infof("selector: received notify of engine(%s) queue(%s)", info.EngineName, info.QueueName)
 			s.pick(egn, tqg, info.QueueName)
-		default:
+		case <-tickerdefault.C:
 			s.pick(egn, tqg, info.QueueName)
-			time.Sleep(selectorSelectSleepTime)
+			// default:
+			// 	s.pick(egn, tqg, info.QueueName)
+			// 	time.Sleep(selectorSelectSleepTime)
 		}
 	}
 }
@@ -228,7 +233,8 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 	tb.Client.QueueName = queueName
 	tb.Status.Launch()
 	tb.Status.Message = messageTaskStarting
-	if err = s.layer.UpdateTaskBasic(tb); err != nil {
+	rawwhere := []string{"launch_time=0"}
+	if err = s.layer.UpdateTaskBasic(tb, rawwhere, true); err != nil {
 		blog.Errorf("selector: update task basic(%s) failed: %v", tb.ID, err)
 		_ = egn.ReleaseTask(tb.ID)
 		return

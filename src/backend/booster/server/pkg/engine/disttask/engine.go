@@ -440,6 +440,7 @@ func (de *disttaskEngine) createTask(tb *engine.TaskBasic, extra []byte) error {
 		blog.Errorf("engine(%s) try creating task, update task(%s) failed: %v", EngineName, tb.ID, err)
 		return err
 	}
+
 	blog.Infof("engine(%s) success to create task(%s)", EngineName, tb.ID)
 	return nil
 }
@@ -494,7 +495,45 @@ type ExtraData struct {
 	ExtraVars taskClientExtra `json:"extra_vars,omitempty"`
 }
 
+// 缓存task信息
+var (
+	distTaskCacheLock sync.RWMutex
+	distTaskCache     map[string]*distTask = make(map[string]*distTask, 10000)
+)
+
+func getTaskFromCache(taskid string) (*distTask, bool) {
+	distTaskCacheLock.RLock()
+	task, ok := distTaskCache[taskid]
+	distTaskCacheLock.RUnlock()
+
+	blog.Infof("task_cache engine(%s) get task(%s) from cache:%t", EngineName, taskid, ok)
+	return task, ok
+}
+
+func putTask2Cache(taskid string, task *distTask) {
+	distTaskCacheLock.Lock()
+	distTaskCache[taskid] = task
+	distTaskCacheLock.Unlock()
+
+	blog.Infof("task_cache engine(%s) put task(%s) to cache", EngineName, taskid)
+	return
+}
+
+func deleteTaskFromCache(taskid string) {
+	distTaskCacheLock.Lock()
+	delete(distTaskCache, taskid)
+	distTaskCacheLock.Unlock()
+
+	blog.Infof("task_cache engine(%s) delete task(%s) from cache", EngineName, taskid)
+	return
+}
+
 func (de *disttaskEngine) getTask(taskID string) (*distTask, error) {
+	dt, ok := getTaskFromCache(taskID)
+	if ok && dt != nil {
+		return dt, nil
+	}
+
 	t, err := de.mysql.GetTask(taskID)
 	if err != nil {
 		blog.Errorf("engine(%s) get task(%s) failed: %v", EngineName, taskID, err)
@@ -505,6 +544,9 @@ func (de *disttaskEngine) getTask(taskID string) (*distTask, error) {
 }
 
 func (de *disttaskEngine) updateTask(task *distTask) error {
+	// 加到缓存里面，后续可以直接从缓存取，避免读数据库
+	putTask2Cache(task.ID, task)
+
 	data, err := engine.GetMapExcludeTableTaskBasic(task2Table(task))
 	if err != nil {
 		blog.Errorf("engine(%s) update task(%s), get exclude map failed: %v", EngineName, task.ID, err)
@@ -767,10 +809,18 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		return err
 	}
 
-	if err = de.updateTask(task); err != nil {
-		blog.Errorf("engine(%s) try launching crm task, update task(%s) failed: %v", EngineName, tb.ID, err)
-		return err
+	// 这儿的task数据表更新，没有非常重要的字段，不影响后续加速，忽略写db失败的情况
+	// if err = de.updateTask(task); err != nil {
+	// 	blog.Errorf("engine(%s) try launching crm task, update task(%s) failed: %v", EngineName, tb.ID, err)
+	// 	return err
+	// }
+
+	if task.InheritSetting.QueueName != queueName {
+		task.InheritSetting.QueueName = queueName
+		putTask2Cache(task.ID, task)
 	}
+	go de.updateTask(task)
+
 	blog.Infof("engine(%s) success to launch crm task(%s)", EngineName, tb.ID)
 	return nil
 }
@@ -992,6 +1042,8 @@ func (de *disttaskEngine) releaseTask(taskID string) error {
 		blog.Errorf("engine(%s) try release task, get task(%s) failed: %v", EngineName, taskID, err)
 		return err
 	}
+
+	deleteTaskFromCache(taskID)
 
 	if task.InheritSetting.BanAllBooster {
 		blog.Infof("engine(%s) release task(%s) success immediately for banning", EngineName, taskID)

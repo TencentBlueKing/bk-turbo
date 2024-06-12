@@ -149,10 +149,24 @@ func (s *Sandbox) Fork() *Sandbox {
 
 // ExecScripts run the scripts
 func (s *Sandbox) ExecScripts(src string) (int, error) {
+	blog.Infof("sanbox:ready exec script:%s", src)
+
 	caller, options := GetCallerAndOptions()
 
 	s.spa = &syscall.SysProcAttr{
 		CmdLine:    fmt.Sprintf("%s %s", options, src),
+		HideWindow: true,
+	}
+	return s.execCommand(caller)
+}
+
+func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
+	blog.Infof("sanbox:ready exec raw script:%s", src)
+
+	caller, _ := GetCallerAndOptions()
+
+	s.spa = &syscall.SysProcAttr{
+		CmdLine:    src,
 		HideWindow: true,
 	}
 	return s.execCommand(caller)
@@ -233,6 +247,8 @@ func (s *Sandbox) ExecCommand(name string, arg ...string) (int, error) {
 }
 
 func (s *Sandbox) execCommand(name string, arg ...string) (int, error) {
+	blog.Infof("sanbox:ready run cmd:%s %v", name, arg)
+
 	if s.Env == nil {
 		s.Env = env.NewSandbox(os.Environ())
 	}
@@ -260,6 +276,10 @@ func (s *Sandbox) execCommand(name string, arg ...string) (int, error) {
 	// if not relative path find the command in PATH
 	if !strings.HasPrefix(name, ".") {
 		name, err = s.LookPath(name)
+
+		if err != nil {
+			blog.Infof("sanbox:LookPath %s with error:%v", name, err)
+		}
 	}
 
 	var cmd *exec.Cmd
@@ -282,6 +302,9 @@ func (s *Sandbox) execCommand(name string, arg ...string) (int, error) {
 	}
 
 	if err := cmd.Run(); err != nil {
+		// blog.Infof("sanbox:run cmd:%+v with error:%v", cmd, err)
+		blog.Infof("sanbox:run cmd:%+v with error:%v,spa:%+v\n", *cmd, err, *cmd.SysProcAttr)
+
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 				return status.ExitStatus(), err
