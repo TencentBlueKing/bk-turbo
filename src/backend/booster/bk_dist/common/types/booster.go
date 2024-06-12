@@ -147,23 +147,21 @@ type BoosterTransport struct {
 }
 
 func (w *BoosterWorks) GetBazelTypeInfo() string {
-	if w.Bazel4Plus {
+	switch {
+	case w.Bazel4Plus:
 		return "bazel4Plus launcher enabled"
-	}
-	if w.BazelPlus {
+	case w.BazelPlus:
 		return "bazelPlus launcher enabled"
-	}
-	if w.BazelNoLauncher {
+	case w.BazelNoLauncher:
 		return "bazel launcher disabled"
-	}
-	if w.Bazel {
+	case w.Bazel:
 		if w.Launcher {
 			return "old bazel launcher enabled"
 		}
 		return "old bazel launcher disabled"
-	}
-	if w.Launcher {
+	case w.Launcher:
 		return "launcher enabled"
+	default:
+		return "launcher disabled"
 	}
-	return "launcher disabled"
 }
