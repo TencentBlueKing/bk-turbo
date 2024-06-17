@@ -145,3 +145,23 @@ type BoosterTransport struct {
 	PrintTaskInfoEveryTime int
 	CommitSuicideCheckTick time.Duration
 }
+
+func (w *BoosterWorks) GetBazelTypeInfo() string {
+	switch {
+	case w.Bazel4Plus:
+		return "bazel4Plus launcher enabled"
+	case w.BazelPlus:
+		return "bazelPlus launcher enabled"
+	case w.BazelNoLauncher:
+		return "bazel launcher disabled"
+	case w.Bazel:
+		if w.Launcher {
+			return "old bazel launcher enabled"
+		}
+		return "old bazel launcher disabled"
+	case w.Launcher:
+		return "launcher enabled"
+	default:
+		return "launcher disabled"
+	}
+}

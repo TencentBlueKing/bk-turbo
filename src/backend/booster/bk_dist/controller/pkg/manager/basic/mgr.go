@@ -282,7 +282,10 @@ func (m *Mgr) Start() error {
 	m.work.Local().Start()
 	m.work.Remote().Start()
 
-	go m.syncBriefStats()
+	if m.work.Basic().Info().ProjectID() != "" {
+		go m.syncBriefStats()
+	}
+
 	return nil
 }
 

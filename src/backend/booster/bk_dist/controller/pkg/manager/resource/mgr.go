@@ -307,6 +307,11 @@ func (m *Mgr) Apply(req *v2.ParamApply, force bool) (*v2.RespTaskInfo, error) {
 		blog.Errorf("resource: apply dist-resource failed for work(%s) error:%v", m.work.ID(), err)
 		return nil, err
 	}
+	if req.ProjectID == "" {
+		err := fmt.Errorf("projectId is nil")
+		blog.Warnf("resource: apply dist-resource failed for work(%s) error:%v", m.work.ID(), err)
+		return nil, err
+	}
 
 	// 确保只有一个apply生效中，避免多个apply同时运行
 	// 另外还需要设置一个失败后的冷却期，比如30秒后才能下次申请，避免频繁触发导致server端的压力
