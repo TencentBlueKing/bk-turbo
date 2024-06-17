@@ -293,6 +293,11 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 			},
 		}
 	}
+
+	return e.realExecuteLocalTask(locallockweight)
+}
+
+func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskExecuteResult {
 	blog.Infof("executor: got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkLockTime)
 	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkUnlockTime)
@@ -387,53 +392,7 @@ func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
 		return nil
 	}
 
-	blog.Infof("executor: got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
-	dcSDK.StatsTimeNow(&e.stats.LocalWorkLockTime)
-	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkUnlockTime)
-	defer e.unlock(dcSDK.JobUsageLocalExe, locallockweight)
-
-	dcSDK.StatsTimeNow(&e.stats.LocalWorkStartTime)
-	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkEndTime)
-	e.mgr.work.Basic().UpdateJobStats(e.stats)
-
-	var code int
-	// var err error
-	var stdout, stderr []byte
-
-	if e.handler.LocalExecuteNeed(e.req.Commands) {
-		code, err = e.handler.LocalExecute(e.req.Commands)
-		stdout, stderr = e.Stdout(), e.Stderr()
-	} else {
-		sandbox := e.sandbox.Fork()
-		var outBuf, errBuf bytes.Buffer
-		sandbox.Stdout = &outBuf
-		sandbox.Stderr = &errBuf
-		code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
-		stdout, stderr = outBuf.Bytes(), errBuf.Bytes()
-	}
-
-	if err != nil {
-		blog.Errorf("executor: failed to execute local-task from pid(%d): %v, %v",
-			e.req.Pid, err, string(stderr))
-		return &types.LocalTaskExecuteResult{
-			Result: &dcSDK.LocalTaskResult{
-				ExitCode: code,
-				Message:  err.Error(),
-				Stdout:   stdout,
-				Stderr:   stderr,
-			},
-		}
-	}
-
-	e.stats.LocalWorkSuccess = true
-	blog.Infof("executor: success to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
-	return &types.LocalTaskExecuteResult{
-		Result: &dcSDK.LocalTaskResult{
-			ExitCode: code,
-			Stdout:   stdout,
-			Stderr:   stderr,
-		},
-	}
+	return e.realExecuteLocalTask(locallockweight)
 }
 
 func (e *executor) executeFinalTask() {
