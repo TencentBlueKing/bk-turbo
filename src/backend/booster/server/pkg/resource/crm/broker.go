@@ -20,6 +20,10 @@ import (
 	op "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
 )
 
+const (
+	waitTime4Create = 4 * time.Minute
+)
+
 // NewBrokerSet get a new, empty broker set.
 func NewBrokerSet() *BrokerSet {
 	return &BrokerSet{
@@ -99,12 +103,12 @@ func (bs *BrokerSet) Apply(
 }
 
 // BrokerParam describe the params of one broker, contains the following fields:
-// - Param resource param, use to launch broker resource automatically
-// - Instance decide how many instances in one broker resource
-// - FitFunc a function receive the broker resource param and request resource param,
-// - ReleaseLoop indicate whether release resource with loop until succeed
-// - IdleKeepSeconds to set wait seconds before release idle resource
-//  check if the broker can serve this request.
+//   - Param resource param, use to launch broker resource automatically
+//   - Instance decide how many instances in one broker resource
+//   - FitFunc a function receive the broker resource param and request resource param,
+//   - ReleaseLoop indicate whether release resource with loop until succeed
+//   - IdleKeepSeconds to set wait seconds before release idle resource
+//     check if the broker can serve this request.
 type BrokerParam struct {
 	Param           ResourceParam
 	Instance        int
@@ -150,10 +154,10 @@ type freeResourceInfo struct {
 }
 
 // Broker maintains a type of pre-launch-server, it has following features:
-// - When someone call the Broker for Applying, the Broker check if it matches the conditions,
-//   if so, give the caller the running server, and kicked the server out from its pool.
-// - When the number of running servers in its pool is less or more than expected, the Broker launch or release servers
-//   to match the expect number.
+//   - When someone call the Broker for Applying, the Broker check if it matches the conditions,
+//     if so, give the caller the running server, and kicked the server out from its pool.
+//   - When the number of running servers in its pool is less or more than expected, the Broker launch or release servers
+//     to match the expect number.
 type Broker struct {
 	name         string
 	user         string
@@ -504,7 +508,7 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 	// dirty data which created as init but no one launch it.
 	// if a broker is in deploying status for more then 2min, then release it.
 	if resource.status == resourceStatusInit ||
-		(resource.status == resourceStatusDeploying && time.Now().Local().After(startTime.Add(2*time.Minute))) {
+		(resource.status == resourceStatusDeploying && time.Now().Local().After(startTime.Add(waitTime4Create))) {
 		blog.Infof("crm broker: clean dirty resource(%s) in status(%s) from broker(%s) with user(%s)",
 			resourceID, resource.status.String(), b.name, b.user)
 		err = b.mgr.release(resource.resourceID, b.user)
