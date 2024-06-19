@@ -449,7 +449,7 @@ func (rm *resourceManager) recover() error {
 			continue
 		}
 		// recover the no-ready records
-		rm.nodeInfoPool.RecoverNoReadyBlock(r.resourceBlockKey, r.noReadyInstance)
+		rm.nodeInfoPool.RecoverNoReadyBlock(r.resourceBlockKey, r.noReadyInstance, r.resourceID)
 		blog.Infof("crm: recover no-ready-instance(%d) from resource(%s)", r.noReadyInstance, r.resourceID)
 	}
 
