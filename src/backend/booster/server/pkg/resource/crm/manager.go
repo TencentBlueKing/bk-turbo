@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/rd"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
 	dcmac "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator/dc_mac"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -413,6 +414,7 @@ func (rm *resourceManager) runAppDetailSync() {
 
 func (rm *resourceManager) logResourceStats() {
 	blog.Infof("crm: report resources(%s) following: %s", rm.conf.Operator, rm.nodeInfoPool.GetStats())
+	operator.PrintNoReadyInfo()
 }
 
 func (rm *resourceManager) recover() error {
@@ -526,13 +528,13 @@ func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready i
 	}
 
 	if terminated {
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
 		r.noReadyInstance = 0
 	} else {
 		// the newest no ready num = resource request instance - the newest ready num
 		currentNoReady := r.requestInstance - ready
 		if r.noReadyInstance > currentNoReady && currentNoReady >= 0 {
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance-currentNoReady)
+			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance-currentNoReady, resourceID)
 			r.noReadyInstance = currentNoReady
 		}
 	}
@@ -789,16 +791,17 @@ func (rm *resourceManager) getServerRealName(resourceID string) (string, error) 
 
 func (rm *resourceManager) getFreeInstances(
 	condition map[string]string,
-	function op.InstanceFilterFunction) (int, string, error) {
+	function op.InstanceFilterFunction,
+	caller string) (int, string, error) {
 
-	return rm.nodeInfoPool.GetFreeInstances(condition, function)
+	return rm.nodeInfoPool.GetFreeInstances(condition, function, caller)
 }
 
-func (rm *resourceManager) releaseNoReadyInstance(key string, instance int) {
+func (rm *resourceManager) releaseNoReadyInstance(key string, instance int, caller string) {
 	now := time.Now()
 	for ; ; time.Sleep(syncTimeGap) {
 		if rm.nodeInfoPool.GetLastUpdateTime().After(now) {
-			rm.nodeInfoPool.ReleaseNoReadyInstance(key, instance)
+			rm.nodeInfoPool.ReleaseNoReadyInstance(key, instance, caller)
 			break
 		}
 	}
@@ -868,7 +871,7 @@ func (rm *resourceManager) launch(
 			op.AttributeKeyCity:     r.param.City,
 			op.AttributeKeyPlatform: r.param.Platform,
 		}
-		instance, key, err = rm.getFreeInstances(condition, function)
+		instance, key, err = rm.getFreeInstances(condition, function, resourceID)
 		if err == engine.ErrorNoEnoughResources || err == ErrorBrokerNotEnoughResources {
 			return err
 		}
@@ -956,7 +959,7 @@ func (rm *resourceManager) realLaunch(
 			blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
 			// if launch failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
 			return err
 		}
 	}
@@ -1024,7 +1027,7 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 		condition := map[string]string{
 			op.AttributeKeyCity: r.param.City,
 		}
-		deltaInstance, key, err := rm.getFreeInstances(condition, function)
+		deltaInstance, key, err := rm.getFreeInstances(condition, function, resourceID)
 		if err != nil {
 			blog.Errorf("crm: try get free instances for resource(%s) user(%s) failed: %v",
 				resourceID, user, err)
@@ -1044,7 +1047,7 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 				resourceID, r.requestInstance, targetInstance, user, err)
 
 			// if scale failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
 			return err
 		}
 
@@ -1056,7 +1059,7 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 		blog.Errorf("crm: try scaling service, save resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
 		// if save resource failed, clean the dirty data in noReadyInstance
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
 		return err
 	}
 
@@ -1108,7 +1111,7 @@ func (rm *resourceManager) release(resourceID, user string) error {
 	}
 
 	if r.noReadyInstance > 0 {
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
 		r.noReadyInstance = 0
 	}
 	r.status = resourceStatusReleased

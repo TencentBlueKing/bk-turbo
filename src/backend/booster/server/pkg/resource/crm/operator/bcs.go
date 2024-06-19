@@ -132,6 +132,87 @@ func (ni *NodeInfo) valid() bool {
 	return ni.CPUTotal >= 0 && ni.MemTotal >= 0 && ni.DiskTotal >= 0
 }
 
+type noReadyInfoDetail struct {
+	caller string
+	start  time.Time
+	num    int32
+}
+
+type noReadyInfoBlock struct {
+	blockkey string
+	total    int32
+	details  map[string]*noReadyInfoDetail
+}
+
+var (
+	noReadyInfoLock sync.RWMutex
+	noReadyInfo     map[string]*noReadyInfoBlock = make(map[string]*noReadyInfoBlock, 10)
+)
+
+func addNoReadyInfo(blockkey, caller string, num int32) {
+	noReadyInfoLock.Lock()
+	defer noReadyInfoLock.Unlock()
+
+	block, ok := noReadyInfo[blockkey]
+	var detail *noReadyInfoDetail
+	var ok1 bool
+	if ok {
+		detail, ok1 = block.details[caller]
+		if ok1 {
+			detail.num += num
+			block.total += num
+
+			if detail.num == 0 {
+				delete(block.details, caller)
+			}
+		} else {
+			detail = &noReadyInfoDetail{
+				caller: caller,
+				start:  time.Now(),
+				num:    num,
+			}
+			block.details[caller] = detail
+			block.total += num
+		}
+	} else {
+		detail = &noReadyInfoDetail{
+			caller: caller,
+			start:  time.Now(),
+			num:    num,
+		}
+		block = &noReadyInfoBlock{
+			blockkey: blockkey,
+			total:    0,
+			details:  make(map[string]*noReadyInfoDetail, 10),
+		}
+		block.details[caller] = detail
+		block.total += num
+		noReadyInfo[blockkey] = block
+	}
+
+	blog.Infof("bcs: block(%s) total noready:%d after add %d by caller(%s)",
+		blockkey, block.total, num, caller)
+}
+
+func PrintNoReadyInfo() {
+	noReadyInfoLock.RLock()
+	defer noReadyInfoLock.RUnlock()
+
+	allinfo := ""
+	for _, v := range noReadyInfo {
+		allinfo += fmt.Sprintf("%s %d:[", v.blockkey, v.total)
+		for _, d := range v.details {
+			if d.num == 0 {
+				continue
+			}
+			allinfo += fmt.Sprintf("%s:%d %v | ", d.caller, d.num, d.start)
+		}
+		allinfo += "];"
+	}
+
+	blog.Infof("bcs: all noready info: %s", allinfo)
+}
+
 // NewNodeInfoPool get a new node info pool
 func NewNodeInfoPool(conf *config.ContainerResourceConfig) *NodeInfoPool {
 	nip := NodeInfoPool{
@@ -230,6 +311,7 @@ func (nip *NodeInfoPool) GetStats() string {
 			memLeftStr,
 		)
 	}
+
 	return message
 }
 
@@ -371,7 +453,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 // GetFreeInstances 在资源池中尝试获取可用的instance, 给定需求条件condition和资源数量函数function
 func (nip *NodeInfoPool) GetFreeInstances(
 	condition map[string]string,
-	function InstanceFilterFunction) (int, string, error) {
+	function InstanceFilterFunction,
+	caller string) (int, string, error) {
 
 	nip.Lock()
 	defer nip.Unlock()
@@ -392,6 +475,7 @@ func (nip *NodeInfoPool) GetFreeInstances(
 	}
 
 	nodeBlock.noReadyInstance += need
+	addNoReadyInfo(key, caller, int32(need))
 	blog.V(5).Infof(
 		"crm: get free instances consume %d instances from %s, current stats: report %d, no-ready: %d",
 		need, key, nodeBlock.AvailableInstance, nodeBlock.noReadyInstance,
@@ -400,7 +484,7 @@ func (nip *NodeInfoPool) GetFreeInstances(
 }
 
 // ReleaseNoReadyInstance 消除给定区域的noReady计数, 表示这部分已经ready或已经释放
-func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
+func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int, caller string) {
 	nip.Lock()
 	defer nip.Unlock()
 
@@ -410,6 +494,7 @@ func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
 	}
 
 	nodeBlock.noReadyInstance -= instance
+	addNoReadyInfo(key, caller, int32(instance*-1))
 	blog.V(5).Infof("crm: release %d no-ready instance from %s, current stats no-ready: %d",
 		instance, key, nodeBlock.noReadyInstance)
 }
