@@ -268,12 +268,14 @@ type NodeInfoPool struct {
 
 // RecoverNoReadyBlock 对给定区域key的资源, 加上noReady个未就绪标记
 // 一般用于在系统恢复时, 从数据库同步之前未就绪的数据信息
-func (nip *NodeInfoPool) RecoverNoReadyBlock(key string, noReady int) {
+func (nip *NodeInfoPool) RecoverNoReadyBlock(key string, noReady int, caller string) {
 	if _, ok := nip.nodeBlockMap[key]; !ok {
 		nip.nodeBlockMap[key] = &NodeInfoBlock{}
 	}
 
 	nip.nodeBlockMap[key].noReadyInstance += noReady
+
+	addNoReadyInfo(key, caller, int32(noReady))
 }
 
 // GetStats get status message
