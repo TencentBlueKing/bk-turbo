@@ -682,6 +682,15 @@ func (rm *resourceManager) saveResources(r *resource) error {
 	return rm.mysql.PutResource(resource2Table(r))
 }
 
+func (rm *resourceManager) updateResourcesCache(r *resource) error {
+	rm.registeredResourceMapLock.Lock()
+	defer rm.registeredResourceMapLock.Unlock()
+
+	rm.registeredResourceMap[r.resourceID] = r
+
+	return nil
+}
+
 func (rm *resourceManager) getResources(resourceID string) (*resource, error) {
 	rm.registeredResourceMapLock.Lock()
 	defer rm.registeredResourceMapLock.Unlock()
@@ -888,44 +897,11 @@ func (rm *resourceManager) launch(
 		r.noReadyInstance = instance
 		r.resourceBlockKey = key
 		r.requestInstance = instance
-
-		// 	blog.Infof("crm: try to launch service with resource(%s) instance(%d) for user(%s)",
-		// 		resourceID, instance, user)
-		// 	if err = rm.operator.LaunchServer(rm.conf.BcsClusterID, op.BcsLaunchParam{
-		// 		Name:               resourceID,
-		// 		Namespace:          rm.handlerMap[user].GetNamespace(),
-		// 		AttributeCondition: condition,
-		// 		Env:                r.param.Env,
-		// 		Ports:              r.param.Ports,
-		// 		Volumes:            r.param.Volumes,
-		// 		Image:              r.param.Image,
-		// 		Instance:           instance,
-		// 	}); err != nil {
-		// 		blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
-
-		// 		// if launch failed, clean the dirty data in noReadyInstance
-		// 		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-		// 		return err
-		// 	}
 	}
 
-	// r.status = resourceStatusDeploying
-	// if err = rm.saveResources(r); err != nil {
-	// 	blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
-	// 		resourceID, user, err)
-
-	// 	// if save resource failed, clean the dirty data in noReadyInstance
-	// 	go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-	// 	return err
-	// }
-
-	// needTrace = true
-
-	// blog.Infof(
-	// 	"crm: success to launch service with resource(%s) instance(%d) "+
-	// 		"for user(%s) in city(%s) from originCity(%s)",
-	// 	resourceID, r.requestInstance, user, r.param.City, originCity,
-	// )
+	// 在启动协程前，将resource刷新到内存，其它协程依赖该数据
+	r.status = resourceStatusDeploying
+	rm.updateResourcesCache(r)
 
 	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
 	go rm.realLaunch(hasBroker, resourceID, user, r, condition, instance, originCity)
