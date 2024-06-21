@@ -35,6 +35,9 @@ const (
 type TCPClient struct {
 	timeout int
 	conn    *net.TCPConn
+
+	desc      string
+	localport int32
 }
 
 // NewTCPClient return new TCPClient
@@ -44,7 +47,8 @@ func NewTCPClient(timeout int) *TCPClient {
 	}
 
 	return &TCPClient{
-		timeout: timeout,
+		timeout:   timeout,
+		localport: -1,
 	}
 }
 
@@ -57,8 +61,9 @@ func NewTCPClientWithConn(conn *net.TCPConn) *TCPClient {
 	}
 
 	return &TCPClient{
-		conn:    conn,
-		timeout: DefaultLongTCPTimeoutSeconds,
+		conn:      conn,
+		timeout:   DefaultLongTCPTimeoutSeconds,
+		localport: -1,
 	}
 }
 
@@ -356,5 +361,25 @@ func (c *TCPClient) ConnDesc() string {
 		return ""
 	}
 
-	return fmt.Sprintf("%s->%s", c.conn.LocalAddr().String(), c.conn.RemoteAddr().String())
+	if c.desc != "" {
+		return c.desc
+	}
+
+	c.desc = fmt.Sprintf("%s->%s", c.conn.LocalAddr().String(), c.conn.RemoteAddr().String())
+	return c.desc
+}
+
+func (c *TCPClient) LocalPort() int32 {
+	if c.localport != -1 {
+		return c.localport
+	}
+
+	localAddr, ok := c.conn.LocalAddr().(*net.TCPAddr)
+	if !ok {
+		c.localport = 0
+	} else {
+		c.localport = int32(localAddr.Port)
+	}
+
+	return c.localport
 }
