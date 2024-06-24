@@ -528,14 +528,20 @@ func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready i
 	}
 
 	if terminated {
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
-		r.noReadyInstance = 0
+		if r.noReadyInstance > 0 {
+			noReadyInstance := r.noReadyInstance
+			r.noReadyInstance = 0
+			rm.updateResourcesCache(r)
+			go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+		}
 	} else {
 		// the newest no ready num = resource request instance - the newest ready num
 		currentNoReady := r.requestInstance - ready
 		if r.noReadyInstance > currentNoReady && currentNoReady >= 0 {
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance-currentNoReady, resourceID)
+			noReadyInstance := r.noReadyInstance - currentNoReady
 			r.noReadyInstance = currentNoReady
+			rm.updateResourcesCache(r)
+			go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
 		}
 	}
 
@@ -935,7 +941,12 @@ func (rm *resourceManager) realLaunch(
 			blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
 			// if launch failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
+			if r.noReadyInstance > 0 {
+				noReadyInstance := r.noReadyInstance
+				r.noReadyInstance = 0
+				rm.updateResourcesCache(r)
+				go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+			}
 			return err
 		}
 	}
@@ -1023,7 +1034,13 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 				resourceID, r.requestInstance, targetInstance, user, err)
 
 			// if scale failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
+			if r.noReadyInstance > 0 {
+				noReadyInstance := r.noReadyInstance
+				r.noReadyInstance = 0
+				rm.updateResourcesCache(r)
+				go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+			}
+
 			return err
 		}
 
@@ -1035,7 +1052,12 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 		blog.Errorf("crm: try scaling service, save resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
 		// if save resource failed, clean the dirty data in noReadyInstance
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
+		if r.noReadyInstance > 0 {
+			noReadyInstance := r.noReadyInstance
+			r.noReadyInstance = 0
+			rm.updateResourcesCache(r)
+			go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+		}
 		return err
 	}
 
@@ -1087,8 +1109,10 @@ func (rm *resourceManager) release(resourceID, user string) error {
 	}
 
 	if r.noReadyInstance > 0 {
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance, resourceID)
+		noReadyInstance := r.noReadyInstance
 		r.noReadyInstance = 0
+		rm.updateResourcesCache(r)
+		go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
 	}
 	r.status = resourceStatusReleased
 	if err = rm.saveResources(r); err != nil {
