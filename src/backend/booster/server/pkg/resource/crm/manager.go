@@ -513,6 +513,12 @@ func (rm *resourceManager) isFinishDeploying(resourceID, user string) bool {
 	}
 }
 
+func (rm *resourceManager) updateNoReadyInfo(r *resource, cleannum int, leftnum int, caller string) {
+	r.noReadyInstance = leftnum
+	rm.updateResourcesCache(r)
+	go rm.releaseNoReadyInstance(r.resourceBlockKey, cleannum, caller)
+}
+
 func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready int, terminated bool) {
 	rm.lockResource(resourceID)
 	defer rm.unlockResource(resourceID)
@@ -529,19 +535,14 @@ func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready i
 
 	if terminated {
 		if r.noReadyInstance > 0 {
-			noReadyInstance := r.noReadyInstance
-			r.noReadyInstance = 0
-			rm.updateResourcesCache(r)
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+			rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
 		}
 	} else {
 		// the newest no ready num = resource request instance - the newest ready num
 		currentNoReady := r.requestInstance - ready
 		if r.noReadyInstance > currentNoReady && currentNoReady >= 0 {
-			noReadyInstance := r.noReadyInstance - currentNoReady
-			r.noReadyInstance = currentNoReady
-			rm.updateResourcesCache(r)
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+			cleannum := r.noReadyInstance - currentNoReady
+			rm.updateNoReadyInfo(r, cleannum, currentNoReady, resourceID)
 		}
 	}
 
@@ -942,10 +943,7 @@ func (rm *resourceManager) realLaunch(
 
 			// if launch failed, clean the dirty data in noReadyInstance
 			if r.noReadyInstance > 0 {
-				noReadyInstance := r.noReadyInstance
-				r.noReadyInstance = 0
-				rm.updateResourcesCache(r)
-				go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+				rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
 			}
 			return err
 		}
@@ -1035,10 +1033,7 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 
 			// if scale failed, clean the dirty data in noReadyInstance
 			if r.noReadyInstance > 0 {
-				noReadyInstance := r.noReadyInstance
-				r.noReadyInstance = 0
-				rm.updateResourcesCache(r)
-				go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+				rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
 			}
 
 			return err
@@ -1053,10 +1048,7 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 
 		// if save resource failed, clean the dirty data in noReadyInstance
 		if r.noReadyInstance > 0 {
-			noReadyInstance := r.noReadyInstance
-			r.noReadyInstance = 0
-			rm.updateResourcesCache(r)
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+			rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
 		}
 		return err
 	}
@@ -1109,10 +1101,7 @@ func (rm *resourceManager) release(resourceID, user string) error {
 	}
 
 	if r.noReadyInstance > 0 {
-		noReadyInstance := r.noReadyInstance
-		r.noReadyInstance = 0
-		rm.updateResourcesCache(r)
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, noReadyInstance, resourceID)
+		rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
 	}
 	r.status = resourceStatusReleased
 	if err = rm.saveResources(r); err != nil {
