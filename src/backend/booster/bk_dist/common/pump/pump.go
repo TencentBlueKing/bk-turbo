@@ -156,7 +156,8 @@ func IsPump(env *env.Sandbox) bool {
 }
 
 func SupportPump(env *env.Sandbox) bool {
-	return IsPump(env) && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
+	return IsPump(env)
+	// return IsPump(env) && (runtime.GOOS == "windows" || runtime.GOOS == "darwin")
 	// return IsPump(env) && runtime.GOOS == "windows"
 }
 
