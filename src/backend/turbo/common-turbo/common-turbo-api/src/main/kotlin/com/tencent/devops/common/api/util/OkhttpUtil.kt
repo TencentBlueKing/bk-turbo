@@ -51,7 +51,7 @@ object OkhttpUtil {
         return body.toRequestBody(mediaType)
     }
 
-    private fun needSleep(sleepMillis: Long) {
+    fun needSleep(sleepMillis: Long) {
         try {
             Thread.sleep(sleepMillis)
         } catch (e: Exception) {
