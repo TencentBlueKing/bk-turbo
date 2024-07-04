@@ -5,6 +5,7 @@ import com.tencent.devops.common.api.exception.code.TURBO_NO_DATA_FOUND
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
 import com.tencent.devops.common.api.pojo.Page
+import com.tencent.devops.common.api.util.OkhttpUtil
 import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.service.prometheus.BkTimed
@@ -27,6 +28,7 @@ import com.tencent.devops.turbo.vo.TurboMigratedPlanVO
 import com.tencent.devops.turbo.vo.TurboPlanDetailVO
 import com.tencent.devops.turbo.vo.TurboPlanPageVO
 import com.tencent.devops.turbo.vo.TurboPlanStatRowVO
+import com.tencent.devops.turbo.vo.TurboPlanStatusBatchUpdateReqVO
 import org.slf4j.LoggerFactory
 import org.springframework.beans.BeanUtils
 import org.springframework.beans.factory.annotation.Autowired
@@ -662,7 +664,7 @@ class TurboPlanService @Autowired constructor(
     fun updatePlanStatusByBkProjectStatus(userId: String, projectId: String, enabled: Boolean) {
         logger.info("ProjectStatusUpdate event: $userId, $projectId, $enabled")
         // true表示启用项目，false表示停用项目
-        // 启用项目时注意，只回复系统自动停用的方案，用户停用的方案保持停用
+        // 启用项目时注意，只启用系统自动停用的方案，用户停用的方案保持停用
         val updatedBy = if (enabled) SYSTEM_ADMIN else null
 
         // 获取到待启用/待停用的加速方案清单
@@ -698,6 +700,29 @@ class TurboPlanService @Autowired constructor(
             logger.error("Sync turbo info to TBS backend failed: $projectId, plan ids: ${failedPlanIds.joinToString()}")
         } else {
             logger.info("Sync turbo info to TBS backend successful")
+        }
+    }
+
+    /**
+     * 更新存量停用项目的加速方案状态
+     */
+    fun manualRefreshStatus(reqVO: TurboPlanStatusBatchUpdateReqVO): String {
+        val projectIdList = reqVO.projectIdList
+        logger.info("manualRefreshStatus: ${reqVO.status}, project id:${projectIdList.joinToString()}")
+
+        val failedProjectIds = projectIdList.filter { projectId ->
+            try {
+                this.updatePlanStatusByBkProjectStatus(SYSTEM_ADMIN, projectId, reqVO.status)
+                OkhttpUtil.needSleep(200)
+                false
+            } catch (e: TurboException) {
+                true
+            }
+        }
+        return if (failedProjectIds.isNotEmpty()) {
+            "update failed project id: ${failedProjectIds.joinToString()}"
+        } else {
+            "all project id turbo plan status updated successfully!"
         }
     }
 }
