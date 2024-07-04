@@ -12,6 +12,7 @@ import com.tencent.devops.turbo.service.TurboPlanService
 import com.tencent.devops.turbo.vo.TurboMigratedPlanVO
 import com.tencent.devops.turbo.vo.TurboPlanDetailVO
 import com.tencent.devops.turbo.vo.TurboPlanPageVO
+import com.tencent.devops.turbo.vo.TurboPlanStatusBatchUpdateReqVO
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RestController
 
@@ -72,5 +73,17 @@ class UserTurboPlanController @Autowired constructor(
 
     override fun findTurboPlanIdByProjectIdAndPipelineInfo(projectId: String, pipelineId: String, pipelineElementId: String): Response<TurboMigratedPlanVO?> {
         return Response.success(turboPlanService.findMigratedTurboPlanByPipelineInfo(projectId, pipelineId, pipelineElementId))
+    }
+
+    override fun manualRefreshStatus(
+        reqVO: TurboPlanStatusBatchUpdateReqVO,
+        user: String,
+        projectId: String
+    ): Response<String> {
+        // 判断是否是管理员
+        if (!turboAuthService.getAuthResult(projectId, user)) {
+            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+        }
+        return Response.success(turboPlanService.manualRefreshStatus(reqVO))
     }
 }
