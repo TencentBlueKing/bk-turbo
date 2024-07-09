@@ -364,6 +364,8 @@ class TurboPlanService @Autowired constructor(
 
     /**
      * 同步加速方案信息至后端编译加速服务
+     *
+     * @param openStatus true:停用; false:启用
      */
     private fun updateTbsProjectInfo(
         user: String,
@@ -689,7 +691,7 @@ class TurboPlanService @Autowired constructor(
                     user = userId,
                     engineCode = it.engineCode,
                     planId = it.id!!,
-                    openStatus = enabled,
+                    openStatus = !enabled,
                     planName = null
                 )
             } catch (e: TurboException) {
