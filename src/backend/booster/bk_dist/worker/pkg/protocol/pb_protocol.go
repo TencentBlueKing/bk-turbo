@@ -439,9 +439,21 @@ func saveFile(
 			blog.Warnf("create dir %s before create input symlink %s failed: %v", inputDir, inputfile, err)
 			return "", err
 		}
-		if err = os.Symlink(linkTarget, inputfile); err != nil && !os.IsExist(err) {
-			blog.Errorf("create input symlink %s -> %s error: [%s]", inputfile, linkTarget, err.Error())
-			return "", err
+		if err = os.Symlink(linkTarget, inputfile); err != nil {
+			if os.IsExist(err) {
+				err = os.Remove(inputfile)
+				if err != nil {
+					blog.Errorf("remove old symlink %s with error:%v", inputfile, err)
+					return "", err
+				}
+				if err = os.Symlink(linkTarget, inputfile); err != nil {
+					blog.Errorf("create input symlink %s -> %s error: [%s]", inputfile, linkTarget, err.Error())
+					return "", err
+				}
+			} else {
+				blog.Errorf("create input symlink %s -> %s error: [%s]", inputfile, linkTarget, err.Error())
+				return "", err
+			}
 		}
 
 		// if the link is a dir, then we should ensure the target exist.
