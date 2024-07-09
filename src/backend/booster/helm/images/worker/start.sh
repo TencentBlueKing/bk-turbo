@@ -42,7 +42,8 @@ fi
 echo "BK_DIST_MAX_PROCESS_4_WORKER=${BK_DIST_MAX_PROCESS_4_WORKER}"
 echo "BK_DIST_WHITE_IP=${BK_DIST_WHITE_IP}"
 
-if [ -d "~/.bashrc" ]; then
+if [ -f ~/.bashrc ]; then
+echo "source bashrc file"
 source ~/.bashrc
 fi
 
