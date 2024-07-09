@@ -163,22 +163,23 @@ func (lr *slot) handleLock(ctx context.Context) {
 }
 
 func (lr *slot) hasEnoughtSlots(pairChan chanPair) bool {
+	// 这儿的内存判断，可能导致一直拿不到锁，先屏蔽掉
 	// 如果已经锁定的内存超过了largeLocked，再次申请内存时，需要关注当前系统内存情况
-	if lr.occupiedSlots > largeLocked {
-		v, err := mem.VirtualMemory()
-		if err == nil {
-			if v.Available < leastFree ||
-				v.Available < uint64(pairChan.weight) ||
-				v.UsedPercent > maxMemPercent {
-				blog.Infof("send slot: request size:%d,locked size:%d,Available:%d,UsedPercent:%f",
-					pairChan.weight,
-					lr.occupiedSlots,
-					v.Available,
-					v.UsedPercent)
-				return false
-			}
-		}
-	}
+	// if lr.occupiedSlots > largeLocked {
+	// 	v, err := mem.VirtualMemory()
+	// 	if err == nil {
+	// 		if v.Available < leastFree ||
+	// 			v.Available < uint64(pairChan.weight) ||
+	// 			v.UsedPercent > maxMemPercent {
+	// 			blog.Infof("send slot: request size:%d,locked size:%d,Available:%d,UsedPercent:%f",
+	// 				pairChan.weight,
+	// 				lr.occupiedSlots,
+	// 				v.Available,
+	// 				v.UsedPercent)
+	// 			return false
+	// 		}
+	// 	}
+	// }
 
 	if lr.occupiedSlots+pairChan.weight < lr.totalSlots {
 		return true

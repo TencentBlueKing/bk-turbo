@@ -379,7 +379,7 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	defer func() {
 		r.updateJobStatsFunc()
 	}()
-	blog.Debugf("start send files to server %s", server)
+	blog.Infof("start send files to server %s", server)
 	r.recordStats.RemoteWorker = server.Server
 
 	if len(req.Files) == 0 {
@@ -499,6 +499,12 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	client := NewTCPClient(r.ioTimeout)
 	if err := client.Connect(getRealServer(server.Server)); err != nil {
 		blog.Warnf("error: %v", err)
+
+		if memorylocked {
+			r.slot.Unlock(locksize)
+			blog.Debugf("remotehandle: succeed to release one memory lock")
+		}
+
 		return nil, err
 	}
 	d := time.Now().Sub(t)
@@ -516,14 +522,13 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 	blog.Debugf("success connect to server %s", server)
 
 	err = SendMessages(client, messages)
+	if memorylocked {
+		r.slot.Unlock(locksize)
+		blog.Debugf("remotehandle: succeed to release one memory lock")
+	}
+
 	if err != nil {
 		blog.Warnf("error: %v", err)
-
-		if memorylocked {
-			r.slot.Unlock(locksize)
-			blog.Debugf("remotehandle: succeed to release one memory lock")
-		}
-
 		return nil, err
 	}
 
@@ -535,11 +540,6 @@ func (r *CommonRemoteHandler) ExecuteSendFile(
 		len(req.Files), totalsize, server.Server)
 
 	debug.FreeOSMemory() // free memory anyway
-
-	if memorylocked {
-		r.slot.Unlock(locksize)
-		blog.Debugf("remotehandle: succeed to release one memory lock")
-	}
 
 	blog.Debugf("success sent to server %s", server)
 	// receive result

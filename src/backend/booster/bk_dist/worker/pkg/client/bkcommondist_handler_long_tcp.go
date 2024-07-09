@@ -167,7 +167,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	defer func() {
 		r.updateJobStatsFunc()
 	}()
-	blog.Debugf("start send files to server %s", server)
+	blog.Infof("start send files to server %s", server)
 	r.recordStats.RemoteWorker = server.Server
 
 	if len(req.Files) == 0 {
