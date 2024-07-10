@@ -810,6 +810,12 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		}
 	}
 
+	if cc.forcedepend {
+		args = append(args, "-MD")
+		args = append(args, "-MF")
+		args = append(args, cc.sourcedependfile)
+	}
+
 	if err = cc.preBuild(args); err != nil {
 		blog.Warnf("cc: [%s] pre execute pre-build %v: %v", cc.tag, args, err)
 		return nil, err
