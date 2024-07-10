@@ -12,7 +12,6 @@ package cc
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -239,8 +238,8 @@ func uniqArr(arr []string) []string {
 	return newarr
 }
 
-func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Info, error) {
-	data, err := ioutil.ReadFile(dependf)
+func (cc *TaskCC) analyzeIncludes(dependf string) ([]*dcFile.Info, error) {
+	data, err := os.ReadFile(dependf)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +415,7 @@ func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, f
 
 	existed, fileSize, _, _ := dcFile.Stat(cc.pumpHeadFile).Batch()
 	if dcPump.IsPumpCache(cc.sandbox.Env) && !forcefresh && existed && fileSize > 0 {
-		return cc.analyzeIncludes(cc.pumpHeadFile, workdir)
+		return cc.analyzeIncludes(cc.pumpHeadFile)
 	}
 
 	return nil, ErrorNoPumpHeadFile
@@ -536,7 +535,7 @@ func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
 				if fsv != nil && len(fsv) > 0 {
 					fs = append(fs, fsv...)
 				} else {
-					fsv, err := cc.analyzeIncludes(df, cc.sandbox.Dir)
+					fsv, err := cc.analyzeIncludes(df)
 					if err == nil && len(fsv) > 0 {
 						fs = append(fs, fsv...)
 						// 添加到缓存
