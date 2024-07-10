@@ -758,23 +758,20 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	cc.originArgs = command
 
-	// TODO : 先只支持clang，gcc和g++应该会直接失败
 	if !cc.pumpremotefailed &&
 		dcPump.IsPumpCache(cc.sandbox.Env) &&
 		cc.workerSupportAbsPath() {
-		if satisfied, _ := cc.isPumpActionNumSatisfied(); satisfied {
-			req, err, notifyerr := cc.trypumpwithcache(command)
-			if err != nil {
-				if notifyerr == ErrorNotSupportRemote {
-					blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
-					return nil, err
-				}
-			} else {
-				// for debug
-				blog.Debugf("cc: after try pump, req: %+v", *req)
-				cc.pumpremote = true
-				return req, err
+		req, err, notifyerr := cc.trypumpwithcache(command)
+		if err != nil {
+			if notifyerr == ErrorNotSupportRemote {
+				blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
+				return nil, err
 			}
+		} else {
+			// for debug
+			blog.Debugf("cc: after try pump, req: %+v", *req)
+			cc.pumpremote = true
+			return req, err
 		}
 	}
 

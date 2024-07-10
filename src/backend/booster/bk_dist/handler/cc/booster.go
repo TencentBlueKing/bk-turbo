@@ -84,8 +84,6 @@ func (cc *TaskCC) appendCcache(config dcType.BoosterConfig) error {
 func (cc *TaskCC) appendPump(config dcType.BoosterConfig) error {
 	if config.Works.PumpCache {
 		bazelActionConstOptions = append(bazelActionConstOptions, env.GetEnvKey(env.KeyExecutorPumpCache))
-		bazelActionConstOptions = append(bazelActionConstOptions, env.GetEnvKey(env.KeyExecutorPumpMinActionNum))
-
 		// 这个是p2p里面需要判断的，先忽略
 		// bazelActionConstOptions = append(bazelActionConstOptions, env.GetEnvKey(env.KeyWorkerSupportAbsPath)）
 	}
