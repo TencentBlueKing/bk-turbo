@@ -1152,7 +1152,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 		}
 
 		// strip the args and get the server side args.
-		serverSideArgs := stripLocalArgs(finalArgs, cc.sandbox)
+		serverSideArgs := stripLocalArgs(finalArgs)
 		if cc.supportDirectives {
 			serverSideArgs = append(serverSideArgs, "-fdirectives-only")
 		}
