@@ -881,6 +881,17 @@ func (m *Mgr) ensureFiles(
 		if err = <-wg; err != nil {
 			blog.Warnf("remote: failed to ensure multi %d files for work(%s) from pid(%d) to server with err:%v",
 				count, m.work.ID(), pid, err)
+
+			// 异常情况下启动一个协程将消息收完，避免发送协程阻塞
+			i++
+			if i < count {
+				go func(i, count int, c <-chan error) {
+					for ; i < count; i++ {
+						_ = <-c
+					}
+				}(i, count, wg)
+			}
+
 			return nil, err
 		}
 	}
