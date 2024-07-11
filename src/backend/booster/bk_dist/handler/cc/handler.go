@@ -17,18 +17,27 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/analyser"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
 	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
+)
+
+const (
+	appendEnvKey = "INCLUDE="
 )
 
 var (
@@ -54,6 +63,7 @@ type TaskCC struct {
 	rewriteCrossArgs []string
 	preProcessArgs   []string
 	serverSideArgs   []string
+	pumpArgs         []string
 
 	// file names
 	inputFile        string
@@ -66,9 +76,34 @@ type TaskCC struct {
 
 	supportDirectives bool
 
+	responseFile     string
+	sourcedependfile string
+	pumpHeadFile     string
+	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
+	// 在rsp中-I后面的参数，需要将这些目录全部发送到远端
+	// 有特殊场景：编译不需要该路径下的文件，但需要该路径作为跳板，去查找其它相对路径下的头文件（或其它依赖文件）
+	includePaths []string
+	// 在rsp中 -include后面的参数，将这些文件发送到远端
+	includeFiles []string
+
+	// forcedepend 是我们主动导出依赖文件，showinclude 是编译命令已经指定了导出依赖文件
+	forcedepend          bool
+	pumpremote           bool
+	needcopypumpheadfile bool
+	pumpremotefailed     bool
+
+	// 当前是pch/gch的生成，pump模式下我们需要关注并保存其依赖关系
+	// 方便在后续pump模式下，发送完整的pch/gch列表
+	needresolvepchdepend bool
+	objectpchfile        string
+
 	pchFileDesc *dcSDK.FileDesc
 
-	ForceLocalCppFileKeys []string
+	// for /showIncludes
+	showinclude bool
+
+	ForceLocalResponseFileKeys []string
+	ForceLocalCppFileKeys      []string
 }
 
 // NewTaskCC get a new task-cc handler
@@ -146,11 +181,20 @@ func (cc *TaskCC) RemoteRetryTimes() int {
 
 // NeedRetryOnRemoteFail check whether need retry on remote fail
 func (cc *TaskCC) NeedRetryOnRemoteFail(command []string) bool {
-	return false
+	return cc.pumpremote
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	blog.Infof("cc: start OnRemoteFail for: %v", command)
+
+	if cc.pumpremote {
+		blog.Infof("cc: set pumpremotefailed to true now")
+		cc.pumpremotefailed = true
+		cc.needcopypumpheadfile = true
+		cc.pumpremote = false
+		return cc.preExecute(command)
+	}
 	return nil, nil
 }
 
@@ -181,10 +225,555 @@ func (cc *TaskCC) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	}, nil
 }
 
+func uniqArr(arr []string) []string {
+	newarr := make([]string, 0)
+	tempMap := make(map[string]bool, len(newarr))
+	for _, v := range arr {
+		if tempMap[v] == false {
+			tempMap[v] = true
+			newarr = append(newarr, v)
+		}
+	}
+
+	return newarr
+}
+
+func (cc *TaskCC) analyzeIncludes(dependf string) ([]*dcFile.Info, error) {
+	data, err := os.ReadFile(dependf)
+	if err != nil {
+		return nil, err
+	}
+
+	sep := "\n"
+	lines := strings.Split(string(data), sep)
+	uniqlines := uniqArr(lines)
+	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
+
+	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+}
+
+func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
+	if !filepath.IsAbs(f) {
+		f, _ = filepath.Abs(filepath.Join(workdir, f))
+	}
+	fstat := dcFile.Stat(f)
+	if fstat.Exist() && !fstat.Basic().IsDir() {
+		return fstat, nil
+	}
+
+	return nil, nil
+}
+
+func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) error {
+	data, err := os.ReadFile(cc.sourcedependfile)
+	if err != nil {
+		blog.Warnf("cc: copy pump head failed to read depned file: %s with err:%v", cc.sourcedependfile, err)
+		return err
+	}
+
+	lines := strings.Split(string(data), sep)
+	// includes := []string{}
+	for _, l := range lines {
+		l = strings.Trim(l, " \r\n\\")
+		// TODO : the file path maybe contains space, should support this condition
+		fields := strings.Split(l, " ")
+		if len(fields) >= 1 {
+			// for i, f := range fields {
+			for index := len(fields) - 1; index >= 0; index-- {
+				var targetf string
+				// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
+				// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
+				// 向前依附到不为空的字符串为止
+				if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
+					for targetindex := index - 1; targetindex >= 0; targetindex-- {
+						if len(fields[targetindex]) > 0 {
+							fields[targetindex] = strings.Trim(fields[targetindex], "\\")
+							targetf = strings.Join(fields[targetindex:index+1], " ")
+							index = targetindex
+							break
+						}
+					}
+				} else if len(fields[index]) > 0 {
+					targetf = fields[index]
+				} else {
+					continue
+				}
+
+				if strings.HasSuffix(targetf, ".o:") || strings.HasSuffix(targetf, ".gch:") {
+					continue
+				}
+				if !filepath.IsAbs(targetf) {
+					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
+				}
+
+				*includes = append(*includes, commonUtil.FormatFilePath(targetf))
+			}
+		}
+	}
+
+	return nil
+}
+
+func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
+	blog.Infof("cc: copy pump head file: %s to: %s", cc.sourcedependfile, cc.pumpHeadFile)
+
+	sep := "\n"
+	includes := []string{}
+	err := cc.resolveDependFile(sep, workdir, &includes)
+	if err != nil {
+		return err
+	}
+
+	// copy includeRspFiles
+	if len(cc.includeRspFiles) > 0 {
+		for _, l := range cc.includeRspFiles {
+			blog.Infof("cc: ready add rsp file: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, commonUtil.FormatFilePath(l))
+		}
+	}
+
+	// copy includePaths
+	if len(cc.includePaths) > 0 {
+		for _, l := range cc.includePaths {
+			blog.Infof("cc: ready add include path: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, commonUtil.FormatFilePath(l))
+		}
+	}
+
+	// copy include files
+	if len(cc.includeFiles) > 0 {
+		for _, l := range cc.includeFiles {
+			blog.Infof("cc: ready add include file: %s", l)
+			if !filepath.IsAbs(l) {
+				l, _ = filepath.Abs(filepath.Join(workdir, l))
+			}
+			includes = append(includes, commonUtil.FormatFilePath(l))
+		}
+	}
+
+	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
+
+	if len(includes) == 0 {
+		blog.Warnf("cc: depend file: %s is invalid", cc.sourcedependfile)
+		return ErrorInvalidDependFile
+	}
+
+	uniqlines := uniqArr(includes)
+
+	// append symlink or symlinked if need
+	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
+	if links != nil {
+		uniqlines = append(uniqlines, links...)
+	}
+
+	// save to cc.pumpHeadFile
+	newdata := strings.Join(uniqlines, sep)
+	err = os.WriteFile(cc.pumpHeadFile, []byte(newdata), os.ModePerm)
+	if err != nil {
+		blog.Warnf("cc: copy pump head failed to write file: %s with err:%v", cc.pumpHeadFile, err)
+		return err
+	} else {
+		blog.Infof("cc: copy pump head succeed to write file: %s", cc.pumpHeadFile)
+	}
+
+	return nil
+}
+
+func (cc *TaskCC) getPumpDir(env *env.Sandbox) (string, error) {
+	pumpdir := dcPump.PumpCacheDir(env)
+	if pumpdir == "" {
+		pumpdir = dcUtil.GetPumpCacheDir()
+	}
+
+	if !dcFile.Stat(pumpdir).Exist() {
+		if err := os.MkdirAll(pumpdir, os.ModePerm); err != nil {
+			return "", err
+		}
+	}
+
+	return pumpdir, nil
+}
+
+// search all include files for this compile command
+func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, forcefresh bool) ([]*dcFile.Info, error) {
+	pumpdir, err := cc.getPumpDir(cc.sandbox.Env)
+	if err != nil {
+		return nil, err
+	}
+
+	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
+	if err != nil {
+		blog.Errorf("cc: do includes get output file failed: %v", err)
+		return nil, err
+	}
+
+	existed, fileSize, _, _ := dcFile.Stat(cc.pumpHeadFile).Batch()
+	if dcPump.IsPumpCache(cc.sandbox.Env) && !forcefresh && existed && fileSize > 0 {
+		return cc.analyzeIncludes(cc.pumpHeadFile)
+	}
+
+	return nil, ErrorNoPumpHeadFile
+}
+
+func (cc *TaskCC) forceDepend() error {
+	cc.sourcedependfile = makeTmpFileName(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc_depend", ".d")
+	cc.sourcedependfile = strings.Replace(cc.sourcedependfile, "\\", "/", -1)
+	cc.addTmpFile(cc.sourcedependfile)
+
+	cc.forcedepend = true
+
+	return nil
+}
+
+func (cc *TaskCC) inPumpBlack(responseFile string, args []string) (bool, error) {
+	// obtain black key set by booster
+	blackkeystr := cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorPumpBlackKeys)
+	if blackkeystr != "" {
+		// blog.Infof("cc: got pump black key string: %s", blackkeystr)
+		blacklist := strings.Split(blackkeystr, dcEnv.CommonBKEnvSepKey)
+		if len(blacklist) > 0 {
+			for _, v := range blacklist {
+				if v != "" && strings.Contains(responseFile, v) {
+					blog.Infof("cc: found response %s is in pump blacklist", responseFile)
+					return true, nil
+				}
+
+				for _, v1 := range args {
+					if strings.HasSuffix(v1, ".cpp") && strings.Contains(v1, v) {
+						blog.Infof("cc: found arg %s is in pump blacklist", v1)
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+
+	return false, nil
+}
+
+var (
+	// 缓存单个pch文件的依赖列表
+	pchDependHeadLock sync.RWMutex
+	pchDependHead     map[string][]*dcFile.Info = make(map[string][]*dcFile.Info, 20)
+)
+
+func setPchDependHead(f string, heads []*dcFile.Info) {
+	pchDependHeadLock.Lock()
+	defer pchDependHeadLock.Unlock()
+
+	pchDependHead[f] = heads
+}
+
+func getPchDependHead(f string) []*dcFile.Info {
+	pchDependHeadLock.RLock()
+	defer pchDependHeadLock.RUnlock()
+
+	heads, ok := pchDependHead[f]
+	if ok {
+		return heads
+	}
+
+	return nil
+}
+
+func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
+	// 取出依赖的所有gch文件
+	gchfiles := []string{}
+	for _, v := range fs {
+		if strings.HasSuffix(v.Path(), ".gch") {
+			gchfiles = append(gchfiles, v.Path())
+		}
+	}
+
+	if len(gchfiles) > 0 {
+		blog.Infof("cc: got pch files:%v", gchfiles)
+
+		gchdependfiles := []string{}
+		// 再得到这些gch文件的依赖的其它gch文件
+		for _, v := range gchfiles {
+			dfs := dcPump.GetPchDepend(v)
+			if len(dfs) > 0 {
+				for _, v1 := range dfs {
+					newfile := true
+					for _, v2 := range gchdependfiles {
+						if v1 == v2 {
+							newfile = false
+							break
+						}
+					}
+
+					if newfile {
+						gchdependfiles = append(gchdependfiles, v1)
+					}
+				}
+			}
+		}
+
+		// 得到最终的 文件信息列表
+		if len(gchdependfiles) > 0 {
+			blog.Infof("cc: got pch depends files:%v", gchdependfiles)
+			fs, err := commonUtil.GetFileInfo(gchdependfiles, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+			if err != nil {
+				return nil, err
+			}
+
+			// 获取每个pch的依赖列表
+			for _, v := range gchdependfiles {
+				df, err := cc.getPumpFileByPCHFullPath(v)
+				if err != nil {
+					continue
+				}
+
+				// 尝试从缓存取
+				fsv := getPchDependHead(df)
+				if fsv != nil && len(fsv) > 0 {
+					fs = append(fs, fsv...)
+				} else {
+					fsv, err := cc.analyzeIncludes(df)
+					if err == nil && len(fsv) > 0 {
+						fs = append(fs, fsv...)
+						// 添加到缓存
+						setPchDependHead(df, fsv)
+					}
+				}
+			}
+
+			blog.Infof("cc: got pch total %d depends files", len(fs))
+			return fs, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// first error means real error when try pump, second is notify error
+func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, error, error) {
+	blog.Infof("cc: trypumpwithcache: %v", command)
+
+	// TODO : !! ensureCompilerRaw changed the command slice, it maybe not we need !!
+	tstart := time.Now().Local()
+	responseFile, args, showinclude, sourcedependfile, objectfile, pchfile, err := ensureCompilerRaw(command, cc.sandbox.Dir)
+	if err != nil {
+		blog.Debugf("cc: pre execute ensure compiler failed %v: %v", args, err)
+		return nil, err, nil
+	} else {
+		blog.Infof("cc: after parse command, got responseFile:%s,sourcedepent:%s,objectfile:%s,pchfile:%s",
+			responseFile, sourcedependfile, objectfile, pchfile)
+	}
+	tend := time.Now().Local()
+	blog.Debugf("cc: trypumpwithcache time record: %s for ensureCompilerRaw for rsp file:%s", tend.Sub(tstart), responseFile)
+	tstart = tend
+
+	// 关注 gch 文件的依赖列表
+	if strings.HasSuffix(objectfile, ".gch") && sourcedependfile != "" {
+		cc.needresolvepchdepend = true
+		cc.sourcedependfile = sourcedependfile
+		cc.objectpchfile = objectfile
+		blog.Infof("cc: need resolve dpend for gch file:%s", objectfile)
+	}
+
+	_, err = scanArgs(args, cc.sandbox)
+	if err != nil {
+		blog.Debugf("cc: try pump not support, scan args %v: %v", args, err)
+		return nil, err, ErrorNotSupportRemote
+	}
+
+	inblack, _ := cc.inPumpBlack(responseFile, args)
+	if inblack {
+		return nil, ErrorInPumpBlack, nil
+	}
+
+	tend = time.Now().Local()
+	blog.Debugf("cc: trypumpwithcache time record: %s for scanArgs for rsp file:%s", tend.Sub(tstart), responseFile)
+	tstart = tend
+
+	if cc.sourcedependfile == "" {
+		if sourcedependfile != "" {
+			cc.sourcedependfile = sourcedependfile
+		} else {
+			// 主动加上参数得到依赖列表，生成一个临时的 sourcedependfile 文件
+			blog.Infof("cc: trypump not found depend file, try append it")
+			if cc.forceDepend() != nil {
+				return nil, ErrorNoDependFile, nil
+			}
+		}
+	}
+	cc.showinclude = showinclude
+	cc.needcopypumpheadfile = true
+
+	cc.responseFile = responseFile
+	cc.pumpArgs = args
+
+	includes, err := cc.Includes(responseFile, args, cc.sandbox.Dir, false)
+
+	// 添加pch的依赖列表
+	if len(includes) > 0 {
+		pchdepends, err := cc.getPchDepends(includes)
+		if err == nil && len(pchdepends) > 0 {
+			includes = append(includes, pchdepends...)
+		}
+	}
+
+	tend = time.Now().Local()
+	blog.Debugf("cc: trypumpwithcache time record: %s for Includes for rsp file:%s", tend.Sub(tstart), responseFile)
+	tstart = tend
+
+	if err == nil {
+		blog.Infof("cc: parse command,got total %d includes files", len(includes))
+
+		// add pch file as input
+		if pchfile != "" {
+			// includes = append(includes, pchfile)
+			finfo, _ := cc.checkFstat(pchfile, cc.sandbox.Dir)
+			if finfo != nil {
+				includes = append(includes, finfo)
+			}
+		}
+
+		// add response file as input
+		if responseFile != "" {
+			// includes = append(includes, responseFile)
+			finfo, _ := cc.checkFstat(responseFile, cc.sandbox.Dir)
+			if finfo != nil {
+				includes = append(includes, finfo)
+			}
+		}
+
+		inputFiles := []dcSDK.FileDesc{}
+		// priority := dcSDK.MaxFileDescPriority
+		for _, f := range includes {
+			// existed, fileSize, modifyTime, fileMode := dcFile.Stat(f).Batch()
+			existed, fileSize, modifyTime, fileMode := f.Batch()
+			fpath := f.Path()
+			if !existed {
+				err := fmt.Errorf("input file %s not existed", fpath)
+				blog.Errorf("cc: %v", err)
+				return nil, err, nil
+			}
+			inputFiles = append(inputFiles, dcSDK.FileDesc{
+				FilePath:           fpath,
+				Compresstype:       protocol.CompressLZ4,
+				FileSize:           fileSize,
+				Lastmodifytime:     modifyTime,
+				Md5:                "",
+				Filemode:           fileMode,
+				Targetrelativepath: filepath.Dir(fpath),
+				LinkTarget:         f.LinkTarget,
+				NoDuplicated:       true,
+				// Priority:           priority,
+			})
+			// priority++
+			// blog.Infof("cc: added include file:%s with modify time %d", fpath, modifyTime)
+
+			blog.Debugf("cc: added include file:%s for object:%s", fpath, objectfile)
+		}
+
+		results := []string{objectfile}
+		// add source depend file as result
+		if sourcedependfile != "" {
+			results = append(results, sourcedependfile)
+		}
+
+		// set env which need append to remote
+		envs := []string{}
+		for _, v := range cc.sandbox.Env.Source() {
+			if strings.HasPrefix(v, appendEnvKey) {
+				envs = append(envs, v)
+				// set flag we hope append env, not overwrite
+				flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(env.KeyRemoteEnvAppend))
+				envs = append(envs, flag)
+				break
+			}
+		}
+		blog.Infof("cc: env which ready sent to remote:[%v]", envs)
+
+		exeName := command[0]
+		params := command[1:]
+		blog.Infof("cc: parse command,server command:[%s %s],dir[%s]",
+			exeName, strings.Join(params, " "), cc.sandbox.Dir)
+		return &dcSDK.BKDistCommand{
+			Commands: []dcSDK.BKCommand{
+				{
+					WorkDir:         cc.sandbox.Dir,
+					ExePath:         "",
+					ExeName:         exeName,
+					ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
+					Params:          params,
+					Inputfiles:      inputFiles,
+					ResultFiles:     results,
+					Env:             envs,
+				},
+			},
+			CustomSave: true,
+		}, nil, nil
+	}
+
+	tend = time.Now().Local()
+	blog.Debugf("cc: trypumpwithcache time record: %s for return dcSDK.BKCommand for rsp file:%s", tend.Sub(tstart), responseFile)
+
+	return nil, err, nil
+}
+
+func (cc *TaskCC) isPumpActionNumSatisfied() (bool, error) {
+	minnum := dcPump.PumpMinActionNum(cc.sandbox.Env)
+	if minnum <= 0 {
+		return true, nil
+	}
+
+	curbatchsize := 0
+	strsize := cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorTotalActionNum)
+	if strsize != "" {
+		size, err := strconv.Atoi(strsize)
+		if err != nil {
+			return true, err
+		} else {
+			curbatchsize = size
+		}
+	}
+
+	blog.Infof("cc: check pump action num with min:%d: current batch num:%d", minnum, curbatchsize)
+
+	return int32(curbatchsize) > minnum, nil
+}
+
+func (cc *TaskCC) workerSupportAbsPath() bool {
+	v := cc.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
 func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	blog.Infof("cc: [%s] start pre execute for: %v", cc.tag, command)
 
 	cc.originArgs = command
+
+	if !cc.pumpremotefailed &&
+		dcPump.IsPumpCache(cc.sandbox.Env) &&
+		cc.workerSupportAbsPath() {
+		req, err, notifyerr := cc.trypumpwithcache(command)
+		if err != nil {
+			if notifyerr == ErrorNotSupportRemote {
+				blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
+				return nil, err
+			}
+		} else {
+			// for debug
+			blog.Debugf("cc: after try pump, req: %+v", *req)
+			cc.pumpremote = true
+			return req, err
+		}
+	}
+
 	compilerEnsuredArgs, err := ensureCompiler(command)
 	if err != nil {
 		blog.Warnf("cc: [%s] pre execute ensure compiler %v: %v", cc.tag, command, err)
@@ -215,6 +804,12 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 				return nil, fmt.Errorf("arg %s is in force local cpp list", v)
 			}
 		}
+	}
+
+	if cc.forcedepend {
+		args = append(args, "-MD")
+		args = append(args, "-MF")
+		args = append(args, cc.sourcedependfile)
 	}
 
 	if err = cc.preBuild(args); err != nil {
@@ -268,6 +863,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 				ResultFiles:     cc.outputFile,
 			},
 		},
+		CustomSave: true,
 	}, nil
 }
 
@@ -277,11 +873,45 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) error {
 		return ErrorInvalidParam
 	}
 
+	resultfilenum := 0
+	// by tomtian 20201224,to ensure existed result file
+	if len(r.Results[0].ResultFiles) == 0 {
+		blog.Warnf("cc: not found result file for: %v", cc.originArgs)
+		goto ERROREND
+	}
+	blog.Infof("cc: found %d result files for result[0]", len(r.Results[0].ResultFiles))
+
+	// resultfilenum := 0
+	if len(r.Results[0].ResultFiles) > 0 {
+		for _, f := range r.Results[0].ResultFiles {
+			if f.Buffer != nil {
+				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
+					blog.Errorf("cc: failed to save file [%s]", f.FilePath)
+					return err
+				}
+				resultfilenum++
+			}
+		}
+	}
+
+	// by tomtian 20201224,to ensure existed result file
+	if resultfilenum == 0 {
+		blog.Warnf("cc: not found result file for: %v", cc.originArgs)
+		goto ERROREND
+	}
+
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cc: [%s] success done post execute", cc.tag)
+		// set output to inputFile
+		r.Results[0].OutputMessage = []byte(filepath.Base(cc.inputFile))
+		// if remote succeed with pump,do not need copy head file
+		if cc.pumpremote {
+			cc.needcopypumpheadfile = false
+		}
 		return nil
 	}
 
+ERROREND:
 	// write error message into
 	if cc.saveTemp() && len(r.Results[0].ErrorMessage) > 0 {
 		// make the tmp file for storing the stderr from server compiler.
@@ -296,6 +926,11 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) error {
 				blog.Debugf("cc: [%s] save error message to %s", cc.tag, stderrFile)
 			}
 		}
+	}
+
+	if cc.pumpremote {
+		blog.Infof("cc: ready remove pump head file: %s after failed pump remote, generate it next time", cc.pumpHeadFile)
+		os.Remove(cc.pumpHeadFile)
 	}
 
 	return fmt.Errorf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
@@ -340,12 +975,87 @@ func (cc *TaskCC) ensureOwner(fdl []string) {
 	}
 }
 
+func (cc *TaskCC) resolvePchDepend(workdir string) error {
+	blog.Infof("cc: ready resolve pch depend file: %s", cc.sourcedependfile)
+
+	sep := "\n"
+	includes := []string{}
+	err := cc.resolveDependFile(sep, workdir, &includes)
+	if err != nil {
+		return err
+	}
+
+	if len(includes) > 0 {
+		if !filepath.IsAbs(cc.objectpchfile) {
+			cc.objectpchfile, _ = filepath.Abs(filepath.Join(workdir, cc.objectpchfile))
+		}
+
+		gchfile := []string{}
+		for _, v := range includes {
+			if strings.HasSuffix(v, ".gch") {
+				newfile := true
+				for _, v1 := range gchfile {
+					if v == v1 {
+						newfile = false
+						break
+					}
+				}
+
+				if newfile {
+					blog.Infof("cc: found pch depend %s->%s", cc.objectpchfile, v)
+					gchfile = append(gchfile, v)
+				}
+			}
+		}
+
+		if len(gchfile) > 0 {
+			dcPump.SetPchDepend(cc.objectpchfile, gchfile)
+		}
+	}
+
+	return nil
+}
+
+func (cc *TaskCC) getPumpFileByPCHFullPath(f string) (string, error) {
+	pumpdir, err := cc.getPumpDir(cc.sandbox.Env)
+	if err == nil {
+		args := []string{f}
+		return getPumpIncludeFile(pumpdir, "pch_depend", ".txt", args, cc.sandbox.Dir)
+	}
+
+	blog.Warnf("cc: got pch:%s depend file with err:%v", f, err)
+	return "", err
+}
+
 func (cc *TaskCC) finalExecute(args []string, sandbox *dcSyscall.Sandbox) {
 	cc.ensureOwner(getOutputFile(args, sandbox))
 
-	if !cc.saveTemp() {
+	go func() {
+		if cc.needcopypumpheadfile {
+			cc.copyPumpHeadFile(cc.sandbox.Dir)
+		}
+
+		// 解析pch的依赖关系，并将该gch的依赖列表保存起来
+		if cc.needresolvepchdepend {
+			// 解析并保存pch的依赖关系
+			cc.resolvePchDepend(cc.sandbox.Dir)
+
+			// 并将该gch的依赖列表保存起来
+			var err error
+			cc.pumpHeadFile, err = cc.getPumpFileByPCHFullPath(cc.objectpchfile)
+			if err != nil {
+				blog.Warnf("cc: failed to get pump head file with pch file:%s err:%v", cc.objectpchfile, err)
+			} else {
+				cc.copyPumpHeadFile(cc.sandbox.Dir)
+			}
+		}
+
+		if cc.saveTemp() {
+			return
+		}
+
 		cc.cleanTmpFile()
-	}
+	}()
 }
 
 func (cc *TaskCC) saveTemp() bool {
@@ -665,7 +1375,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	// try preprocess with "-E"
 	cc.preProcessArgs = newArgs2
 
-	blog.Debugf("cc: [%s] going to execute pre-process: %s", strings.Join(newArgs2, " "))
+	blog.Debugf("cc: [%s] going to execute pre-process: %s", cc.tag, strings.Join(newArgs2, " "))
 	if _, err = sandbox.ExecCommand(newArgs2[0], newArgs2[1:]...); err != nil {
 		blog.Warnf("cc: [%s] do pre-process %v: %v, %s", cc.tag, newArgs2, err, errBuf.String())
 		return "", nil, err

@@ -11,6 +11,8 @@ package sdk
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
@@ -95,50 +97,157 @@ func ResolveToolchainEnvValue(value string) (map[string]string, error) {
 	return outmap, nil
 }
 
+func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
+	f := FileDesc{
+		FilePath:           i.Path(),
+		Compresstype:       protocol.CompressLZ4,
+		FileSize:           i.Size(),
+		Lastmodifytime:     i.ModifyTime64(),
+		Md5:                "",
+		Targetrelativepath: remotepath,
+		Filemode:           i.Mode32(),
+		LinkTarget:         i.LinkTarget,
+	}
+
+	if i.LinkTarget == "" {
+		*files = append(*files, f)
+		return nil
+	}
+
+	// 检查链接是否存在循环
+	for _, v := range *files {
+		if v.FilePath == i.Path() {
+			return fmt.Errorf("found loop link file:%s", v.FilePath)
+		}
+	}
+
+	*files = append(*files, f)
+	return nil
+}
+
+// 得到所有关联文件；如果是链接，则递归搜索，直到找到非链接为止
+// 如果发现链接循环，则报错
+func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
+	i := dcFile.Lstat(f)
+	if !i.Exist() {
+		err := fmt.Errorf("file %s not existed", f)
+		blog.Errorf("%v", err)
+		return err
+	}
+
+	// 链接，需要递归
+	if i.Basic().Mode()&os.ModeSymlink != 0 {
+		originFile, err := os.Readlink(f)
+		if err == nil {
+			if !filepath.IsAbs(originFile) {
+				originFile, err = filepath.Abs(filepath.Join(filepath.Dir(f), originFile))
+				if err == nil {
+					i.LinkTarget = originFile
+					blog.Infof("toolchain: symlink %s to %s", f, originFile)
+				} else {
+					blog.Infof("toolchain: symlink %s origin %s, got abs path error:%s",
+						f, originFile, err)
+					return err
+				}
+			} else {
+				i.LinkTarget = originFile
+				blog.Infof("toolchain: symlink %s to %s", f, originFile)
+			}
+
+			err = checkAndAdd(i, remotepath, files)
+			if err != nil {
+				return err
+			}
+
+			// 递归查找
+			return getRecursiveFiles(originFile, filepath.Dir(originFile), files)
+		} else {
+			blog.Infof("toolchain: symlink %s Readlink error:%s", f, err)
+			return err
+		}
+	}
+
+	return checkAndAdd(i, remotepath, files)
+}
+
+// 得到所有关联文件
+func getAssociatedFiles(f string, remotepath string) (*[]FileDesc, error) {
+	files := make([]FileDesc, 0, 0)
+	err := getRecursiveFiles(f, remotepath, &files)
+
+	return &files, err
+}
+
 // ToFileDesc parse toolchains to file targets
 func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 	if t == nil {
 		return nil, fmt.Errorf("tool chain is nil")
 	}
 
+	// TODO : 将链接展开，直到得到所有相关文件，比如 a->b,b->c，则需要将a/b/c都包含进来
 	toolfiles := make([]FileDesc, 0, 0)
 	for _, v := range t.Toolchains {
-		existed, fileSize, modifyTime, fileMode := dcFile.Stat(v.ToolLocalFullPath).Batch()
-		if !existed {
-			err := fmt.Errorf("tool chain file %s not existed", v.ToolLocalFullPath)
-			blog.Errorf("%v", err)
+		// existed, fileSize, modifyTime, fileMode := dcFile.Stat(v.ToolLocalFullPath).Batch()
+		// if !existed {
+		// 	err := fmt.Errorf("tool chain file %s not existed", v.ToolLocalFullPath)
+		// 	blog.Errorf("%v", err)
+		// 	return nil, err
+		// }
+
+		// toolfiles = append(toolfiles, FileDesc{
+		// 	FilePath:           v.ToolLocalFullPath,
+		// 	Compresstype:       protocol.CompressLZ4,
+		// 	FileSize:           fileSize,
+		// 	Lastmodifytime:     modifyTime,
+		// 	Md5:                "",
+		// 	Targetrelativepath: v.ToolRemoteRelativePath,
+		// 	Filemode:           fileMode,
+		// })
+		files, err := getAssociatedFiles(v.ToolLocalFullPath, v.ToolRemoteRelativePath)
+		if err != nil {
 			return nil, err
 		}
-
-		toolfiles = append(toolfiles, FileDesc{
-			FilePath:           v.ToolLocalFullPath,
-			Compresstype:       protocol.CompressLZ4,
-			FileSize:           fileSize,
-			Lastmodifytime:     modifyTime,
-			Md5:                "",
-			Targetrelativepath: v.ToolRemoteRelativePath,
-			Filemode:           fileMode,
-		})
+		// 倒序添加，保证创建链接成功
+		size := len(*files)
+		if size > 0 {
+			for i := size - 1; i >= 0; i-- {
+				toolfiles = append(toolfiles, (*files)[i])
+			}
+		}
 
 		for _, f := range v.Files {
-			existed, fileSize, modifyTime, fileMode = dcFile.Stat(f.LocalFullPath).Batch()
-			if !existed {
-				err := fmt.Errorf("tool chain file %s not existed", f.LocalFullPath)
-				blog.Errorf("%v", err)
+			// existed, fileSize, modifyTime, fileMode = dcFile.Stat(f.LocalFullPath).Batch()
+			// if !existed {
+			// 	err := fmt.Errorf("tool chain file %s not existed", f.LocalFullPath)
+			// 	blog.Errorf("%v", err)
+			// 	return nil, err
+			// }
+
+			// toolfiles = append(toolfiles, FileDesc{
+			// 	FilePath:           f.LocalFullPath,
+			// 	Compresstype:       protocol.CompressLZ4,
+			// 	FileSize:           fileSize,
+			// 	Lastmodifytime:     modifyTime,
+			// 	Md5:                "",
+			// 	Targetrelativepath: f.RemoteRelativePath,
+			// 	Filemode:           fileMode,
+			// })
+
+			files, err := getAssociatedFiles(f.LocalFullPath, f.RemoteRelativePath)
+			if err != nil {
 				return nil, err
 			}
-
-			toolfiles = append(toolfiles, FileDesc{
-				FilePath:           f.LocalFullPath,
-				Compresstype:       protocol.CompressLZ4,
-				FileSize:           fileSize,
-				Lastmodifytime:     modifyTime,
-				Md5:                "",
-				Targetrelativepath: f.RemoteRelativePath,
-				Filemode:           fileMode,
-			})
+			// 倒序添加，保证创建链接成功
+			size := len(*files)
+			if size > 0 {
+				for i := size - 1; i >= 0; i-- {
+					toolfiles = append(toolfiles, (*files)[i])
+				}
+			}
 		}
 	}
+
+	blog.Infof("toolchain: get all files:%v", toolfiles)
 
 	return toolfiles, nil
 }
