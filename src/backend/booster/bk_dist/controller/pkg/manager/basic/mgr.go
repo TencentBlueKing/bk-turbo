@@ -443,6 +443,15 @@ func (m *Mgr) SetToolChain(toolchain *types.ToolChain) error {
 	return nil
 }
 
+// IsToolChainExsited return if toolchain files exsited
+func (m *Mgr) IsToolChainExsited(key string) bool {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	_, ok := m.toolchainMap[key]
+	return ok
+}
+
 // GetToolChainFiles return the toolchain files
 func (m *Mgr) GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error) {
 	m.toolchainLock.RLock()

@@ -54,6 +54,8 @@ const (
 	osWindows = "windows"
 
 	envValueTrue = "true"
+
+	additionToolName = "additionFile"
 )
 
 // ExtraItems describe the info from extra-project-data
@@ -659,7 +661,10 @@ func (b *Booster) sendAdditionFile() {
 			AllDistributed:     true,
 		})
 	}
-
+	if len(fds) == 0 {
+		blog.Infof("booster: no addition files found")
+		return
+	}
 	if err := b.work.Job(&dcSDK.ControllerJobStats{
 		Pid:        os.Getpid(),
 		WorkID:     b.workID,
@@ -769,7 +774,7 @@ func (b *Booster) runCommands(ctx context.Context) (code int, err error) {
 	}()
 
 	// send addition files to workers before run commands.
-	b.sendAdditionFile()
+	//b.sendAdditionFile()
 
 	// before run the commands, ensure that environments for workers are set.
 	b.ensureWorkersEnv()
@@ -1240,40 +1245,47 @@ func (b *Booster) request(method, server, uri string, data []byte) ([]byte, bool
 func (b *Booster) setToolChain() error {
 	blog.Debugf("booster: try to set tool chain")
 
-	if b.config.Works.ToolChainJSONFile == "" || b.config.Works.ToolChainJSONFile == "nothing" {
+	if len(b.config.Works.AdditionFiles) == 0 &&
+		(b.config.Works.ToolChainJSONFile == "" || b.config.Works.ToolChainJSONFile == "nothing") {
 		blog.Debugf("booster: tool chain not set, do nothing now")
 		return nil
 	}
-
-	tools, err := resolveToolChainJSON(b.config.Works.ToolChainJSONFile)
-	if err != nil {
-		blog.Warnf("booster: failed to resolve %s with error:%v", b.config.Works.ToolChainJSONFile, err)
-		return err
+	var tools *dcSDK.Toolchain
+	var err error
+	if b.config.Works.ToolChainJSONFile != "" && b.config.Works.ToolChainJSONFile != "nothing" {
+		tools, err = resolveToolChainJSON(b.config.Works.ToolChainJSONFile)
+		if err != nil {
+			blog.Warnf("booster: failed to resolve %s with error:%v", b.config.Works.ToolChainJSONFile, err)
+			return err
+		}
 	}
+	//add addition files to tool chain for all commands
+	if len(b.config.Works.AdditionFiles) != 0 {
+		onechain := dcSDK.OneToolChain{
+			ToolName: additionToolName,
+			ToolKey:  dcSDK.GetAdditionFileKey(),
+		}
 
-	// for _, v := range tools.Toolchains {
-	// 	var data []byte
-	// 	_ = codec.EncJSON(&v, &data)
-	// 	commonconfig := dcSDK.CommonControllerConfig{
-	// 		Configkey: dcSDK.CommonConfigKeyToolChain,
-	// 		WorkerKey: dcSDK.WorkerKeyConfig{
-	// 			BatchMode: b.config.BatchMode,
-	// 			ProjectID: b.config.ProjectID,
-	// 			Scene:     b.config.Type.String(),
-	// 		},
-	// 		Data: data,
-	// 	}
-
-	// 	err = b.controller.SetConfig(&commonconfig)
-	// 	if err != nil {
-	// 		blog.Warnf("booster: failed to set config [%+v] with error:%v", commonconfig, err)
-	// 		return err
-	// 	}
-	// }
-
-	// blog.Debugf("booster: success to set tool chain")
-	// return nil
-
+		for _, f := range b.config.Works.AdditionFiles {
+			absPath, _ := filepath.Abs(f)
+			if onechain.ToolLocalFullPath == "" {
+				onechain.ToolLocalFullPath = f
+				onechain.ToolRemoteRelativePath = filepath.Dir(absPath)
+			} else {
+				onechain.Files = append(onechain.Files, dcSDK.ToolFile{
+					LocalFullPath:      f,
+					RemoteRelativePath: filepath.Dir(absPath),
+				})
+			}
+		}
+		if tools == nil {
+			tools = &dcSDK.Toolchain{
+				Toolchains: []dcSDK.OneToolChain{onechain},
+			}
+		} else {
+			tools.Toolchains = append(tools.Toolchains, onechain)
+		}
+	}
 	return b.setToolChainWithJSON(tools)
 }
 

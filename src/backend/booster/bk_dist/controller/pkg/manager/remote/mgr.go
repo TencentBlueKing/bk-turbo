@@ -1604,38 +1604,52 @@ func (m *Mgr) syncHostTime(hostList []*dcProtocol.Host) []*dcProtocol.Host {
 	return hostList
 }
 
-func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest) []*types.FileCollectionInfo {
-	blog.Debugf("remote: get toolchain with req:[%+v]", *req)
-	fd := make([]*types.FileCollectionInfo, 0, 2)
-	for _, c := range req.Req.Commands {
-		blog.Debugf("remote: ready get toolchain with key:[%s]", c.ExeToolChainKey)
-		if c.ExeToolChainKey != "" {
-			if !m.work.Resource().SupportAbsPath() {
-				blog.Infof("remote: ready get relative toolchain files")
-				toolchainfiles, timestamp, err := m.work.Basic().GetToolChainRelativeFiles(c.ExeToolChainKey)
-				if err == nil && len(toolchainfiles) > 0 {
-					fd = append(fd, &types.FileCollectionInfo{
-						UniqID:     c.ExeToolChainKey,
-						Files:      toolchainfiles,
-						SendStatus: types.FileSending,
-						Timestamp:  timestamp,
-					})
-				}
-			} else {
-				blog.Infof("remote: ready get normal toolchain files")
-				toolchainfiles, timestamp, err := m.work.Basic().GetToolChainFiles(c.ExeToolChainKey)
-				if err == nil && len(toolchainfiles) > 0 {
-					blog.Infof("remote: got toolchain files:%v", toolchainfiles)
-					fd = append(fd, &types.FileCollectionInfo{
-						UniqID:     c.ExeToolChainKey,
-						Files:      toolchainfiles,
-						SendStatus: types.FileSending,
-						Timestamp:  timestamp,
-					})
-				}
+func (m *Mgr) getToolFileInfoByKey(key string) *types.FileCollectionInfo {
+	if !m.work.Resource().SupportAbsPath() {
+		blog.Infof("remote: ready get relative toolchain files for %s", key)
+		toolchainfiles, timestamp, err := m.work.Basic().GetToolChainRelativeFiles(key)
+		if err == nil && len(toolchainfiles) > 0 {
+			blog.Infof("remote: got toolchain files for %s:%v", key, toolchainfiles)
+			return &types.FileCollectionInfo{
+				UniqID:     key,
+				Files:      toolchainfiles,
+				SendStatus: types.FileSending,
+				Timestamp:  timestamp,
+			}
+		}
+	} else {
+		blog.Infof("remote: ready get normal toolchain files for %s", key)
+		toolchainfiles, timestamp, err := m.work.Basic().GetToolChainFiles(key)
+		if err == nil && len(toolchainfiles) > 0 {
+			blog.Infof("remote: got toolchain files for %s:%v", key, toolchainfiles)
+			return &types.FileCollectionInfo{
+				UniqID:     key,
+				Files:      toolchainfiles,
+				SendStatus: types.FileSending,
+				Timestamp:  timestamp,
 			}
 		}
 	}
+	return nil
+}
+
+func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest) []*types.FileCollectionInfo {
+	blog.Debugf("remote: get toolchain with req:[%+v]", *req)
+	fd := make([]*types.FileCollectionInfo, 0, 2)
+
+	for _, c := range req.Req.Commands {
+		blog.Debugf("remote: ready get toolchain with key:[%s]", c.ExeToolChainKey)
+		//add additional files to all workers
+		if additionfd := m.getToolFileInfoByKey(dcSDK.GetAdditionFileKey()); additionfd != nil {
+			fd = append(fd, additionfd)
+		}
+		if c.ExeToolChainKey != "" {
+			if toolfd := m.getToolFileInfoByKey(c.ExeToolChainKey); toolfd != nil {
+				fd = append(fd, toolfd)
+			}
+		}
+	}
+
 	return fd
 }
 
@@ -1644,13 +1658,26 @@ func (m *Mgr) isToolChainChanged(req *types.RemoteTaskExecuteRequest, server str
 
 	for _, c := range req.Req.Commands {
 		blog.Debugf("remote: ready check toolchain changed with key:[%s]", c.ExeToolChainKey)
-		if c.ExeToolChainKey != "" {
-			timestamp, _ := m.work.Basic().GetToolChainTimestamp(c.ExeToolChainKey)
-			timestampcached, _ := m.getCachedToolChainTimestamp(server, c.ExeToolChainKey)
+		//check additional files toolchain
+		timestamp, err := m.work.Basic().GetToolChainTimestamp(dcSDK.GetAdditionFileKey())
+		if err == nil {
+			timestampcached, _ := m.getCachedToolChainTimestamp(server, dcSDK.GetAdditionFileKey())
 			if timestamp != timestampcached {
 				blog.Infof("remote: found collection(%s) server(%s) cached timestamp(%d) "+
-					"newly timestamp(%d) changed", c.ExeToolChainKey, server, timestampcached, timestamp)
+					"newly timestamp(%d) changed", dcSDK.GetAdditionFileKey(), server, timestampcached, timestamp)
 				return true, nil
+			}
+		}
+
+		if c.ExeToolChainKey != "" {
+			timestamp, err := m.work.Basic().GetToolChainTimestamp(c.ExeToolChainKey)
+			if err == nil {
+				timestampcached, _ := m.getCachedToolChainTimestamp(server, c.ExeToolChainKey)
+				if timestamp != timestampcached {
+					blog.Infof("remote: found collection(%s) server(%s) cached timestamp(%d) "+
+						"newly timestamp(%d) changed", c.ExeToolChainKey, server, timestampcached, timestamp)
+					return true, nil
+				}
 			}
 		}
 	}
@@ -1664,13 +1691,29 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 	allfinished := true
 	for _, c := range req.Req.Commands {
 		blog.Debugf("remote: ready check toolchain finished with key:[%s]", c.ExeToolChainKey)
+		//check additional files toolchain
+		if m.work.Basic().IsToolChainExsited(dcSDK.GetAdditionFileKey()) {
+			status, err := m.getCachedToolChainStatus(server, dcSDK.GetAdditionFileKey())
+			if err == nil {
+				if status != types.FileSendSucceed && status != types.FileSendFailed {
+					blog.Infof("remote: found collection(%s) server(%s) status(%d) not finished",
+						dcSDK.GetAdditionFileKey(), server, status)
+					allfinished = false
+					return allfinished, nil
+				}
+			}
+		}
 		if c.ExeToolChainKey != "" {
-			status, _ := m.getCachedToolChainStatus(server, c.ExeToolChainKey)
-			if status != types.FileSendSucceed && status != types.FileSendFailed {
-				blog.Infof("remote: found collection(%s) server(%s) status(%d) not finished",
-					c.ExeToolChainKey, server, status)
-				allfinished = false
-				return allfinished, nil
+			if m.work.Basic().IsToolChainExsited(c.ExeToolChainKey) {
+				status, err := m.getCachedToolChainStatus(server, c.ExeToolChainKey)
+				if err == nil {
+					if status != types.FileSendSucceed && status != types.FileSendFailed {
+						blog.Infof("remote: found collection(%s) server(%s) status(%d) not finished",
+							c.ExeToolChainKey, server, status)
+						allfinished = false
+						return allfinished, nil
+					}
+				}
 			}
 		}
 	}
@@ -1678,31 +1721,46 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 	return allfinished, nil
 }
 
+func (m *Mgr) getInputFiles(key string, filepath string) (dcSDK.FileDesc, error) {
+	remotepath := ""
+	var err error
+	if !m.work.Resource().SupportAbsPath() {
+		remotepath, err = m.work.Basic().GetToolChainRelativeRemotePath(key)
+	} else {
+		remotepath, err = m.work.Basic().GetToolChainRemotePath(key)
+	}
+	if err != nil {
+		return dcSDK.FileDesc{}, err
+	}
+	return dcSDK.FileDesc{
+		FilePath:           filepath,
+		Compresstype:       protocol.CompressLZ4,
+		FileSize:           -1,
+		Lastmodifytime:     0,
+		Md5:                "",
+		Targetrelativepath: remotepath,
+	}, nil
+}
+
 func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 	for i, c := range req.Req.Commands {
-		if c.ExeToolChainKey != "" {
-			remotepath := ""
-			var err error
-			if !m.work.Resource().SupportAbsPath() {
-				remotepath, err = m.work.Basic().GetToolChainRelativeRemotePath(c.ExeToolChainKey)
-			} else {
-				remotepath, err = m.work.Basic().GetToolChainRemotePath(c.ExeToolChainKey)
-			}
-			if err != nil {
-				return fmt.Errorf("not found remote path for toolchain %s", c.ExeToolChainKey)
-			}
-			blog.Debugf("remote: before update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
-				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
-			req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, dcSDK.FileDesc{
-				FilePath:           c.ExeName,
-				Compresstype:       protocol.CompressLZ4,
-				FileSize:           -1,
-				Lastmodifytime:     0,
-				Md5:                "",
-				Targetrelativepath: remotepath,
-			})
+		blog.Debugf("remote: before update toolchain with key:[%s],inputfiles:%+v",
+			dcSDK.GetAdditionFileKey(), req.Req.Commands[i].Inputfiles)
+		if inputfiles, err := m.getInputFiles(dcSDK.GetAdditionFileKey(), c.ExeName); err == nil {
+			req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, inputfiles)
 			blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
-				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
+				dcSDK.GetAdditionFileKey(), inputfiles.Targetrelativepath, req.Req.Commands[i].Inputfiles)
+		}
+
+		if c.ExeToolChainKey != "" {
+			blog.Debugf("remote: before update toolchain with key:[%s],inputfiles:%+v",
+				c.ExeToolChainKey, req.Req.Commands[i].Inputfiles)
+			if inputfiles, err := m.getInputFiles(c.ExeToolChainKey, c.ExeName); err == nil {
+				req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, inputfiles)
+				blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
+					c.ExeToolChainKey, inputfiles.Targetrelativepath, req.Req.Commands[i].Inputfiles)
+			}
+
 		}
 	}
 	return nil
