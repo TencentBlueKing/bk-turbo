@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -254,5 +253,5 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 }
 
 func GetAdditionFileKey() string {
-	return fmt.Sprintf("addition\\file|%d", time.Now().Unix())
+	return "addition\\file|key"
 }
