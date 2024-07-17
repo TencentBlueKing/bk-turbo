@@ -17,6 +17,7 @@ allprojects {
 
     repositories {
         maven(url = "https://mirrors.tencent.com/repository/maven/bkdevops_maven")
+        jcenter()
     }
 
     configurations.forEach {
