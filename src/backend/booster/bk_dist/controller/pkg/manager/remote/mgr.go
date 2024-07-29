@@ -1721,46 +1721,31 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 	return allfinished, nil
 }
 
-func (m *Mgr) getInputFiles(key string, filepath string) (dcSDK.FileDesc, error) {
-	remotepath := ""
-	var err error
-	if !m.work.Resource().SupportAbsPath() {
-		remotepath, err = m.work.Basic().GetToolChainRelativeRemotePath(key)
-	} else {
-		remotepath, err = m.work.Basic().GetToolChainRemotePath(key)
-	}
-	if err != nil {
-		return dcSDK.FileDesc{}, err
-	}
-	return dcSDK.FileDesc{
-		FilePath:           filepath,
-		Compresstype:       protocol.CompressLZ4,
-		FileSize:           -1,
-		Lastmodifytime:     0,
-		Md5:                "",
-		Targetrelativepath: remotepath,
-	}, nil
-}
-
 func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 	for i, c := range req.Req.Commands {
-		blog.Debugf("remote: before update toolchain with key:[%s],inputfiles:%+v",
-			dcSDK.GetAdditionFileKey(), req.Req.Commands[i].Inputfiles)
-		if inputfiles, err := m.getInputFiles(dcSDK.GetAdditionFileKey(), c.ExeName); err == nil {
-			req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, inputfiles)
-			blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
-				dcSDK.GetAdditionFileKey(), inputfiles.Targetrelativepath, req.Req.Commands[i].Inputfiles)
-		}
-
 		if c.ExeToolChainKey != "" {
-			blog.Debugf("remote: before update toolchain with key:[%s],inputfiles:%+v",
-				c.ExeToolChainKey, req.Req.Commands[i].Inputfiles)
-			if inputfiles, err := m.getInputFiles(c.ExeToolChainKey, c.ExeName); err == nil {
-				req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, inputfiles)
-				blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
-					c.ExeToolChainKey, inputfiles.Targetrelativepath, req.Req.Commands[i].Inputfiles)
+			remotepath := ""
+			var err error
+			if !m.work.Resource().SupportAbsPath() {
+				remotepath, err = m.work.Basic().GetToolChainRelativeRemotePath(c.ExeToolChainKey)
+			} else {
+				remotepath, err = m.work.Basic().GetToolChainRemotePath(c.ExeToolChainKey)
 			}
-
+			if err != nil {
+				return fmt.Errorf("not found remote path for toolchain %s", c.ExeToolChainKey)
+			}
+			blog.Debugf("remote: before update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
+				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
+			req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, dcSDK.FileDesc{
+				FilePath:           c.ExeName,
+				Compresstype:       protocol.CompressLZ4,
+				FileSize:           -1,
+				Lastmodifytime:     0,
+				Md5:                "",
+				Targetrelativepath: remotepath,
+			})
+			blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
+				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
 		}
 	}
 	return nil
