@@ -514,10 +514,13 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
 	if err != nil {
-		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-			"ensure files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
 		req.BanWorkerList = append(req.BanWorkerList, req.Server)
-		blog.Errorf("remote: after add failed server(%s), banworkerlist is %v", req.Server, req.BanWorkerList)
+		var banlistStr string
+		for _, s := range req.BanWorkerList {
+			banlistStr = banlistStr + s.Server + ","
+		}
+		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
+			"ensure files failed: %v, after add failed server, banworkerlist is %s", m.work.ID(), req.Pid, req.Server.Server, err, banlistStr)
 		return nil, err
 	}
 	if err = updateTaskRequestInputFilesReady(req, remoteDirs); err != nil {
