@@ -516,6 +516,8 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 	if err != nil {
 		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
 			"ensure files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+		req.BanWorkerList = append(req.BanWorkerList, req.Server)
+		blog.Errorf("remote: after add failed server(%s), banworkerlist is %v", req.Server, req.BanWorkerList)
 		return nil, err
 	}
 	if err = updateTaskRequestInputFilesReady(req, remoteDirs); err != nil {
