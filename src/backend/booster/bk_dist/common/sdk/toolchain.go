@@ -251,3 +251,7 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 
 	return toolfiles, nil
 }
+
+func GetAdditionFileKey() string {
+	return "addition\\file|key"
+}
