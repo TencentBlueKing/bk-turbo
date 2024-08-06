@@ -484,6 +484,29 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 					l, _ = filepath.Abs(filepath.Join(workdir, l))
 				}
 				includes = append(includes, commonUtil.FormatFilePath(l))
+
+				// 如果是链接，则将相关指向的文件都包含进来
+				tempf := l
+				for {
+					loopagain := false
+					i := dcFile.Lstat(tempf)
+					if i.Basic().Mode()&os.ModeSymlink != 0 {
+						originFile, err := os.Readlink(tempf)
+						if err == nil {
+							if !filepath.IsAbs(originFile) {
+								originFile, _ = filepath.Abs(filepath.Join(workdir, originFile))
+							}
+							includes = append(includes, commonUtil.FormatFilePath(originFile))
+
+							loopagain = true
+							tempf = originFile
+						}
+					}
+
+					if !loopagain {
+						break
+					}
+				}
 			}
 		} else {
 			blog.Warnf("cl: failed to resolve depend file: %s with err:%s", cl.sourcedependfile, err)
@@ -497,6 +520,29 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
 			includes = append(includes, commonUtil.FormatFilePath(l))
+
+			// 如果是链接，则将相关指向的文件都包含进来
+			tempf := l
+			for {
+				loopagain := false
+				i := dcFile.Lstat(tempf)
+				if i.Basic().Mode()&os.ModeSymlink != 0 {
+					originFile, err := os.Readlink(tempf)
+					if err == nil {
+						if !filepath.IsAbs(originFile) {
+							originFile, _ = filepath.Abs(filepath.Join(workdir, originFile))
+						}
+						includes = append(includes, commonUtil.FormatFilePath(originFile))
+
+						loopagain = true
+						tempf = originFile
+					}
+				}
+
+				if !loopagain {
+					break
+				}
+			}
 		}
 	}
 
