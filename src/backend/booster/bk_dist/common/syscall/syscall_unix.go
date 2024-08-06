@@ -332,3 +332,11 @@ func RedirectStderror(f string) error {
 
 	return nil
 }
+
+func NeedSearchToolchain(input *env.Sandbox) bool {
+	if input != nil {
+		return input.GetEnv(env.KeyExecutorSearchToolchain) != ""
+	}
+
+	return env.GetEnv(env.KeyExecutorSearchToolchain) != ""
+}

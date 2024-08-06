@@ -516,3 +516,7 @@ func RedirectStderror(f string) error {
 
 	return nil
 }
+
+func NeedSearchToolchain(input *env.Sandbox) bool {
+	return false
+}

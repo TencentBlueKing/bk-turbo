@@ -63,6 +63,7 @@ const (
 	FlagOutputEnvSourceFile  = "output_env_source_file"
 	FlagCommitSuicide        = "commit_suicide"
 	FlagToolChainJSONFile    = "tool_chain_json_file"
+	FlagSearchToolchain      = "search_toolchain"
 	FlagBatchMode            = "batch_mode"
 	FlagDirectives           = "directives"
 	FlagGlobalSlots          = "global_slots"
@@ -278,6 +279,10 @@ var (
 		commandCli.StringFlag{
 			Name:  "tool_chain_json_file",
 			Usage: "json file to describe tool chain",
+		},
+		commandCli.BoolFlag{
+			Name:  "search_toolchain",
+			Usage: "automatically search for toolchain based on command",
 		},
 		commandCli.BoolFlag{
 			Name:  "batch_mode, bm",
