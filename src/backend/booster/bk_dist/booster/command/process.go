@@ -315,6 +315,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),
 			IdleKeepSecs:         c.Int(FlagIdleKeepSecs),
 			CleanTmpFilesDayAgo:  cleanTmpFilesDayAgo,
+			SearchToolchain:      c.Bool(FlagSearchToolchain),
 		},
 
 		Transport: dcType.BoosterTransport{

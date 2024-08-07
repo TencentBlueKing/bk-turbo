@@ -64,6 +64,7 @@ const (
 	KeyExecutorTotalActionNum          = "TOTAL_ACTION_NUM"
 	KeyExecutorUseWebSocket            = "USE_WEBSOCKET"
 	KeyExecutorNewShader               = "NEW_SHADER"
+	KeyExecutorSearchToolchain         = "SEARCH_TOOLCHAIN"
 
 	KeyUserDefinedLogLevel         = "USER_DEFINED_LOG_LEVEL"
 	KeyUserDefinedExecutorLogLevel = "USER_DEFINED_EXECUTOR_LOG_LEVEL"

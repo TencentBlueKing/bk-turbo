@@ -114,52 +114,65 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 
 	// query
 	tempis := make(map[string]*dcFile.Info, len(notfound))
-	for _, f := range notfound {
-		var i *dcFile.Info
-		if statbysearchdir {
-			i = dcFile.GetFileInfoByEnumDir(f)
-		} else {
-			i = dcFile.Lstat(f)
-		}
-		tempis[f] = i
-
-		if !i.Exist() {
-			if mustexisted {
-				// TODO : return fail if not existed
-				// continue
-				blog.Warnf("common util: depend file:%s not existed ", f)
-				return nil, fmt.Errorf("%s not existed", f)
+	for _, notf := range notfound {
+		tempf := notf
+		for {
+			var i *dcFile.Info
+			if statbysearchdir {
+				i = dcFile.GetFileInfoByEnumDir(tempf)
 			} else {
+				i = dcFile.Lstat(tempf)
+			}
+			tempis[tempf] = i
+
+			if !i.Exist() {
+				if mustexisted {
+					// TODO : return fail if not existed
+					// continue
+					blog.Warnf("common util: depend file:%s not existed ", tempf)
+					return nil, fmt.Errorf("%s not existed", tempf)
+				} else {
+					// continue
+					break
+				}
+			}
+
+			loopagain := false
+			if i.Basic().Mode()&os.ModeSymlink != 0 {
+				originFile, err := os.Readlink(tempf)
+				if err == nil {
+					if !filepath.IsAbs(originFile) {
+						originFile, err = filepath.Abs(filepath.Join(filepath.Dir(tempf), originFile))
+						if err == nil {
+							i.LinkTarget = originFile
+							blog.Infof("common util: symlink %s to %s", tempf, originFile)
+						} else {
+							blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
+								tempf, originFile, err)
+						}
+					} else {
+						i.LinkTarget = originFile
+						blog.Infof("common util: symlink %s to %s", tempf, originFile)
+					}
+
+					// 如果是链接，并且指向了其它文件，则需要将指向的文件也包含进来
+					loopagain = true
+					tempf = originFile
+				} else {
+					blog.Infof("common util: symlink %s Readlink error:%s", tempf, err)
+				}
+			}
+
+			if notdir && i.Basic().IsDir() {
 				continue
 			}
-		}
 
-		if i.Basic().Mode()&os.ModeSymlink != 0 {
-			originFile, err := os.Readlink(f)
-			if err == nil {
-				if !filepath.IsAbs(originFile) {
-					originFile, err = filepath.Abs(filepath.Join(filepath.Dir(f), originFile))
-					if err == nil {
-						i.LinkTarget = originFile
-						blog.Infof("common util: symlink %s to %s", f, originFile)
-					} else {
-						blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
-							f, originFile, err)
-					}
-				} else {
-					i.LinkTarget = originFile
-					blog.Infof("common util: symlink %s to %s", f, originFile)
-				}
-			} else {
-				blog.Infof("common util: symlink %s Readlink error:%s", f, err)
+			is = append(is, i)
+
+			if !loopagain {
+				break
 			}
 		}
-
-		if notdir && i.Basic().IsDir() {
-			continue
-		}
-
-		is = append(is, i)
 	}
 
 	// write
@@ -340,4 +353,31 @@ func FormatFilePath(f string) string {
 	}
 
 	return f
+}
+
+func GetAllLinkFiles(f, workdir string) []string {
+	fs := []string{}
+	tempf := f
+	for {
+		loopagain := false
+		i := dcFile.Lstat(tempf)
+		if i.Basic().Mode()&os.ModeSymlink != 0 {
+			originFile, err := os.Readlink(tempf)
+			if err == nil {
+				if !filepath.IsAbs(originFile) {
+					originFile, _ = filepath.Abs(filepath.Join(workdir, originFile))
+				}
+				fs = append(fs, FormatFilePath(originFile))
+
+				loopagain = true
+				tempf = originFile
+			}
+		}
+
+		if !loopagain {
+			break
+		}
+	}
+
+	return fs
 }

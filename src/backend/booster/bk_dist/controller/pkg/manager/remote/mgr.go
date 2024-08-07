@@ -1649,8 +1649,23 @@ func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest
 			fd = append(fd, additionfd)
 		}
 		if c.ExeToolChainKey != "" {
-			if toolfd := m.getToolFileInfoByKey(c.ExeToolChainKey); toolfd != nil {
+			toolfd := m.getToolFileInfoByKey(c.ExeToolChainKey)
+			if toolfd != nil {
 				fd = append(fd, toolfd)
+			} else {
+				// TODO : 如果环境变量中指定了需要自动探测工具链，则需要自动探测
+				if dcSyscall.NeedSearchToolchain(req.Sandbox.Env) {
+					blog.Infof("remote: start search toolchain with key:%s now", c.ExeToolChainKey)
+					err := m.work.Basic().SearchToolChain(c.ExeToolChainKey)
+					blog.Infof("remote: end search toolchain with key:%s error:%v", c.ExeToolChainKey, err)
+
+					if err == nil {
+						toolfd = m.getToolFileInfoByKey(c.ExeToolChainKey)
+						if toolfd != nil {
+							fd = append(fd, toolfd)
+						}
+					}
+				}
 			}
 		}
 	}

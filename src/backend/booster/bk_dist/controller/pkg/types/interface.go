@@ -265,4 +265,7 @@ type BasicMgr interface {
 
 	// minus registered count for batch mode
 	DecRegistered()
+
+	// search toolchain files by cmd, ensure only execute once
+	SearchToolChain(cmd string) error
 }

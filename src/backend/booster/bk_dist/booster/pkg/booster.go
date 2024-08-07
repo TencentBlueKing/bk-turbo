@@ -360,6 +360,10 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorIdleKeepSecs] = strconv.Itoa(b.config.Works.IdleKeepSecs)
 	}
 
+	if b.config.Works.SearchToolchain {
+		requiredEnv[env.KeyExecutorSearchToolchain] = envValueTrue
+	}
+
 	resultEnv := make(map[string]string, 10)
 	for k, v := range requiredEnv {
 		resultEnv[env.GetEnvKey(k)] = v

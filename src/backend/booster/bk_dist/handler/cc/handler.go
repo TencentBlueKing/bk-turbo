@@ -307,6 +307,12 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 				}
 
 				*includes = append(*includes, commonUtil.FormatFilePath(targetf))
+
+				// 如果是链接，则将相关指向的文件都包含进来
+				fs := commonUtil.GetAllLinkFiles(targetf, workdir)
+				if len(fs) > 0 {
+					*includes = append(*includes, fs...)
+				}
 			}
 		}
 	}

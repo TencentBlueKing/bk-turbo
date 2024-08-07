@@ -132,6 +132,8 @@ type BoosterWorks struct {
 
 	EnableLink bool
 	EnableLib  bool
+
+	SearchToolchain bool
 }
 
 // BoosterTransport describe the transport data to controller
