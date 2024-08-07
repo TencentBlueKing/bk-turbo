@@ -295,6 +295,10 @@ var soWhiteList = []string{
 	"libbfd",
 }
 
+var specialSOFiles = []string{
+	"/lib64/libstdc++.so.6",
+}
+
 func getLddFiles(exe string) []string {
 	cmd := fmt.Sprintf("ldd %s", exe)
 	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
@@ -384,6 +388,16 @@ func searchGcc(cmd string) (*types.ToolChain, error) {
 			t.Files = append(t.Files, dcSDK.ToolFile{
 				LocalFullPath:      i,
 				RemoteRelativePath: filepath.Dir(i),
+			})
+		}
+	}
+
+	// add special so
+	for _, f := range specialSOFiles {
+		if dcFile.Lstat(f).Exist() {
+			t.Files = append(t.Files, dcSDK.ToolFile{
+				LocalFullPath:      f,
+				RemoteRelativePath: filepath.Dir(f),
 			})
 		}
 	}
@@ -490,6 +504,16 @@ func searchClang(cmd string) (*types.ToolChain, error) {
 			t.Files = append(t.Files, dcSDK.ToolFile{
 				LocalFullPath:      i,
 				RemoteRelativePath: filepath.Dir(i),
+			})
+		}
+	}
+
+	// add special so
+	for _, f := range specialSOFiles {
+		if dcFile.Lstat(f).Exist() {
+			t.Files = append(t.Files, dcSDK.ToolFile{
+				LocalFullPath:      f,
+				RemoteRelativePath: filepath.Dir(f),
 			})
 		}
 	}
