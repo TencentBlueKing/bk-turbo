@@ -354,3 +354,30 @@ func FormatFilePath(f string) string {
 
 	return f
 }
+
+func GetAllLinkFiles(f, workdir string) []string {
+	fs := []string{}
+	tempf := f
+	for {
+		loopagain := false
+		i := dcFile.Lstat(tempf)
+		if i.Basic().Mode()&os.ModeSymlink != 0 {
+			originFile, err := os.Readlink(tempf)
+			if err == nil {
+				if !filepath.IsAbs(originFile) {
+					originFile, _ = filepath.Abs(filepath.Join(workdir, originFile))
+				}
+				fs = append(fs, FormatFilePath(originFile))
+
+				loopagain = true
+				tempf = originFile
+			}
+		}
+
+		if !loopagain {
+			break
+		}
+	}
+
+	return fs
+}

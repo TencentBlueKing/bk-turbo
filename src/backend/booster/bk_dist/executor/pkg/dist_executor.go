@@ -201,7 +201,7 @@ func getAbsPath(cmd string) string {
 		}
 	}
 
-	// no path, noly file name
+	// no path, only file name
 	newcmd, err := exec.LookPath(cmd)
 	if err == nil {
 		return newcmd

@@ -329,10 +329,6 @@ func getLddFiles(exe string) []string {
 			if inWhiteList && dcFile.Lstat(f).Exist() {
 				files = append(files, f)
 			}
-
-			// if dcFile.Lstat(f).Exist() {
-			// 	files = append(files, f)
-			// }
 		}
 	}
 
