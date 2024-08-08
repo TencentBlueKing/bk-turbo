@@ -220,11 +220,13 @@ func searchToolChain(cmd string) (*types.ToolChain, error) {
 	blog.Infof("basic: real start search toolchian for cmd:%s", cmd)
 	defer blog.Infof("basic: end search toolchian for cmd:%s", cmd)
 
-	if strings.HasSuffix(cmd, "clang") || strings.HasSuffix(cmd, "clang++") {
+	cmdbase := filepath.Base(cmd)
+	switch cmdbase {
+	case "clang", "clang++":
 		return searchClang(cmd)
-	}
-
-	if strings.HasSuffix(cmd, "gcc") || strings.HasSuffix(cmd, "g++") {
+	case "gcc", "g++":
+		return searchGcc(cmd)
+	case "cc", "c++":
 		return searchGcc(cmd)
 	}
 
