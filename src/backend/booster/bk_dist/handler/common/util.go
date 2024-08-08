@@ -358,6 +358,9 @@ func FormatFilePath(f string) string {
 func GetAllLinkFiles(f, workdir string) []string {
 	fs := []string{}
 	tempf := f
+	// avoid dead loop
+	maxTry := 10
+	try := 0
 	for {
 		loopagain := false
 		i := dcFile.Lstat(tempf)
@@ -371,6 +374,13 @@ func GetAllLinkFiles(f, workdir string) []string {
 
 				loopagain = true
 				tempf = originFile
+
+				try++
+				if try >= maxTry {
+					loopagain = false
+					blog.Infof("common util: symlink %s may be drop in dead loop", tempf)
+					break
+				}
 			}
 		}
 
