@@ -1258,7 +1258,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 	// debugRecordFileName(fmt.Sprintf("cc: pre-build ready stripLocalArgs"))
 
 	// strip the args and get the server side args.
-	serverSideArgs := stripLocalArgs(finalArgs)
+	serverSideArgs := stripLocalArgs(finalArgs, cc.sandbox.Env)
 
 	// replace the input file into preprocessedFile, for the next server side process.
 	for index := range serverSideArgs {

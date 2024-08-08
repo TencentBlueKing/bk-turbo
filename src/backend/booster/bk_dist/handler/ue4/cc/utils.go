@@ -25,6 +25,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -583,7 +584,7 @@ func getPreprocessedExt(inputFile string) string {
 // are pointed to by that array are aliased with the values pointed
 // to by 'from'.  The caller is responsible for calling free() on
 // '*out_argv'.
-func stripLocalArgs(args []string) []string {
+func stripLocalArgs(args []string, env *env.Sandbox) []string {
 	r := make([]string, 0, len(args))
 
 	// skip through argv, copying all arguments but skipping ones that ought to be omitted
@@ -616,7 +617,9 @@ func stripLocalArgs(args []string) []string {
 		r = append(r, arg)
 	}
 
-	r[0] = filepath.Base(r[0])
+	if !dcSyscall.NeedSearchToolchain(env) {
+		r[0] = filepath.Base(r[0])
+	}
 	return r
 }
 
