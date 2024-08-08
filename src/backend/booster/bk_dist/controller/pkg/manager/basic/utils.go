@@ -228,6 +228,10 @@ func searchToolChain(cmd string) (*types.ToolChain, error) {
 		return searchGcc(cmd)
 	}
 
+	if strings.HasSuffix(cmd, "cc") || strings.HasSuffix(cmd, "c++") {
+		return searchGcc(cmd)
+	}
+
 	return nil, nil
 }
 
