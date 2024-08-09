@@ -77,6 +77,7 @@ class TbsDaySummaryDao @Autowired constructor(
 
         val criteria = Criteria.where("day").gte(startDate).lte(endDate)
             .and("user").`is`(null)
+            .and("total_time_with_cpu").gt(0)
             .and("engine_code").ne("disttask-ue4")
             .apply { if (filterPlanIdNin.isNotEmpty()) and("plan_id").nin(filterPlanIdNin) }
             .apply { if (filterProjectIdNin.isNotEmpty()) and("project_id").nin(filterProjectIdNin) }
@@ -112,6 +113,7 @@ class TbsDaySummaryDao @Autowired constructor(
         logger.info("findByDayForUE startDate: $startDate, endDate: $endDate, filterPlanIdNin: $filterPlanIdNin")
         val criteria = Criteria.where("day").gte(startDate).lte(endDate)
             .and("user").ne(null)
+            .and("total_time_with_cpu").gt(0)
             .and("engine_code").`is`("disttask-ue4")
             .apply {
                 if (filterPlanIdNin.isNotEmpty()) and("plan_id").nin(filterPlanIdNin)
