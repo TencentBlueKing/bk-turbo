@@ -1268,6 +1268,21 @@ func (cc *TaskCC) preBuild(args []string) error {
 		}
 	}
 
+	// avoid error : does not allow 'register' storage class specifier
+	prefix := "-std=c++"
+	for _, v := range serverSideArgs {
+		if strings.HasPrefix(v, prefix) {
+			if len(v) > len(prefix) {
+				version, err := strconv.Atoi(v[len(prefix):])
+				if err == nil && version > 14 {
+					serverSideArgs = append(serverSideArgs, "-Wno-register")
+					blog.Infof("cc: found %s,ready add [-Wno-register]", v)
+				}
+			}
+			break
+		}
+	}
+
 	// quota result file if it's path contains space
 	if runtime.GOOS == osWindows {
 		if hasSpace(cc.outputFile) && !strings.HasPrefix(cc.outputFile, "\"") {
