@@ -879,6 +879,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cc: [%s] start post execute", cc.tag)
 	if r == nil || len(r.Results) == 0 {
+		blog.Warnf("cc: [%s] got empty result", cc.tag)
 		return dcType.ErrorUnknown
 	}
 
