@@ -293,7 +293,7 @@ func (u *UE4) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 		return u.innerhandler.PostExecute(r)
 	}
 
-	// return fmt.Errorf("not support")
+	blog.Warnf("innerhandler is nil when ready post execute")
 	return dcType.ErrorUnknown
 }
 
