@@ -1040,7 +1040,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
-					blog.Errorf("cc: failed to save file [%s]", f.FilePath)
+					blog.Errorf("cc: failed to save file [%s] with error:%v", f.FilePath, err)
 					return dcType.ErrorUnknown
 				}
 				resultfilenum++

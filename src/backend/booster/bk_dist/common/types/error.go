@@ -32,27 +32,31 @@ var (
 	DescUnknown = fmt.Errorf("unknown")
 )
 
+const (
+	BaseCode = 100000
+)
+
 // define errors
 var (
 	// no error        0
 	ErrorNone = BKDistCommonError{Code: 0, Error: nil}
 
-	// pre-execute     1~999
-	ErrorPreForceLocal       = BKDistCommonError{Code: 1, Error: DescPreForceLocal}
-	ErrorPreNotSupportRemote = BKDistCommonError{Code: 2, Error: DescPreNotSupportRemote}
+	// pre-execute     1~999 (+BaseCode)
+	ErrorPreForceLocal       = BKDistCommonError{Code: BaseCode + 1, Error: DescPreForceLocal}
+	ErrorPreNotSupportRemote = BKDistCommonError{Code: BaseCode + 2, Error: DescPreNotSupportRemote}
 
-	// remote-execute  1000~1999
-	ErrorRemoteSendFile      = BKDistCommonError{Code: 1000, Error: DescRemoteSendFile}
-	ErrorRemoteSendToolchain = BKDistCommonError{Code: 1001, Error: DescRemoteSendToolchain}
+	// remote-execute  1000~1999 (+BaseCode)
+	ErrorRemoteSendFile      = BKDistCommonError{Code: BaseCode + 1000, Error: DescRemoteSendFile}
+	ErrorRemoteSendToolchain = BKDistCommonError{Code: BaseCode + 1001, Error: DescRemoteSendToolchain}
 
-	// post-execute    2000~2999
-	ErrorPostMissPumpDependFile   = BKDistCommonError{Code: 2000, Error: DescPostMissPumpDependFile}
-	ErrorPostMissNormalDependFile = BKDistCommonError{Code: 2001, Error: DescPostMissNormalDependFile}
-	ErrorPostSaveFileFailed       = BKDistCommonError{Code: 2002, Error: DescPostSaveFileFailed}
-	ErrorPostOutOfMemoy           = BKDistCommonError{Code: 2100, Error: DescPostOutOfMemoy}
-	ErrorPostToolchainNotFound    = BKDistCommonError{Code: 2200, Error: DescPostToolchainNotFound}
+	// post-execute    2000~2999 (+BaseCode)
+	ErrorPostMissPumpDependFile   = BKDistCommonError{Code: BaseCode + 2000, Error: DescPostMissPumpDependFile}
+	ErrorPostMissNormalDependFile = BKDistCommonError{Code: BaseCode + 2001, Error: DescPostMissNormalDependFile}
+	ErrorPostSaveFileFailed       = BKDistCommonError{Code: BaseCode + 2002, Error: DescPostSaveFileFailed}
+	ErrorPostOutOfMemoy           = BKDistCommonError{Code: BaseCode + 2100, Error: DescPostOutOfMemoy}
+	ErrorPostToolchainNotFound    = BKDistCommonError{Code: BaseCode + 2200, Error: DescPostToolchainNotFound}
 
-	// local-execute   3000~3999
+	// local-execute   3000~3999 (+BaseCode)
 
 	// other error     999999
 	ErrorUnknown = BKDistCommonError{Code: 999999, Error: DescUnknown}
