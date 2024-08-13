@@ -135,7 +135,7 @@ func (c *Custom) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 单个任务的预处理, 如c/c++编译的pre-process, 决定了分发到远程处理的任务信息
-func (c *Custom) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (c *Custom) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	return c.innerHandler.PreExecute(command)
 }
 
@@ -175,8 +175,8 @@ func (c *Custom) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (c *Custom) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
-	return nil, nil
+func (c *Custom) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
+	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -185,7 +185,7 @@ func (c *Custom) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 单个任务的后置处理, 需要处理远程任务执行的结果
-func (c *Custom) PostExecute(result *dcSDK.BKDistResult) error {
+func (c *Custom) PostExecute(result *dcSDK.BKDistResult) (int, error) {
 	return c.innerHandler.PostExecute(result)
 }
 

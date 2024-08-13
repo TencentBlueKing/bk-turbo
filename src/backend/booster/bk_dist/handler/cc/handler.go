@@ -27,6 +27,7 @@ import (
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/analyser"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
@@ -150,7 +151,7 @@ func (cc *TaskCC) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (cc *TaskCC) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cc *TaskCC) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	return cc.preExecute(command)
 }
 
@@ -185,7 +186,7 @@ func (cc *TaskCC) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
 	blog.Infof("cc: start OnRemoteFail for: %v", command)
 
 	if cc.pumpremote {
@@ -195,7 +196,8 @@ func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 		cc.pumpremote = false
 		return cc.preExecute(command)
 	}
-	return nil, nil
+
+	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -204,7 +206,7 @@ func (cc *TaskCC) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 判断远程执行的结果是否正确
-func (cc *TaskCC) PostExecute(r *dcSDK.BKDistResult) error {
+func (cc *TaskCC) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 	return cc.postExecute(r)
 }
 
@@ -758,7 +760,7 @@ func (cc *TaskCC) workerSupportAbsPath() bool {
 	return true
 }
 
-func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	blog.Infof("cc: [%s] start pre execute for: %v", cc.tag, command)
 
 	cc.originArgs = command
@@ -770,25 +772,25 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		if err != nil {
 			if notifyerr == ErrorNotSupportRemote {
 				blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
-				return nil, err
+				return nil, dcType.ErrorPreNotSupportRemote.Code, dcType.ErrorPreNotSupportRemote.Error
 			}
 		} else {
 			// for debug
 			blog.Debugf("cc: after try pump, req: %+v", *req)
 			cc.pumpremote = true
-			return req, err
+			return req, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 		}
 	}
 
 	compilerEnsuredArgs, err := ensureCompiler(command)
 	if err != nil {
 		blog.Warnf("cc: [%s] pre execute ensure compiler %v: %v", cc.tag, command, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 	args, err := expandOptions(cc.sandbox, compilerEnsuredArgs)
 	if err != nil {
 		blog.Warnf("cc: [%s] pre execute expand options %v: %v", cc.tag, compilerEnsuredArgs, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 	cc.ensuredArgs = args
 
@@ -807,7 +809,8 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		for _, v1 := range cc.ForceLocalCppFileKeys {
 			if v1 != "" && strings.Contains(v, v1) {
 				blog.Warnf("cc: pre execute found %s is in force local list, do not deal now", v)
-				return nil, fmt.Errorf("arg %s is in force local cpp list", v)
+				// return nil, fmt.Errorf("arg %s is in force local cpp list", v)
+				return nil, dcType.ErrorPreForceLocal.Code, dcType.ErrorPreForceLocal.Error
 			}
 		}
 	}
@@ -820,7 +823,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	if err = cc.preBuild(args); err != nil {
 		blog.Warnf("cc: [%s] pre execute pre-build %v: %v", cc.tag, args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	// generate the input files for pre-process file
@@ -829,7 +832,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		if !existed {
 			err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
 			blog.Warnf("cc: [%s] %v", cc.tag, err)
-			return nil, err
+			return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 		}
 
 		cc.sendFiles = append(cc.sendFiles, dcSDK.FileDesc{
@@ -870,13 +873,13 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			},
 		},
 		CustomSave: true,
-	}, nil
+	}, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
-func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) error {
+func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) (int, error) {
 	blog.Infof("cc: [%s] start post execute", cc.tag)
 	if r == nil || len(r.Results) == 0 {
-		return ErrorInvalidParam
+		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	resultfilenum := 0
@@ -893,7 +896,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) error {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
 					blog.Errorf("cc: failed to save file [%s]", f.FilePath)
-					return err
+					return dcType.ErrorPostSaveFileFailed.Code, dcType.ErrorPostSaveFileFailed.Error
 				}
 				resultfilenum++
 			}
@@ -914,7 +917,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) error {
 		if cc.pumpremote {
 			cc.needcopypumpheadfile = false
 		}
-		return nil
+		return dcType.ErrorNone.Code, dcType.ErrorNone.Error
 	}
 
 ERROREND:
@@ -939,11 +942,13 @@ ERROREND:
 		os.Remove(cc.pumpHeadFile)
 	}
 
-	return fmt.Errorf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
 		cc.tag,
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
+
+	return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 }
 
 func (cc *TaskCC) ensureOwner(fdl []string) {

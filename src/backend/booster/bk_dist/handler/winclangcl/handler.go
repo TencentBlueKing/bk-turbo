@@ -83,14 +83,14 @@ func (cc *WinClangCl) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (cc *WinClangCl) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cc *WinClangCl) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	commandline, err := cmd.Parse(command)
 	if err != nil {
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 	err = cc.preprocess(commandline)
 	if err != nil {
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 	serverSideArgs := commandline.RenderToServerSide(cc.preprocessedFile)
 
@@ -105,7 +105,7 @@ func (cc *WinClangCl) PreExecute(command []string) (*dcSDK.BKDistCommand, error)
 				ResultFiles: []string{commandline.Obj},
 			},
 		},
-	}, nil
+	}, 0, nil
 }
 
 // LocalExecuteNeed 无需自定义本地处理
@@ -139,8 +139,8 @@ func (cc *WinClangCl) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (cc *WinClangCl) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
-	return nil, nil
+func (cc *WinClangCl) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
+	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -149,21 +149,24 @@ func (cc *WinClangCl) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 判断远程执行的结果是否正确
-func (cc *WinClangCl) PostExecute(r *dcSDK.BKDistResult) error {
+func (cc *WinClangCl) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 	blog.Infof("cc: [%s] start post execute", cc.tag)
 	if r == nil || len(r.Results) == 0 {
-		return fmt.Errorf("cc: remote execute error")
+		blog.Warnf("cc: remote execute error")
+		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cc: [%s] success done post execute", cc.tag)
-		return nil
+		return 0, nil
 	}
-	return fmt.Errorf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
 		cc.tag,
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
+
+	return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 }
 
 // FinalExecute 清理临时文件
@@ -190,7 +193,7 @@ func (cc *WinClangCl) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.Prel
 	return nil, nil
 }
 
-//编译过程的预处理
+// 编译过程的预处理
 func (cc *WinClangCl) preprocess(command cmd.Commandline) error {
 	sandbox := cc.sandbox.Fork()
 	tmpfile, err := ioutil.TempFile("", "bk_boost_*."+command.FileType)

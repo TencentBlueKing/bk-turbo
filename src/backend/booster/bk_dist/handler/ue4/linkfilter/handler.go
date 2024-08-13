@@ -99,7 +99,7 @@ func (lf *TaskLinkFilter) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理, 复用cl-handler的逻辑
-func (lf *TaskLinkFilter) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (lf *TaskLinkFilter) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	return lf.preExecute(command)
 }
 
@@ -119,8 +119,8 @@ func (lf *TaskLinkFilter) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (lf *TaskLinkFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
-	return nil, nil
+func (lf *TaskLinkFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
+	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -132,7 +132,7 @@ func (lf *TaskLinkFilter) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 复用cl-handler的逻辑
-func (lf *TaskLinkFilter) PostExecute(r *dcSDK.BKDistResult) error {
+func (lf *TaskLinkFilter) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 	return lf.postExecute(r)
 }
 
@@ -166,18 +166,19 @@ func (lf *TaskLinkFilter) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
-func (lf *TaskLinkFilter) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (lf *TaskLinkFilter) preExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	blog.Infof("lf: start pre execute for: %v", command)
 
 	if lf.handle == nil {
-		return nil, ErrorNilInnerHandle
+		blog.Warnf("lf: inner handle is nil")
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	lf.originArgs = command
 	args, err := ensureCompiler(command)
 	if err != nil {
 		blog.Errorf("lf: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	lf.linkArgs = args
@@ -188,11 +189,12 @@ func (lf *TaskLinkFilter) preExecute(command []string) (*dcSDK.BKDistCommand, er
 	return lf.handle.PreExecute(args)
 }
 
-func (lf *TaskLinkFilter) postExecute(r *dcSDK.BKDistResult) error {
+func (lf *TaskLinkFilter) postExecute(r *dcSDK.BKDistResult) (int, error) {
 	blog.Infof("lf: start post execute for: %v", lf.originArgs)
 
 	if lf.handle == nil {
-		return ErrorNilInnerHandle
+		blog.Warnf("lf: inner handle is nil")
+		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	return lf.handle.PostExecute(r)

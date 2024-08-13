@@ -155,7 +155,7 @@ func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
 
 	dcSDK.StatsTimeNow(&e.stats.PreWorkStartTime)
 	e.mgr.work.Basic().UpdateJobStats(e.stats)
-	r, err := e.handler.PreExecute(e.req.Commands)
+	r, _, err := e.handler.PreExecute(e.req.Commands)
 	dcSDK.StatsTimeNow(&e.stats.PreWorkEndTime)
 	if err != nil {
 		return nil, err
@@ -211,7 +211,7 @@ func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
 
 	// dcSDK.StatsTimeNow(&e.stats.PreWorkStartTime)
 	// e.mgr.work.Basic().UpdateJobStats(e.stats)
-	r, err := e.handler.OnRemoteFail(e.req.Commands)
+	r, _, err := e.handler.OnRemoteFail(e.req.Commands)
 	// dcSDK.StatsTimeNow(&e.stats.PreWorkEndTime)
 	if err != nil {
 		return nil, err
@@ -247,7 +247,7 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	dcSDK.StatsTimeNow(&e.stats.PostWorkStartTime)
 	defer dcSDK.StatsTimeNow(&e.stats.PostWorkEndTime)
 	e.mgr.work.Basic().UpdateJobStats(e.stats)
-	err := e.handler.PostExecute(result)
+	_, err := e.handler.PostExecute(result)
 	if err != nil {
 		return err
 	}

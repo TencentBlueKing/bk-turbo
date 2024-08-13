@@ -111,7 +111,7 @@ func (l *TaskLink) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (l *TaskLink) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (l *TaskLink) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	return l.preExecute(command)
 }
 
@@ -131,8 +131,8 @@ func (l *TaskLink) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (l *TaskLink) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
-	return nil, nil
+func (l *TaskLink) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
+	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -141,7 +141,7 @@ func (l *TaskLink) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理
-func (l *TaskLink) PostExecute(r *dcSDK.BKDistResult) error {
+func (l *TaskLink) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 	return l.postExecute(r)
 }
 
@@ -179,25 +179,25 @@ func (l *TaskLink) workerSupportAbsPath() bool {
 	return true
 }
 
-func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	blog.Infof("link: start pre execute for: %v", command)
 
 	if !l.workerSupportAbsPath() {
 		blog.Infof("link: remote worker do not support absolute path")
-		return nil, fmt.Errorf("remote worker do not support absolute path")
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	l.originArgs = command
 	responseFile, args, err := ensureCompiler(command)
 	if err != nil {
 		blog.Errorf("link: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	for _, v := range ForceLocalFileKeys {
 		if strings.Contains(responseFile, v) {
 			blog.Errorf("link: pre execute found response %s is in force local list, do not deal now", responseFile)
-			return nil, fmt.Errorf("response file %s is in force local list", responseFile)
+			return nil, dcType.ErrorPreForceLocal.Code, dcType.ErrorPreForceLocal.Error
 		}
 	}
 
@@ -210,7 +210,7 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	if err = l.scan(args); err != nil {
 		blog.Warnf("link: scan command[%v] with error : %v", command, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	// add response file as input
@@ -224,7 +224,7 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		if !existed {
 			err := fmt.Errorf("input file %s not existed", v)
 			blog.Errorf("%v", err)
-			return nil, err
+			return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 		}
 
 		// generate the input files for pre-process file
@@ -369,21 +369,22 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	blog.Debugf("link: after pre,full command[%v]", req)
 
-	return &req, nil
+	return &req, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
-func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
+func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) (int, error) {
 	blog.Infof("link: start post execute for: %v", l.originArgs)
 	if r == nil || len(r.Results) == 0 {
-		return ErrorInvalidParam
+		blog.Warnf("link: parameter is invalid")
+		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	if len(r.Results[0].ResultFiles) > 0 {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f); err != nil {
-					blog.Errorf("link: failed to save file [%s]", f.FilePath)
-					return err
+					blog.Errorf("link: failed to save file [%s] with error:%v", f.FilePath, err)
+					return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 				}
 			}
 		}
@@ -391,13 +392,15 @@ func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("link: success done post execute for: %v", l.originArgs)
-		return nil
+		return dcType.ErrorNone.Code, dcType.ErrorNone.Error
 	}
 
-	return fmt.Errorf("link: failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("link: failed to remote execute, retcode %d, error message:%s, output message:%s",
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
+
+	return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 }
 
 func (l *TaskLink) scan(args []string) error {

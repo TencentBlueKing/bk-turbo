@@ -109,7 +109,7 @@ func (cf *TaskCLFilter) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理, 复用cl-handler的逻辑
-func (cf *TaskCLFilter) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cf *TaskCLFilter) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	return cf.preExecute(command)
 }
 
@@ -133,12 +133,12 @@ func (cf *TaskCLFilter) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (cf *TaskCLFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+func (cf *TaskCLFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
 	if cf.clhandle != nil {
 		return cf.clhandle.OnRemoteFail(cf.cldArgs)
 	}
 
-	return nil, nil
+	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -150,7 +150,7 @@ func (cf *TaskCLFilter) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 复用cl-handler的逻辑
-func (cf *TaskCLFilter) PostExecute(r *dcSDK.BKDistResult) error {
+func (cf *TaskCLFilter) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 	return cf.postExecute(r)
 }
 
@@ -188,7 +188,7 @@ func (cf *TaskCLFilter) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	}, nil
 }
 
-func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 	blog.Infof("cf: start pre execute for: %v", command)
 
 	// debugRecordFileName(fmt.Sprintf("cl: start pre execute for: %v", command))
@@ -197,7 +197,7 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, erro
 	dependFile, args, err := ensureCompiler(command)
 	if err != nil {
 		blog.Errorf("cf: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	cf.dependentFile = dependFile
@@ -210,24 +210,25 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, erro
 	return cf.clhandle.PreExecute(args)
 }
 
-func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) error {
+func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) (int, error) {
 	blog.Infof("cf: start post execute for: %v", cf.originArgs)
 
-	err := cf.clhandle.PostExecute(r)
+	code, err := cf.clhandle.PostExecute(r)
 	if err != nil {
-		return err
+		return code, err
 	}
 
 	// save include to txt file
 	blog.Debugf("cf: ready parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
 	output, err := cf.parseOutput(string(r.Results[0].OutputMessage))
 	if err != nil {
-		return err
+		blog.Warnf("cf: parse output(%s) with error:%v", r.Results[0].OutputMessage, err)
+		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	r.Results[0].OutputMessage = []byte(output)
 	blog.Debugf("cf: after parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
-	return nil
+	return dcType.ErrorNone.Code, dcType.ErrorNone.Error
 }
 
 func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
