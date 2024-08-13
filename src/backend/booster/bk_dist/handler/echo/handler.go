@@ -128,8 +128,8 @@ func (c *Echo) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute execute local cmd by this handle
-func (c *Echo) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (c *Echo) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // PreLockWeight decide pre-execute lock weight, default 1
@@ -139,12 +139,12 @@ func (c *Echo) PreLockWeight(command []string) int32 {
 
 // PreExecute do the pre-process in one executor command.
 // PreExecute should analyse the input command and generate the DistCommand to send to remote.
-func (c *Echo) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (c *Echo) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	upperCommand := strings.ToUpper(command[0])
 	if len(command) < 2 || (!strings.HasSuffix(upperCommand, "ECHO") &&
 		!strings.HasSuffix(upperCommand, "ECHO.EXE")) {
 		blog.Warnf("echo: invalid command,len(command):[%d], command[0]:[%s]", len(command), command[0])
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	inputfiles := make([]dcSDK.FileDesc, 0, 1)
@@ -165,7 +165,7 @@ func (c *Echo) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 				existed, fileSize, modifyTime, fileMode = dcFile.Stat(newinput).Batch()
 				if !existed {
 					blog.Infof("echo: input file %s not exist", newinput)
-					return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+					return nil, dcType.ErrorUnknown
 				}
 			}
 		}
@@ -194,7 +194,7 @@ func (c *Echo) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
 			},
 		},
 		CustomSave: true,
-	}, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	}, dcType.ErrorNone
 }
 
 // NeedRemoteResource check whether this command need remote resource
@@ -213,8 +213,8 @@ func (c *Echo) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (c *Echo) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
-	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+func (c *Echo) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -225,11 +225,11 @@ func (c *Echo) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 // PostExecute do the post-process in one executor command.
 // PostExecute should check the DistResult and judge whether the remote processing succeeded.
 // Also PostExecute should manages the output message.
-func (c *Echo) PostExecute(r *dcSDK.BKDistResult) (int, error) {
+func (c *Echo) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	// do not save result to disk
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("echo: result data is invalid")
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	result := r.Results[0]
@@ -239,13 +239,13 @@ func (c *Echo) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 			result.ErrorMessage,
 			result.OutputMessage)
 
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	for _, v := range result.ResultFiles {
 		blog.Infof("echo: received result file[%s],len[%d]", v.FilePath, len(v.Buffer))
 	}
-	return dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	return dcType.ErrorNone
 }
 
 // FinalExecute provide a chance to do process before the process exit.

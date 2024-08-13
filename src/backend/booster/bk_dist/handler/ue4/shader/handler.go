@@ -102,7 +102,7 @@ func (u *UE4Shader) isNewShader() bool {
 }
 
 // PreExecute 预处理
-func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("shader: ready pre execute with command[%v]", command)
 
 	// to support ue 5.3 macos
@@ -112,7 +112,7 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, int, err
 
 	if len(command) < 6 {
 		blog.Warnf("shader: invalid command")
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	filedir, _ := filepath.Abs(command[1])
@@ -141,7 +141,7 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, int, err
 	existed, fileSize, modifyTime, fileMode := info.Batch()
 	if !existed {
 		blog.Warnf("shader: input file %s not exist with error:%v", inputFile, info.Error())
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	inputfiles := []dcSDK.FileDesc{{
@@ -186,15 +186,15 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, int, err
 			},
 		},
 		CustomSave: true,
-	}, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	}, dcType.ErrorNone
 }
 
-func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Debugf("shader: ready pre execute new with command[%v]", command)
 
 	if len(command) < 6 {
 		blog.Warnf("shader: invalid command")
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	// 注意：command[1]的路径后面可能有/，这个不能去掉，否则shader会编译失败
@@ -230,7 +230,7 @@ func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, int, 
 	existed, fileSize, modifyTime, fileMode := info.Batch()
 	if !existed {
 		blog.Warnf("shader: input file %s not exist with error:%v", inputFile, info.Error())
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	inputfiles := []dcSDK.FileDesc{{
@@ -276,7 +276,7 @@ func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, int, 
 			},
 		},
 		CustomSave: true,
-	}, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	}, dcType.ErrorNone
 }
 
 // NeedRemoteResource check whether this command need remote resource
@@ -295,8 +295,8 @@ func (u *UE4Shader) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (u *UE4Shader) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
-	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+func (u *UE4Shader) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -305,10 +305,10 @@ func (u *UE4Shader) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理
-func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) (int, error) {
+func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("shader: result data is invalid")
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 	result := r.Results[0]
 
@@ -319,7 +319,7 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 			result.ErrorMessage,
 			result.OutputMessage)
 
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	if len(result.ResultFiles) == 0 {
@@ -328,7 +328,7 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 			result.ErrorMessage,
 			result.OutputMessage)
 
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	err := checkAndsaveResultFile(&result.ResultFiles[0])
@@ -336,14 +336,14 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 		blog.Infof("shader: failed to check and save shader result file[%s],error:[%v]",
 			result.ResultFiles[0].FilePath, err)
 
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	// move result temp to real
 	blog.Infof("shader: ready rename file from [%s] to [%s]", u.outputTempFile, u.outputRealFile)
 	_ = os.Rename(u.outputTempFile, u.outputRealFile)
 
-	return dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	return dcType.ErrorNone
 }
 
 // LocalExecuteNeed no need
@@ -382,8 +382,8 @@ func (u *UE4Shader) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (u *UE4Shader) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (u *UE4Shader) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // FinalExecute no need

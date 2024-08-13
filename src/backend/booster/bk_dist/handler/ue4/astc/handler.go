@@ -136,10 +136,10 @@ func (tc *TextureCompressor) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute parse the input and output file, and then just run the origin command in remote
-func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	if len(command) == 0 {
 		blog.Warnf("astc: invalid command")
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	blog.Infof("astc: pre execute for: %v", command)
@@ -147,7 +147,7 @@ func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand,
 	t, err := getTCType(command[0])
 	if err != nil {
 		blog.Warnf("astc: get tc type with error:%v", err)
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	var inputFile string
@@ -155,14 +155,14 @@ func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand,
 	inputFile, tc.outputTempFile, tc.outputRealFile, newparam, err = t.scanParam(command[1:])
 	if err != nil {
 		blog.Warnf("astc: scan param with error:%v", err)
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 	blog.Infof("astc: got new param [%s]", strings.Join(newparam, " "))
 
 	existed, fileSize, modifyTime, fileMode := dcFile.Stat(inputFile).Batch()
 	if !existed {
 		blog.Warnf("astc: input file %s not exist", inputFile)
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	return &dcSDK.BKDistCommand{
@@ -186,7 +186,7 @@ func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand,
 				ResultFiles: []string{tc.outputTempFile},
 			},
 		},
-	}, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	}, dcType.ErrorNone
 }
 
 // RemoteRetryTimes will return the remote retry times
@@ -200,8 +200,8 @@ func (tc *TextureCompressor) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (tc *TextureCompressor) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
-	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+func (tc *TextureCompressor) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -210,16 +210,16 @@ func (tc *TextureCompressor) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute judge the result
-func (tc *TextureCompressor) PostExecute(r *dcSDK.BKDistResult) (int, error) {
+func (tc *TextureCompressor) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("astc: parameter is invalid")
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 	result := r.Results[0]
 
 	if result.RetCode != 0 {
 		blog.Warnf("astc: failed to execute on remote: %s", string(result.ErrorMessage))
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	if len(result.ResultFiles) == 0 {
@@ -227,14 +227,14 @@ func (tc *TextureCompressor) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 			result.RetCode,
 			result.ErrorMessage,
 			result.OutputMessage)
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	// move result temp to real
 	blog.Infof("astc: ready rename file from [%s] to [%s]", tc.outputTempFile, tc.outputRealFile)
 	_ = os.Rename(tc.outputTempFile, tc.outputRealFile)
 
-	return dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	return dcType.ErrorNone
 }
 
 // LocalExecuteNeed no need
@@ -253,8 +253,8 @@ func (tc *TextureCompressor) NeedRemoteResource(command []string) bool {
 }
 
 // LocalExecute no need
-func (tc *TextureCompressor) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (tc *TextureCompressor) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // FinalExecute no need

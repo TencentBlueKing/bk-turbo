@@ -83,14 +83,14 @@ func (cc *WinClangCl) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (cc *WinClangCl) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (cc *WinClangCl) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	commandline, err := cmd.Parse(command)
 	if err != nil {
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 	err = cc.preprocess(commandline)
 	if err != nil {
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 	serverSideArgs := commandline.RenderToServerSide(cc.preprocessedFile)
 
@@ -105,7 +105,7 @@ func (cc *WinClangCl) PreExecute(command []string) (*dcSDK.BKDistCommand, int, e
 				ResultFiles: []string{commandline.Obj},
 			},
 		},
-	}, 0, nil
+	}, dcType.ErrorNone
 }
 
 // LocalExecuteNeed 无需自定义本地处理
@@ -119,8 +119,8 @@ func (cc *WinClangCl) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute 无需自定义本地处理
-func (cc *WinClangCl) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (cc *WinClangCl) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // NeedRemoteResource check whether this command need remote resource
@@ -139,8 +139,8 @@ func (cc *WinClangCl) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (cc *WinClangCl) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
-	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+func (cc *WinClangCl) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -149,16 +149,16 @@ func (cc *WinClangCl) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 判断远程执行的结果是否正确
-func (cc *WinClangCl) PostExecute(r *dcSDK.BKDistResult) (int, error) {
+func (cc *WinClangCl) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cc: [%s] start post execute", cc.tag)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("cc: remote execute error")
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cc: [%s] success done post execute", cc.tag)
-		return dcType.ErrorNone.Code, dcType.ErrorNone.Error
+		return dcType.ErrorNone
 	}
 	blog.Warnf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
 		cc.tag,
@@ -166,7 +166,7 @@ func (cc *WinClangCl) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
 
-	return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+	return dcType.ErrorUnknown
 }
 
 // FinalExecute 清理临时文件

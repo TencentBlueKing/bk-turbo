@@ -142,7 +142,7 @@ func (cc *TaskCC) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (cc *TaskCC) PreExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (cc *TaskCC) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	return cc.preExecute(command)
 }
 
@@ -157,8 +157,8 @@ func (cc *TaskCC) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute 无需自定义本地处理
-func (cc *TaskCC) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (cc *TaskCC) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // NeedRemoteResource check whether this command need remote resource
@@ -177,7 +177,7 @@ func (cc *TaskCC) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute
-func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("cc: start OnRemoteFail for: %v", command)
 
 	if cc.pumpremote {
@@ -188,7 +188,7 @@ func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, int, err
 		return cc.preExecute(command)
 	}
 
-	return nil, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -197,7 +197,7 @@ func (cc *TaskCC) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 判断远程执行的结果是否正确
-func (cc *TaskCC) PostExecute(r *dcSDK.BKDistResult) (int, error) {
+func (cc *TaskCC) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	return cc.postExecute(r)
 }
 
@@ -884,7 +884,7 @@ func (cc *TaskCC) workerSupportAbsPath() bool {
 	return true
 }
 
-func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error) {
+func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("cc: start pre execute for: %v", command)
 
 	// debugRecordFileName(fmt.Sprintf("cc: start pre execute for: %v", command))
@@ -898,13 +898,13 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 			if err != nil {
 				if notifyerr == ErrorNotSupportRemote {
 					blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
-					return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+					return nil, dcType.ErrorUnknown
 				}
 			} else {
 				// for debug
 				blog.Debugf("cc: after try pump, req: %+v", *req)
 				cc.pumpremote = true
-				return req, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+				return req, dcType.ErrorNone
 			}
 		}
 	}
@@ -913,7 +913,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 	responseFile, args, err := ensureCompiler(command, cc.sandbox.Dir)
 	if err != nil {
 		blog.Warnf("cc: pre execute ensure compiler %v: %v", args, err)
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	// obtain force key set by booster
@@ -935,7 +935,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 				blog.Warnf("cc: pre execute found response %s is in force local list, do not deal now",
 					responseFile)
 				// blog.Warnf("response file %s is in force local list", responseFile)
-				return nil, dcType.ErrorPreForceLocal.Code, dcType.ErrorPreForceLocal.Error
+				return nil, dcType.ErrorPreForceLocal
 			}
 		}
 	}
@@ -946,7 +946,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 				if v1 != "" && strings.Contains(v, v1) {
 					blog.Warnf("cc: pre execute found %s is in force local list, do not deal now", v)
 					// return nil, fmt.Errorf("arg %s is in force local cpp list", v)
-					return nil, dcType.ErrorPreForceLocal.Code, dcType.ErrorPreForceLocal.Error
+					return nil, dcType.ErrorPreForceLocal
 				}
 			}
 			break
@@ -966,7 +966,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 
 	if err = cc.preBuild(args); err != nil {
 		blog.Warnf("cc: pre execute pre-build %v: %v", args, err)
-		return nil, dcType.ErrorPreForceLocal.Code, dcType.ErrorPreForceLocal.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	// debugRecordFileName("FileInfo begin")
@@ -975,7 +975,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 	if !existed {
 		err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
 		blog.Errorf("%v", err)
-		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return nil, dcType.ErrorUnknown
 	}
 
 	// generate the input files for pre-process file
@@ -1017,14 +1017,14 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 			},
 		},
 		CustomSave: true,
-	}, dcType.ErrorNone.Code, dcType.ErrorNone.Error
+	}, dcType.ErrorNone
 }
 
-func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) (int, error) {
+func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cc: start post execute for: %v", cc.originArgs)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("cc: parameter is invalid")
-		return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+		return dcType.ErrorUnknown
 	}
 
 	resultfilenum := 0
@@ -1041,7 +1041,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) (int, error) {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
 					blog.Errorf("cc: failed to save file [%s]", f.FilePath)
-					return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+					return dcType.ErrorUnknown
 				}
 				resultfilenum++
 			}
@@ -1062,7 +1062,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) (int, error) {
 		if cc.pumpremote {
 			cc.needcopypumpheadfile = false
 		}
-		return dcType.ErrorNone.Code, dcType.ErrorNone.Error
+		return dcType.ErrorNone
 	}
 
 ERROREND:
@@ -1090,7 +1090,7 @@ ERROREND:
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
-	return dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+	return dcType.ErrorUnknown
 }
 
 func (cc *TaskCC) resolvePchDepend(workdir string) error {
