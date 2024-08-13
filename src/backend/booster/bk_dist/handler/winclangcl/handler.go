@@ -158,7 +158,7 @@ func (cc *WinClangCl) PostExecute(r *dcSDK.BKDistResult) (int, error) {
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cc: [%s] success done post execute", cc.tag)
-		return 0, nil
+		return dcType.ErrorNone.Code, dcType.ErrorNone.Error
 	}
 	blog.Warnf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
 		cc.tag,
