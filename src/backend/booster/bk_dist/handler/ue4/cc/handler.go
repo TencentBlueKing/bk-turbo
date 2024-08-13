@@ -975,7 +975,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 	if !existed {
 		err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
 		blog.Errorf("%v", err)
-		return nil, dcType.ErrorPreForceLocal.Code, dcType.ErrorPreForceLocal.Error
+		return nil, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
 	}
 
 	// generate the input files for pre-process file
