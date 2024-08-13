@@ -155,10 +155,10 @@ func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
 
 	dcSDK.StatsTimeNow(&e.stats.PreWorkStartTime)
 	e.mgr.work.Basic().UpdateJobStats(e.stats)
-	r, err := e.handler.PreExecute(e.req.Commands)
+	r, bkerr := e.handler.PreExecute(e.req.Commands)
 	dcSDK.StatsTimeNow(&e.stats.PreWorkEndTime)
-	if err != nil {
-		return nil, err
+	if bkerr.Error != nil {
+		return nil, bkerr.Error
 	}
 
 	e.stats.PreWorkSuccess = true
@@ -211,10 +211,10 @@ func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
 
 	// dcSDK.StatsTimeNow(&e.stats.PreWorkStartTime)
 	// e.mgr.work.Basic().UpdateJobStats(e.stats)
-	r, err := e.handler.OnRemoteFail(e.req.Commands)
+	r, bkerr := e.handler.OnRemoteFail(e.req.Commands)
 	// dcSDK.StatsTimeNow(&e.stats.PreWorkEndTime)
-	if err != nil {
-		return nil, err
+	if bkerr.Error != nil {
+		return nil, bkerr.Error
 	}
 
 	// e.stats.PreWorkSuccess = true
@@ -247,9 +247,9 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	dcSDK.StatsTimeNow(&e.stats.PostWorkStartTime)
 	defer dcSDK.StatsTimeNow(&e.stats.PostWorkEndTime)
 	e.mgr.work.Basic().UpdateJobStats(e.stats)
-	err := e.handler.PostExecute(result)
-	if err != nil {
-		return err
+	bkerr := e.handler.PostExecute(result)
+	if bkerr.Error != nil {
+		return bkerr.Error
 	}
 
 	for i := range result.Results {
@@ -312,7 +312,9 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 	var stdout, stderr []byte
 
 	if e.handler.LocalExecuteNeed(e.req.Commands) {
-		code, err = e.handler.LocalExecute(e.req.Commands)
+		bkerr := e.handler.LocalExecute(e.req.Commands)
+		code = bkerr.Code
+		err = bkerr.Error
 		stdout, stderr = e.Stdout(), e.Stderr()
 	} else {
 		sandbox := e.sandbox.Fork()

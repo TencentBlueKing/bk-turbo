@@ -245,7 +245,7 @@ func (cl *TaskCL) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (cl *TaskCL) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cl *TaskCL) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	return cl.preExecute(command)
 }
 
@@ -265,7 +265,7 @@ func (cl *TaskCL) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute
-func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("cl: start OnRemoteFail for: %v", command)
 
 	if cl.pumpremote {
@@ -275,7 +275,7 @@ func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
 		cl.pumpremote = false
 		return cl.preExecute(command)
 	}
-	return nil, nil
+	return nil, dcType.ErrorNone
 }
 
 // LocalLockWeight decide local-execute lock weight, default 1
@@ -284,7 +284,7 @@ func (cl *TaskCL) LocalLockWeight(command []string) int32 {
 }
 
 // PostExecute 后置处理
-func (cl *TaskCL) PostExecute(r *dcSDK.BKDistResult) error {
+func (cl *TaskCL) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	return cl.postExecute(r)
 }
 
@@ -299,17 +299,20 @@ func (cl *TaskCL) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // LocalExecute no need
-func (cl *TaskCL) LocalExecute(command []string) (int, error) {
+func (cl *TaskCL) LocalExecute(command []string) dcType.BKDistCommonError {
 	if len(command) < 1 {
-		return 0, fmt.Errorf("cl: failed to execute command, for args is empty")
+		blog.Warnf("cl: failed to execute command, for args is empty")
+		return dcType.ErrorUnknown
 	}
 
 	sandbox := cl.sandbox.Fork()
 	flag, rspfile, err := cl.needSaveResponseFile(command)
 	if flag && err == nil {
-		return sandbox.ExecCommand(command[0], fmt.Sprintf("@%s", rspfile))
+		code, err := sandbox.ExecCommand(command[0], fmt.Sprintf("@%s", rspfile))
+		return dcType.BKDistCommonError{Code: code, Error: err}
 	} else {
-		return sandbox.ExecCommand(command[0], command[1:]...)
+		code, err := sandbox.ExecCommand(command[0], command[1:]...)
+		return dcType.BKDistCommonError{Code: code, Error: err}
 	}
 }
 
@@ -828,7 +831,7 @@ func (cl *TaskCL) workerSupportAbsPath() bool {
 	return true
 }
 
-func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("cl: start pre execute for: %v", command)
 
 	// debugRecordFileName(fmt.Sprintf("cl: start pre execute for: %v", command))
@@ -842,11 +845,11 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			if err != nil {
 				if notifyerr == ErrorNotSupportRemote {
 					blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
-					return nil, err
+					return nil, dcType.ErrorUnknown
 				}
 			} else {
 				cl.pumpremote = true
-				return req, err
+				return req, dcType.ErrorNone
 			}
 		}
 	}
@@ -855,7 +858,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	responseFile, args, showinclude, err := ensureCompiler(command, cl.sandbox.Dir)
 	if err != nil {
 		blog.Warnf("cl: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	// obtain force key set by booster
@@ -879,7 +882,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			if v != "" && strings.Contains(responseFile, v) {
 				blog.Warnf("cl: pre execute found response %s is in force local list, do not deal now",
 					responseFile)
-				return nil, fmt.Errorf("response file %s is in force local list", responseFile)
+				return nil, dcType.ErrorPreForceLocal
 			}
 		}
 	}
@@ -890,7 +893,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			for _, v1 := range cl.ForceLocalCppFileKeys {
 				if v1 != "" && strings.Contains(v, v1) {
 					blog.Warnf("cl: pre execute found %s is in force local list, do not deal now", v)
-					return nil, fmt.Errorf("arg %s is in force local cpp list", v)
+					return nil, dcType.ErrorPreForceLocal
 				}
 			}
 			break
@@ -911,7 +914,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	if err = cl.preBuild(args); err != nil {
 		blog.Debugf("cl: pre execute pre-build %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	tend := time.Now().Local()
@@ -930,9 +933,8 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	} else {
 		existed, fileSize, modifyTime, fileMode = dcFile.Stat(cl.preprocessedFile).Batch()
 		if !existed {
-			err := fmt.Errorf("input pre file %s not existed", cl.preprocessedFile)
-			blog.Errorf("%v", err)
-			return nil, err
+			blog.Errorf("cl: input pre file %s not existed", cl.preprocessedFile)
+			return nil, dcType.ErrorUnknown
 		}
 	}
 
@@ -966,9 +968,8 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		params = []string{fmt.Sprintf("@%s", rspfile)}
 		existed, fileSize, modifyTime, fileMode := dcFile.Stat(rspfile).Batch()
 		if !existed {
-			err := fmt.Errorf("input response file %s not existed", rspfile)
-			blog.Errorf("%v", err)
-			return nil, err
+			blog.Errorf("cl: input response file %s not existed", rspfile)
+			return nil, dcType.ErrorUnknown
 		}
 		inputFiles = append(inputFiles, dcSDK.FileDesc{
 			FilePath:       rspfile,
@@ -996,13 +997,14 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			},
 		},
 		CustomSave: true,
-	}, nil
+	}, dcType.ErrorNone
 }
 
-func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) error {
+func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cl: start post execute for: %v", cl.originArgs)
 	if r == nil || len(r.Results) == 0 {
-		return ErrorInvalidParam
+		blog.Warnf("cl: parameter is invalid")
+		return dcType.ErrorUnknown
 	}
 
 	resultfilenum := 0
@@ -1019,7 +1021,7 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) error {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cl.sandbox.Dir); err != nil {
 					blog.Errorf("cl: failed to save file [%s]", f.FilePath)
-					return err
+					return dcType.ErrorUnknown
 				}
 				resultfilenum++
 			}
@@ -1056,7 +1058,7 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) error {
 			cl.needcopypumpheadfile = false
 		}
 
-		return nil
+		return dcType.ErrorNone
 	}
 
 ERROREND:
@@ -1080,10 +1082,12 @@ ERROREND:
 		os.Remove(cl.pumpHeadFile)
 	}
 
-	return fmt.Errorf("cl: failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("cl: failed to remote execute, retcode %d, error message:%s, output message:%s",
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
+
+	return dcType.ErrorUnknown
 }
 
 func (cl *TaskCL) finalExecute([]string) {
