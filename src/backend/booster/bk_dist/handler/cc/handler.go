@@ -778,7 +778,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, int, error
 			// for debug
 			blog.Debugf("cc: after try pump, req: %+v", *req)
 			cc.pumpremote = true
-			return req, dcType.ErrorUnknown.Code, dcType.ErrorUnknown.Error
+			return req, dcType.ErrorNone.Code, dcType.ErrorNone.Error
 		}
 	}
 
