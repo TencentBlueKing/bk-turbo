@@ -423,20 +423,20 @@ func (s *Session) sendReal() {
 	msgs := s.copyMessages()
 
 	for _, m := range msgs {
-		if m.WaitResponse {
-			err := s.putWait(m)
-			if err != nil {
-				if m.F != nil {
-					m.F()
-				}
-				blog.Warnf("[longtcp] [trace message] [%s] notified with error:%v", m.Desc(), err)
-				m.RetChan <- &MessageResult{
-					Err:  err,
-					Data: nil,
-				}
-				continue
-			}
-		}
+		// if m.WaitResponse {
+		// 	err := s.putWait(m)
+		// 	if err != nil {
+		// 		if m.F != nil {
+		// 			m.F()
+		// 		}
+		// 		blog.Warnf("[longtcp] [trace message] [%s] notified with error:%v", m.Desc(), err)
+		// 		m.RetChan <- &MessageResult{
+		// 			Err:  err,
+		// 			Data: nil,
+		// 		}
+		// 		continue
+		// 	}
+		// }
 
 		// encode long tcp head
 		handshakedata, err := longTCPHead2Byte(m.TCPHead)
@@ -496,6 +496,19 @@ func (s *Session) sendReal() {
 			m.RetChan <- &MessageResult{
 				Err:  nil,
 				Data: nil,
+			}
+		} else {
+			err := s.putWait(m)
+			if err != nil {
+				if m.F != nil {
+					m.F()
+				}
+				blog.Warnf("[longtcp] [trace message] [%s] notified with error:%v", m.Desc(), err)
+				m.RetChan <- &MessageResult{
+					Err:  err,
+					Data: nil,
+				}
+				continue
 			}
 		}
 	}
@@ -734,7 +747,7 @@ func (s *Session) Clean(err error) {
 	blog.Infof("[longtcp] [trace message] [session:%s] has %d in send queue when clean",
 		s.Desc(), len(s.sendQueue))
 	if !s.valid { // 避免重复clean
-		blog.Debugf("[longtcp] session %s has cleaned before", s.Desc())
+		blog.Infof("[longtcp] session %s has cleaned before", s.Desc())
 		return
 	} else {
 		s.valid = false
