@@ -845,7 +845,10 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			if err != nil {
 				if notifyerr == ErrorNotSupportRemote {
 					blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
-					return nil, dcType.ErrorUnknown
+					return nil, dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 			} else {
 				cl.pumpremote = true
@@ -858,7 +861,10 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	responseFile, args, showinclude, err := ensureCompiler(command, cl.sandbox.Dir)
 	if err != nil {
 		blog.Warnf("cl: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 
 	// obtain force key set by booster
@@ -914,7 +920,10 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	if err = cl.preBuild(args); err != nil {
 		blog.Debugf("cl: pre execute pre-build %v: %v", args, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 
 	tend := time.Now().Local()
@@ -934,7 +943,10 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		existed, fileSize, modifyTime, fileMode = dcFile.Stat(cl.preprocessedFile).Batch()
 		if !existed {
 			blog.Errorf("cl: input pre file %s not existed", cl.preprocessedFile)
-			return nil, dcType.ErrorUnknown
+			return nil, dcType.BKDistCommonError{
+				Code:  dcType.UnknowCode,
+				Error: fmt.Errorf("%s not existed", cl.preprocessedFile),
+			}
 		}
 	}
 
@@ -969,7 +981,10 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		existed, fileSize, modifyTime, fileMode := dcFile.Stat(rspfile).Batch()
 		if !existed {
 			blog.Errorf("cl: input response file %s not existed", rspfile)
-			return nil, dcType.ErrorUnknown
+			return nil, dcType.BKDistCommonError{
+				Code:  dcType.UnknowCode,
+				Error: fmt.Errorf("%s not existed", rspfile),
+			}
 		}
 		inputFiles = append(inputFiles, dcSDK.FileDesc{
 			FilePath:       rspfile,
@@ -1004,7 +1019,10 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cl: start post execute for: %v", cl.originArgs)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("cl: parameter is invalid")
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 
 	resultfilenum := 0
@@ -1021,7 +1039,10 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cl.sandbox.Dir); err != nil {
 					blog.Errorf("cl: failed to save file [%s]", f.FilePath)
-					return dcType.ErrorUnknown
+					return dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 				resultfilenum++
 			}
@@ -1078,7 +1099,8 @@ ERROREND:
 	}
 
 	if cl.pumpremote {
-		blog.Infof("cl: ready remove pump head file: %s after failed pump remote, generate it next time", cl.pumpHeadFile)
+		blog.Infof("cl: ready remove pump head file: %s after failed pump remote, generate it next time",
+			cl.pumpHeadFile)
 		os.Remove(cl.pumpHeadFile)
 	}
 
@@ -1087,7 +1109,10 @@ ERROREND:
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
 
-	return dcType.ErrorUnknown
+	return dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+	}
 }
 
 func (cl *TaskCL) finalExecute([]string) {

@@ -246,7 +246,10 @@ func (l *TaskLib) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("lib: start post execute for: %v", l.originArgs)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("lib: parameter is invalid")
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 
 	if len(r.Results[0].ResultFiles) > 0 {
@@ -254,7 +257,10 @@ func (l *TaskLib) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f); err != nil {
 					blog.Errorf("lib: failed to save file [%s] with error:%v", f.FilePath, err)
-					return dcType.ErrorUnknown
+					return dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 			}
 		}
@@ -270,7 +276,10 @@ func (l *TaskLib) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
 
-	return dcType.ErrorUnknown
+	return dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+	}
 }
 
 func (l *TaskLib) scan(args []string) error {

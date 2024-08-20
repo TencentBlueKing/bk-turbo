@@ -10,6 +10,7 @@
 package ue4
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -190,7 +191,10 @@ func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistC
 	}
 
 	blog.Warnf("not support for command %s", command[0])
-	return nil, dcType.ErrorUnknown
+	return nil, dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf("not support for command %s", command[0]),
+	}
 }
 
 // PreExecute 预处理, 根据不同的command来确定不同的子场景

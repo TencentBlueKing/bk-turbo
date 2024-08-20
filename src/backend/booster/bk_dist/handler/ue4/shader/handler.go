@@ -10,6 +10,7 @@
 package shader
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -308,7 +309,10 @@ func (u *UE4Shader) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("shader: result data is invalid")
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 	result := r.Results[0]
 
@@ -319,7 +323,10 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 			result.ErrorMessage,
 			result.OutputMessage)
 
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+		}
 	}
 
 	if len(result.ResultFiles) == 0 {
@@ -328,7 +335,10 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 			result.ErrorMessage,
 			result.OutputMessage)
 
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+		}
 	}
 
 	err := checkAndsaveResultFile(&result.ResultFiles[0])
@@ -336,7 +346,10 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 		blog.Infof("shader: failed to check and save shader result file[%s],error:[%v]",
 			result.ResultFiles[0].FilePath, err)
 
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 
 	// move result temp to real
