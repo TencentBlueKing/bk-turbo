@@ -269,7 +269,11 @@ func (s *Session) sendRoutine(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			blog.Debugf("[longtcp] internal send canceled by context")
+			blog.Infof("[longtcp] internal send canceled by context")
+			for range s.sendNotifyChan {
+				blog.Infof("[longtcp] [trace message] [session:%s] empty sendNotifyChan when context cancel",
+					s.Desc())
+			}
 			return
 
 		case <-s.sendNotifyChan:
@@ -316,16 +320,19 @@ func (s *Session) putWait(msg *Message) error {
 	return nil
 }
 
-// 删除等待的任务
-func (s *Session) removeWait(msg *Message) error {
+// 删除等待的任务，并返回信息是否真正删除了
+func (s *Session) removeWait(msg *Message) (bool, error) {
 	s.waitMutex.Lock()
 	defer s.waitMutex.Unlock()
 
 	if s.waitMap != nil {
-		delete(s.waitMap, msg.TCPHead.UniqID)
+		if _, ok := s.waitMap[msg.TCPHead.UniqID]; ok {
+			delete(s.waitMap, msg.TCPHead.UniqID)
+			return true, nil
+		}
 	}
 
-	return nil
+	return false, nil
 }
 
 // 发送结果
@@ -406,14 +413,20 @@ func (s *Session) encData2MessageWithID(id MessageID, data [][]byte, waitrespons
 }
 
 func (s *Session) onMessageError(m *Message, err error) {
+	existed := false
 	if m.WaitResponse {
-		s.removeWait(m)
+		existed, _ = s.removeWait(m)
 	}
 
-	blog.Warnf("[longtcp] [trace message] [%s] notified with error:%v", m.Desc(), err)
-	m.RetChan <- &MessageResult{
-		Err:  err,
-		Data: nil,
+	if existed {
+		blog.Warnf("[longtcp] [trace message] [%s] notified with error:%v", m.Desc(), err)
+		m.RetChan <- &MessageResult{
+			Err:  err,
+			Data: nil,
+		}
+	} else {
+		blog.Warnf("[longtcp] [trace message] [%s] notified with error:%v, but not in wait map, do nothing",
+			m.Desc(), err)
 	}
 }
 
@@ -423,6 +436,8 @@ func (s *Session) sendReal() {
 	msgs := s.copyMessages()
 
 	for _, m := range msgs {
+		blog.Infof("[longtcp] [trace message] [session:%s] [%s] start real send now",
+			s.Desc(), m.Desc())
 		if m.WaitResponse {
 			err := s.putWait(m)
 			if err != nil {
@@ -578,6 +593,18 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 	}
 }
 
+func (s *Session) safeSend(ch chan bool) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("send on closed chan")
+		}
+	}()
+
+	ch <- true // panic if ch is closed
+	err = nil
+	return
+}
+
 func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	blog.Debugf("[longtcp] notify send and wait for response now...")
 
@@ -599,9 +626,23 @@ func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	s.sendMutex.Unlock()
 
 	blog.Debugf("[longtcp] notify by chan now, total %d messages now", len(s.sendQueue))
-	s.sendNotifyChan <- true
+	// s.sendNotifyChan <- true
+	err := s.safeSend(s.sendNotifyChan)
+	if err != nil {
+		blog.Warnf("[longtcp] [trace message] [%s] session closed when notify to send", msg.Desc())
+		return &MessageResult{
+			Err:  ErrorConnectionInvalid,
+			Data: nil,
+		}
+	}
 
+	blog.Infof("[longtcp] [trace message] [session:%s] [%s] notify and wait result after append",
+		s.Desc(), msg.Desc())
 	msgresult := <-msg.RetChan
+
+	blog.Infof("[longtcp] [trace message] [session:%s] [%s] notify and wait got result now",
+		s.Desc(), msg.Desc())
+
 	return msgresult
 }
 
@@ -626,7 +667,11 @@ func (s *Session) Send(
 	// data 转到 message
 	msg := s.encData2Message(data, waitresponse, waitsecs, f)
 
+	blog.Infof("[longtcp] [trace message] [session:%s] [%s] start notify and wait result",
+		s.Desc(), msg.Desc())
 	ret := s.notifyAndWait(msg)
+	blog.Infof("[longtcp] [trace message] [session:%s] [%s] end notify and wait result",
+		s.Desc(), msg.Desc())
 
 	return ret
 }
@@ -722,23 +767,38 @@ func (s *Session) check(wg *sync.WaitGroup) {
 	}
 }
 
+func (s *Session) safeClose(ch chan bool) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("close on closed chan")
+		}
+	}()
+
+	close(ch) // panic if ch is closed
+	err = nil
+	return
+}
+
 // 清理资源，包括关闭连接，停止协程等
 func (s *Session) Clean(err error) {
 	// blog.Debugf("[longtcp] session %s clean now", s.Desc())
 	blog.Infof("[longtcp] [trace message] [session:%s] ready clean now", s.Desc())
 
-	s.cancel()
+	s.sendMutex.Lock()
 
 	// 通知发送队列中的任务
-	s.sendMutex.Lock()
 	blog.Infof("[longtcp] [trace message] [session:%s] has %d in send queue when clean",
 		s.Desc(), len(s.sendQueue))
 	if !s.valid { // 避免重复clean
-		blog.Debugf("[longtcp] session %s has cleaned before", s.Desc())
+		blog.Infof("[longtcp] session %s has cleaned before", s.Desc())
 		return
 	} else {
 		s.valid = false
 	}
+
+	s.cancel()
+	s.safeClose(s.sendNotifyChan)
+
 	for _, m := range s.sendQueue {
 		blog.Warnf("[longtcp] [trace message] [session:%s] [%s] notified in send queue with error:%v",
 			s.Desc(), m.Desc(), err)
@@ -754,13 +814,14 @@ func (s *Session) Clean(err error) {
 	s.waitMutex.Lock()
 	blog.Infof("[longtcp] [trace message] [session:%s] has %d in wait queue when clean",
 		s.Desc(), len(s.waitMap))
-	for _, m := range s.waitMap {
+	for k, m := range s.waitMap {
 		blog.Warnf("[longtcp] [trace message] [session:%s] [%s] notified in wait queue with error:%v",
 			s.Desc(), m.Desc(), err)
 		m.RetChan <- &MessageResult{
 			Err:  err,
 			Data: nil,
 		}
+		delete(s.waitMap, k)
 	}
 	s.waitMap = nil
 	s.waitMutex.Unlock()

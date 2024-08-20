@@ -772,7 +772,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		if err != nil {
 			if notifyerr == ErrorNotSupportRemote {
 				blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
-				return nil, dcType.ErrorPreNotSupportRemote
+				return nil, dcType.BKDistCommonError{
+					Code:  dcType.UnknowCode,
+					Error: err,
+				}
 			}
 		} else {
 			// for debug
@@ -785,12 +788,18 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	compilerEnsuredArgs, err := ensureCompiler(command)
 	if err != nil {
 		blog.Warnf("cc: [%s] pre execute ensure compiler %v: %v", cc.tag, command, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 	args, err := expandOptions(cc.sandbox, compilerEnsuredArgs)
 	if err != nil {
 		blog.Warnf("cc: [%s] pre execute expand options %v: %v", cc.tag, compilerEnsuredArgs, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 	cc.ensuredArgs = args
 
@@ -823,7 +832,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	if err = cc.preBuild(args); err != nil {
 		blog.Warnf("cc: [%s] pre execute pre-build %v: %v", cc.tag, args, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 
 	// generate the input files for pre-process file
@@ -832,7 +844,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		if !existed {
 			err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
 			blog.Warnf("cc: [%s] %v", cc.tag, err)
-			return nil, dcType.ErrorUnknown
+			return nil, dcType.BKDistCommonError{
+				Code:  dcType.UnknowCode,
+				Error: fmt.Errorf("%s not existed", cc.preprocessedFile),
+			}
 		}
 
 		cc.sendFiles = append(cc.sendFiles, dcSDK.FileDesc{
@@ -880,7 +895,10 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cc: [%s] start post execute", cc.tag)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("cc: [%s] got empty result", cc.tag)
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 
 	resultfilenum := 0
@@ -897,7 +915,10 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
 					blog.Errorf("cc: failed to save file [%s]", f.FilePath)
-					return dcType.ErrorPostSaveFileFailed
+					return dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 				resultfilenum++
 			}
@@ -949,7 +970,10 @@ ERROREND:
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
 
-	return dcType.ErrorUnknown
+	return dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+	}
 }
 
 func (cc *TaskCC) ensureOwner(fdl []string) {

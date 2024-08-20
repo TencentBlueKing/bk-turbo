@@ -11,6 +11,7 @@ package cc
 
 import (
 	// "bytes"
+
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -898,7 +899,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			if err != nil {
 				if notifyerr == ErrorNotSupportRemote {
 					blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
-					return nil, dcType.ErrorUnknown
+					return nil, dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 			} else {
 				// for debug
@@ -913,7 +917,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	responseFile, args, err := ensureCompiler(command, cc.sandbox.Dir)
 	if err != nil {
 		blog.Warnf("cc: pre execute ensure compiler %v: %v", args, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 
 	// obtain force key set by booster
@@ -966,7 +973,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	if err = cc.preBuild(args); err != nil {
 		blog.Warnf("cc: pre execute pre-build %v: %v", args, err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: err,
+		}
 	}
 
 	// debugRecordFileName("FileInfo begin")
@@ -975,7 +985,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	if !existed {
 		err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
 		blog.Errorf("%v", err)
-		return nil, dcType.ErrorUnknown
+		return nil, dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("%s not existed", cc.preprocessedFile),
+		}
 	}
 
 	// generate the input files for pre-process file
@@ -1024,7 +1037,10 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cc: start post execute for: %v", cc.originArgs)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("cc: parameter is invalid")
-		return dcType.ErrorUnknown
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 
 	resultfilenum := 0
@@ -1041,7 +1057,10 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
 					blog.Errorf("cc: failed to save file [%s] with error:%v", f.FilePath, err)
-					return dcType.ErrorUnknown
+					return dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 				resultfilenum++
 			}
@@ -1090,7 +1109,11 @@ ERROREND:
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
-	return dcType.ErrorUnknown
+
+	return dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+	}
 }
 
 func (cc *TaskCC) resolvePchDepend(workdir string) error {

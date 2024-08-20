@@ -33,7 +33,8 @@ var (
 )
 
 const (
-	BaseCode = 100000
+	BaseCode   = 100000
+	UnknowCode = 999999
 )
 
 // define errors
@@ -59,5 +60,5 @@ var (
 	// local-execute   3000~3999 (+BaseCode)
 
 	// other error     999999
-	ErrorUnknown = BKDistCommonError{Code: 999999, Error: DescUnknown}
+	ErrorUnknown = BKDistCommonError{Code: UnknowCode, Error: DescUnknown}
 )
