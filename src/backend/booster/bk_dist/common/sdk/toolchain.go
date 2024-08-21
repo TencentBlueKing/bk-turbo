@@ -135,8 +135,10 @@ func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
 		return err
 	}
 
-	// 链接，需要递归
-	if i.Basic().Mode()&os.ModeSymlink != 0 {
+	// 如果远端路径和本地一致，则将链接相关的文件都包含进来
+	// 如果远端路径和本地不一致，则需要将链接替换为真实文件发送过去
+	localdir := filepath.Dir(f)
+	if localdir == remotepath && i.Basic().Mode()&os.ModeSymlink != 0 {
 		originFile, err := os.Readlink(f)
 		if err == nil {
 			if !filepath.IsAbs(originFile) {
