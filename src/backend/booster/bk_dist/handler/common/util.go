@@ -364,7 +364,7 @@ func GetAllLinkFiles(f, workdir string) []string {
 	for {
 		loopagain := false
 		i := dcFile.Lstat(tempf)
-		if i.Basic().Mode()&os.ModeSymlink != 0 {
+		if i.Exist() && i.Basic().Mode()&os.ModeSymlink != 0 {
 			originFile, err := os.Readlink(tempf)
 			if err == nil {
 				if !filepath.IsAbs(originFile) {
