@@ -81,7 +81,7 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 		return nil, err
 	}
 
-	blog.Infof("protocol: execute dist task commands: %v", req.Commands)
+	blog.Debugf("protocol: execute dist task commands: %v", req.Commands)
 	r.recordStats.RemoteWorkTimeoutSec = r.ioTimeout
 
 	// var err error
