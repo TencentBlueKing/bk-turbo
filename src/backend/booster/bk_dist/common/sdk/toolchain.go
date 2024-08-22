@@ -260,7 +260,7 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 		}
 	}
 
-	blog.Infof("toolchain: get all files:%v", toolfiles)
+	blog.Debugf("toolchain: get all files:%v", toolfiles)
 
 	return toolfiles, nil
 }
