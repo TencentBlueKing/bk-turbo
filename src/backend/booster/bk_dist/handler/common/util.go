@@ -116,6 +116,8 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 	tempis := make(map[string]*dcFile.Info, len(notfound))
 	for _, notf := range notfound {
 		tempf := notf
+		try := 0
+		maxtry := 10
 		for {
 			var i *dcFile.Info
 			if statbysearchdir {
@@ -124,6 +126,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 				i = dcFile.Lstat(tempf)
 			}
 			tempis[tempf] = i
+			try++
 
 			if !i.Exist() {
 				if mustexisted {
@@ -156,8 +159,11 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 					}
 
 					// 如果是链接，并且指向了其它文件，则需要将指向的文件也包含进来
-					loopagain = true
-					tempf = originFile
+					// 增加寻找次数限制，避免死循环
+					if try < maxtry {
+						loopagain = true
+						tempf = originFile
+					}
 				} else {
 					blog.Infof("common util: symlink %s Readlink error:%s", tempf, err)
 				}

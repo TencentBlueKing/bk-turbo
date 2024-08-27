@@ -837,12 +837,28 @@ func encodeSendFileReq(
 		}
 
 		fullpath := sandbox.GetAbsPath(f.FilePath)
-		size := f.FileSize
-		md5 := f.Md5
+
+		// TODO : fresh file info here, avoid file info changed
+		newlyInfo := dcFile.Lstat(fullpath)
+		if !newlyInfo.Exist() {
+			blog.Warnf("file %f not existed when encode send request", fullpath)
+			continue
+		}
+
+		size := newlyInfo.Size()
+		md5 := ""
+		if f.Md5 != "" {
+			md5, _ = newlyInfo.Md5()
+		}
+		filemode := newlyInfo.Mode32()
+		modifytime := newlyInfo.ModifyTime64()
+
+		// size := f.FileSize
+		// md5 := f.Md5
 		targetrelativepath := f.Targetrelativepath
-		filemode := f.Filemode
+		// filemode := f.Filemode
 		linkTarget := f.LinkTarget
-		modifytime := f.Lastmodifytime
+		// modifytime := f.Lastmodifytime
 
 		if size <= 0 {
 			pbbody.Inputfiles = append(pbbody.Inputfiles, &protocol.PBFileDesc{

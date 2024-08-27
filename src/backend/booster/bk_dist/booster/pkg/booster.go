@@ -1343,15 +1343,15 @@ func (b *Booster) checkPump() {
 		b.checkPumpCache(pumpdir)
 
 		if b.config.Works.PumpSearchLink && runtime.GOOS == "darwin" {
+			dirs := []string{}
 			// 获取默认xcode的路径
 			xcodepath, err := getXcodeIncludeLinkDir()
 			if err != nil || xcodepath == nil {
 				blog.Infof("booster: get default xcode path with error:%v", err)
-				return
+			} else {
+				// 得到所有需要搜索的目录（包括默认xcode和用户指定的）
+				dirs = xcodepath
 			}
-
-			// 得到所有需要搜索的目录（包括默认xcode和用户指定的）
-			dirs := xcodepath
 			dirs = append(dirs, b.config.Works.PumpSearchLinkDir...)
 
 			// 搜索所有symlink
@@ -1405,27 +1405,50 @@ func getXcodeIncludeLinkDir() ([]string, error) {
 		return nil, err
 	}
 
-	xcodepath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms/MacOSX.platform/Developer/SDKs")
-	info, err := os.Stat(xcodepath)
-	if info != nil && (err == nil || os.IsExist(err)) {
-		fis, err := ioutil.ReadDir(xcodepath)
-		if err != nil {
-			return nil, err
+	// get all dirs in Platforms
+	platformspath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms")
+	var subdirs []string
+
+	entries, err := os.ReadDir(platformspath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			absPath, err := filepath.Abs(filepath.Join(platformspath, entry.Name()))
+			if err != nil {
+				return nil, err
+			}
+			subdirs = append(subdirs, absPath)
 		}
+	}
 
-		for _, fi := range fis {
-			if fi.Mode()&os.ModeSymlink != 0 {
-				linkfile := filepath.Join(xcodepath, fi.Name())
-				originFile, err := os.Readlink(linkfile)
+	// get all target dirs
+	resultdirs := []string{}
+	for _, v := range subdirs {
+		// xcodepath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms/MacOSX.platform/Developer/SDKs")
+		xcodepath := filepath.Join(v, "Developer/SDKs")
+		info, err := os.Stat(xcodepath)
+		if info != nil && (err == nil || os.IsExist(err)) {
+			fis, err := ioutil.ReadDir(xcodepath)
+			if err != nil {
+				return nil, err
+			}
 
-				if err != nil {
-					blog.Warnf("booster: readlink %s with error:%v", linkfile, err)
-					continue
-				}
+			for _, fi := range fis {
+				if fi.Mode()&os.ModeSymlink != 0 {
+					linkfile := filepath.Join(xcodepath, fi.Name())
+					originFile, err := os.Readlink(linkfile)
 
-				blog.Infof("booster: Resolved symlink %s to %s", linkfile, originFile)
+					if err != nil {
+						blog.Warnf("booster: readlink %s with error:%v", linkfile, err)
+						continue
+					}
 
-				if strings.HasSuffix(originFile, "MacOSX.sdk") {
+					blog.Infof("booster: Resolved symlink %s to %s", linkfile, originFile)
+
+					// if strings.HasSuffix(originFile, "MacOSX.sdk") {
 					blog.Infof("booster: found target link dir %s", linkfile)
 
 					xcodepath1 := filepath.Join(linkfile, "usr/include")
@@ -1435,13 +1458,17 @@ func getXcodeIncludeLinkDir() ([]string, error) {
 					}
 					xcodepath2 := filepath.Join(originFile, "usr/include")
 
-					return []string{xcodepath1, xcodepath2}, nil
+					resultdirs = append(resultdirs, xcodepath1)
+					resultdirs = append(resultdirs, xcodepath2)
+
+					// return []string{xcodepath1, xcodepath2}, nil
+					// }
 				}
 			}
 		}
 	}
 
-	return nil, nil
+	return resultdirs, nil
 }
 
 func getLinkFile(pumpdir string, xcodepath string) string {
