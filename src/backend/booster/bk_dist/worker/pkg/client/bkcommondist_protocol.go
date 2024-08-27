@@ -846,7 +846,14 @@ func encodeSendFileReq(
 
 		// TODO : fresh file info here, avoid file info changed
 		if size > 0 {
-			newlyInfo := dcFile.Lstat(fullpath)
+			var newlyInfo *dcFile.Info
+			localdir := filepath.Dir(fullpath)
+			// 如果本地路径和远端不一样，则不能用Lstat
+			if localdir != targetrelativepath {
+				newlyInfo = dcFile.Stat(fullpath)
+			} else {
+				newlyInfo = dcFile.Lstat(fullpath)
+			}
 			if !newlyInfo.Exist() {
 				blog.Warnf("file %f not existed when encode send request", fullpath)
 				continue
