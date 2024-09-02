@@ -30,6 +30,7 @@ const (
 	InService
 	Retrying
 	RetrySucceed
+	RetryFailed
 	Unknown = 99
 )
 
@@ -43,6 +44,7 @@ var (
 		InService:     "inservice",
 		Retrying:      "retrying",
 		RetrySucceed:  "retrysucceed",
+		RetryFailed:   "retryfailed",
 		Unknown:       "unknown",
 	}
 )

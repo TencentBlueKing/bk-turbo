@@ -1303,7 +1303,7 @@ func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.R
 					return
 				}
 			}
-			m.resource.SetWorkerStatus(req.Server, Init)
+			m.resource.SetWorkerStatus(req.Server, RetryFailed)
 			blog.Errorf("remote: already retry to send tool chain for work(%s) for %d times from pid(%d) to server(%s) failed, keep worker disable", m.work.ID(), toolChainRetryTimes, req.Pid, req.Server.Server)
 		}(handler, *req)
 	} else {
