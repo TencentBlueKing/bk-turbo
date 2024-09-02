@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
@@ -163,7 +162,7 @@ func (fsm *fileSendMap) matchOrInsert(desc dcSDK.FileDesc, retry bool) (*types.F
 	for _, ci := range *c {
 		if ci.Match(desc) {
 			//if worker is retrying and not send succeed, try to set send status to sending
-			if retry && ci.SendStatus != types.FileSendSucceed {
+			if retry && ci.SendStatus == types.FileSendFailed {
 				ci.SendStatus = types.FileSending
 				return ci, false
 			}
@@ -211,8 +210,8 @@ func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc, retry bool) []ma
 		for _, ci := range *c {
 			if ci.Match(*desc) {
 				fileMatch := true
-				//if worker is retrying and not send succeed, try to set send status to sending
-				if retry && ci.SendStatus != types.FileSendSucceed {
+				//if worker is retrying and send failed, try to set send status to sending
+				if retry && ci.SendStatus == types.FileSendFailed {
 					fileMatch = false
 					ci.SendStatus = types.FileSending
 				}
@@ -842,9 +841,9 @@ func (m *Mgr) ensureFiles(
 
 				// 启动协程跟踪未发送完成的文件
 				c := (*fs)[i]
-				go func(err chan<- error, c *corkFile, r matchResult, retry bool) {
-					err <- m.ensureSingleCorkFile(c, r, retry)
-				}(wg, c, v, retry)
+				go func(err chan<- error, c *corkFile, r matchResult) {
+					err <- m.ensureSingleCorkFile(c, r)
+				}(wg, c, v)
 			}
 
 			// TODO : 检查是否在server端有缓存了，如果有，则无需发送，调用 checkBatchCache
@@ -953,7 +952,8 @@ func (m *Mgr) ensureSingleFile(
 		for status == types.FileSending {
 			select {
 			case <-tick.C:
-				status, _ = m.checkOrLockSendFile(host.Server, desc, retry)
+				// 不是发送文件的goroutine，不能修改状态
+				status, _ = m.checkOrLockSendFile(host.Server, desc, false)
 			}
 		}
 
@@ -1031,7 +1031,7 @@ func (m *Mgr) ensureSingleFile(
 }
 
 // ensureSingleCorkFile 保证给到的第一个文件被正确分发到目标机器上, 若给到的文件多于一个, 多余的部分会被忽略
-func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult, retry bool) (err error) {
+func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 	status := r.info.SendStatus
 	host := c.host
 	desc := c.file
@@ -1049,7 +1049,8 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult, retry bool) (err 
 		for status == types.FileSending {
 			select {
 			case <-tick.C:
-				status, _ = m.checkOrLockSendFile(host.Server, *desc, retry)
+				// 不是发送文件的goroutine，不能修改状态
+				status, _ = m.checkOrLockSendFile(host.Server, *desc, false)
 			}
 		}
 
@@ -1277,19 +1278,20 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) ([]*types.FileCollect
 	return fcs, nil
 }
 func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest) {
-	fileCollections, err := m.getFailedFileCollectionByHost(req.Server.Server)
-	if err != nil {
-		blog.Errorf("remote: get failed file collection by host(%s) failed: %v", req.Server.Server, err)
-		return
-	}
-	if len(fileCollections) == 0 {
-		blog.Errorf("remote: retry to send tool chain for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
-		return
-	}
-
 	if m.resource.CanWorkerRetry(req.Server) {
 		go func(handler dcSDK.RemoteWorkerHandler, req types.RemoteTaskExecuteRequest) {
 			for i := 0; i < toolChainRetryTimes; i++ {
+				fileCollections, err := m.getFailedFileCollectionByHost(req.Server.Server)
+				if err != nil || len(fileCollections) == 0 {
+					if err != nil {
+						blog.Errorf("remote: get failed file collection by host(%s) failed: %v", req.Server.Server, err)
+					} else {
+						blog.Errorf("remote: retry to send tool chain for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
+					}
+					time.Sleep(m.toolChainRetryTick)
+					continue
+				}
+
 				blog.Infof("remote: retry to send tool chain for work(%s) for the %dth times from pid(%d) to server(%s)",
 					m.work.ID(), i+1, req.Pid, req.Server.Server)
 				if err := m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections, true); err != nil {
@@ -1489,8 +1491,8 @@ func (m *Mgr) checkOrLockFileCollection(server string, fc *types.FileCollectionI
 
 	for _, f := range *target {
 		if f.UniqID == fc.UniqID {
-			// if retry, set status to sending if fc not send succeed
-			if retry && f.SendStatus != types.FileSendSucceed {
+			// if retry, set status to sending if fc send failed
+			if retry && f.SendStatus == types.FileSendFailed {
 				f.SendStatus = types.FileSending
 				return f.SendStatus, false
 			}
@@ -1848,7 +1850,7 @@ func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
 			req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, dcSDK.FileDesc{
 				FilePath:           c.ExeName,
-				Compresstype:       protocol.CompressLZ4,
+				Compresstype:       dcProtocol.CompressLZ4,
 				FileSize:           -1,
 				Lastmodifytime:     0,
 				Md5:                "",
