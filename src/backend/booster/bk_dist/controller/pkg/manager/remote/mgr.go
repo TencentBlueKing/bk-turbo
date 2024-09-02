@@ -1704,7 +1704,7 @@ func (m *Mgr) getToolFileInfoByKey(key string) *types.FileCollectionInfo {
 		blog.Infof("remote: ready get relative toolchain files for %s", key)
 		toolchainfiles, timestamp, err := m.work.Basic().GetToolChainRelativeFiles(key)
 		if err == nil && len(toolchainfiles) > 0 {
-			blog.Infof("remote: got toolchain files for %s:%v", key, toolchainfiles)
+			blog.Debugf("remote: got toolchain files for %s:%v", key, toolchainfiles)
 			return &types.FileCollectionInfo{
 				UniqID:     key,
 				Files:      toolchainfiles,
@@ -1716,7 +1716,7 @@ func (m *Mgr) getToolFileInfoByKey(key string) *types.FileCollectionInfo {
 		blog.Infof("remote: ready get normal toolchain files for %s", key)
 		toolchainfiles, timestamp, err := m.work.Basic().GetToolChainFiles(key)
 		if err == nil && len(toolchainfiles) > 0 {
-			blog.Infof("remote: got toolchain files for %s:%v", key, toolchainfiles)
+			blog.Debugf("remote: got toolchain files for %s:%v", key, toolchainfiles)
 			return &types.FileCollectionInfo{
 				UniqID:     key,
 				Files:      toolchainfiles,

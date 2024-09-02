@@ -844,6 +844,30 @@ func encodeSendFileReq(
 		linkTarget := f.LinkTarget
 		modifytime := f.Lastmodifytime
 
+		// TODO : fresh file info here, avoid file info changed
+		if size > 0 {
+			var newlyInfo *dcFile.Info
+			localdir := filepath.Dir(fullpath)
+			// 如果本地路径和远端不一样，则不能用Lstat
+			if localdir != targetrelativepath {
+				newlyInfo = dcFile.Stat(fullpath)
+			} else {
+				newlyInfo = dcFile.Lstat(fullpath)
+			}
+			if !newlyInfo.Exist() {
+				blog.Warnf("file %f not existed when encode send request", fullpath)
+				continue
+			}
+
+			size = newlyInfo.Size()
+			md5 = ""
+			if f.Md5 != "" {
+				md5, _ = newlyInfo.Md5()
+			}
+			filemode = newlyInfo.Mode32()
+			modifytime = newlyInfo.ModifyTime64()
+		}
+
 		if size <= 0 {
 			pbbody.Inputfiles = append(pbbody.Inputfiles, &protocol.PBFileDesc{
 				Fullpath:           &fullpath,
