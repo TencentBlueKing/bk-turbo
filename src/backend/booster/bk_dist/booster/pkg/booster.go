@@ -1334,11 +1334,10 @@ func (b *Booster) checkPump() {
 				blog.Infof("booster: not found pump cache dir, do nothing")
 				return
 			}
-
-			// fresh env of cache dir
-			os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
-			b.config.Works.PumpCacheDir = pumpdir
 		}
+		// fresh env of cache dir
+		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
+		b.config.Works.PumpCacheDir = pumpdir
 
 		b.checkPumpCache(pumpdir)
 
