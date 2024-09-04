@@ -588,12 +588,12 @@ func (m *Mgr) SendStats(brief bool) error {
 	_ = codec.EncJSON(message, &data)
 
 	if _, _, err := m.request("POST", m.serverHost, messageURI, data); err != nil {
-		blog.Errorf("resource: send stats(detail %v) to server for task(%s) work(%s) failed: %v",
+		blog.Errorf("resource: send stats(brief %v) to server for task(%s) work(%s) failed: %v",
 			brief, taskID, workID, err)
 		return err
 	}
 
-	blog.Infof("resource: success to send stats detail %v to server for task(%s) work(%s)",
+	blog.Infof("resource: success to send stats brief %v to server for task(%s) work(%s)",
 		brief, taskID, workID)
 	return nil
 }

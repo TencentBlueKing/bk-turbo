@@ -360,18 +360,18 @@ func (cl *TaskCL) getIncludeExe() (string, error) {
 	return includePath, nil
 }
 
-func uniqArr(arr []string) []string {
-	newarr := make([]string, 0)
-	tempMap := make(map[string]bool, len(newarr))
-	for _, v := range arr {
-		if tempMap[v] == false {
-			tempMap[v] = true
-			newarr = append(newarr, v)
-		}
-	}
+// func uniqArr(arr []string) []string {
+// 	newarr := make([]string, 0)
+// 	tempMap := make(map[string]bool, len(newarr))
+// 	for _, v := range arr {
+// 		if tempMap[v] == false {
+// 			tempMap[v] = true
+// 			newarr = append(newarr, v)
+// 		}
+// 	}
 
-	return newarr
-}
+// 	return newarr
+// }
 
 func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, error) {
 	data, err := ioutil.ReadFile(f)
@@ -380,7 +380,7 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	}
 
 	lines := strings.Split(string(data), "\r\n")
-	uniqlines := uniqArr(lines)
+	uniqlines := commonUtil.UniqArr(lines)
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
 	// if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
@@ -489,7 +489,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 				includes = append(includes, commonUtil.FormatFilePath(l))
 
 				// 如果是链接，则将相关指向的文件都包含进来
-				fs := commonUtil.GetAllLinkFiles(l, workdir)
+				fs := commonUtil.GetAllLinkFiles(l)
 				if len(fs) > 0 {
 					includes = append(includes, fs...)
 				}
@@ -508,7 +508,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			includes = append(includes, commonUtil.FormatFilePath(l))
 
 			// 如果是链接，则将相关指向的文件都包含进来
-			fs := commonUtil.GetAllLinkFiles(l, workdir)
+			fs := commonUtil.GetAllLinkFiles(l)
 			if len(fs) > 0 {
 				includes = append(includes, fs...)
 			}
@@ -556,7 +556,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	// for i := range includes {
 	// 	includes[i] = strings.Replace(includes[i], "/", "\\", -1)
 	// }
-	uniqlines := uniqArr(includes)
+	uniqlines := commonUtil.UniqArr(includes)
 
 	if dcPump.PumpCorrectCap(cl.sandbox.Env) {
 		uniqlines, _ = commonUtil.CorrectPathCap(uniqlines)
@@ -744,7 +744,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				Filemode:           fileMode,
 				Targetrelativepath: filepath.Dir(fpath),
 				NoDuplicated:       true,
-				// Priority:           priority,
+				Priority:           commonUtil.GetPriority(f),
 			})
 			// priority++
 

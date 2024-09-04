@@ -247,18 +247,18 @@ func (cc *TaskCC) getIncludeExe() (string, error) {
 	return includePath, nil
 }
 
-func uniqArr(arr []string) []string {
-	newarr := make([]string, 0)
-	tempMap := make(map[string]bool, len(newarr))
-	for _, v := range arr {
-		if tempMap[v] == false {
-			tempMap[v] = true
-			newarr = append(newarr, v)
-		}
-	}
+// func uniqArr(arr []string) []string {
+// 	newarr := make([]string, 0)
+// 	tempMap := make(map[string]bool, len(newarr))
+// 	for _, v := range arr {
+// 		if tempMap[v] == false {
+// 			tempMap[v] = true
+// 			newarr = append(newarr, v)
+// 		}
+// 	}
 
-	return newarr
-}
+// 	return newarr
+// }
 
 func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Info, error) {
 	data, err := ioutil.ReadFile(dependf)
@@ -271,7 +271,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Inf
 		sep = "\r\n"
 	}
 	lines := strings.Split(string(data), sep)
-	uniqlines := uniqArr(lines)
+	uniqlines := commonUtil.UniqArr(lines)
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
@@ -360,7 +360,7 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 				*includes = append(*includes, commonUtil.FormatFilePath(targetf))
 
 				// 如果是链接，则将相关指向的文件都包含进来
-				fs := commonUtil.GetAllLinkFiles(targetf, workdir)
+				fs := commonUtil.GetAllLinkFiles(targetf)
 				if len(fs) > 0 {
 					*includes = append(*includes, fs...)
 				}
@@ -474,12 +474,18 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	// for i := range includes {
 	// 	includes[i] = strings.Replace(includes[i], "\\", "/", -1)
 	// }
-	uniqlines := uniqArr(includes)
+	uniqlines := commonUtil.UniqArr(includes)
 
 	// TODO : append symlink or symlinked if need
 	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
 	if links != nil {
 		uniqlines = append(uniqlines, links...)
+	}
+
+	// TODO :将链接路径找出并放到前面
+	linkdirs := commonUtil.GetAllLinkDir(uniqlines)
+	if len(linkdirs) > 0 {
+		uniqlines = append(linkdirs, uniqlines...)
 	}
 
 	// TODO : save to cc.pumpHeadFile
@@ -799,7 +805,7 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				Targetrelativepath: filepath.Dir(fpath),
 				LinkTarget:         f.LinkTarget,
 				NoDuplicated:       true,
-				// Priority:           priority,
+				Priority:           commonUtil.GetPriority(f),
 			})
 			// priority++
 			// blog.Infof("cc: added include file:%s with modify time %d", fpath, modifyTime)

@@ -1326,7 +1326,7 @@ func (b *Booster) setToolChainWithJSON(tools *dcSDK.Toolchain) error {
 }
 
 func (b *Booster) checkPump() {
-	if b.config.Works.Pump {
+	if b.config.Works.Pump || b.config.Works.PumpCache {
 		pumpdir := b.config.Works.PumpCacheDir
 		if pumpdir == "" {
 			pumpdir = dcUtil.GetPumpCacheDir()
