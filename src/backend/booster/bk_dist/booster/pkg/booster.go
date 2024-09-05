@@ -1326,7 +1326,7 @@ func (b *Booster) setToolChainWithJSON(tools *dcSDK.Toolchain) error {
 }
 
 func (b *Booster) checkPump() {
-	if b.config.Works.Pump {
+	if b.config.Works.Pump || b.config.Works.PumpCache {
 		pumpdir := b.config.Works.PumpCacheDir
 		if pumpdir == "" {
 			pumpdir = dcUtil.GetPumpCacheDir()
@@ -1334,11 +1334,10 @@ func (b *Booster) checkPump() {
 				blog.Infof("booster: not found pump cache dir, do nothing")
 				return
 			}
-
-			// fresh env of cache dir
-			os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
-			b.config.Works.PumpCacheDir = pumpdir
 		}
+		// fresh env of cache dir
+		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
+		b.config.Works.PumpCacheDir = pumpdir
 
 		b.checkPumpCache(pumpdir)
 

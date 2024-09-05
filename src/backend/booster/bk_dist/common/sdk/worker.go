@@ -64,6 +64,12 @@ const (
 	MinFileDescPriority FileDescPriority = 100
 	MaxFileDescPriority FileDescPriority = 0
 
+	// pump cache模式，文件发送需要保证顺序，定义下面几个优先级(由高到底)
+	RealDirPriority  FileDescPriority = 0
+	LinkDirPriority  FileDescPriority = 1
+	RealFilePriority FileDescPriority = 2
+	LinkFilePriority FileDescPriority = 3
+
 	// 优先级先只定3个
 	PriorityLow     = 0
 	PriorityMiddle  = 1

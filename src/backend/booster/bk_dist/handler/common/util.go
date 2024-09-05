@@ -21,6 +21,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -361,7 +362,7 @@ func FormatFilePath(f string) string {
 	return f
 }
 
-func GetAllLinkFiles(f, workdir string) []string {
+func GetAllLinkFiles(f string) []string {
 	fs := []string{}
 	tempf := f
 	// avoid dead loop
@@ -374,7 +375,7 @@ func GetAllLinkFiles(f, workdir string) []string {
 			originFile, err := os.Readlink(tempf)
 			if err == nil {
 				if !filepath.IsAbs(originFile) {
-					originFile, _ = filepath.Abs(filepath.Join(workdir, originFile))
+					originFile, _ = filepath.Abs(filepath.Join(filepath.Dir(tempf), originFile))
 				}
 				fs = append(fs, FormatFilePath(originFile))
 
@@ -396,4 +397,118 @@ func GetAllLinkFiles(f, workdir string) []string {
 	}
 
 	return fs
+}
+
+func UniqArr(arr []string) []string {
+	newarr := make([]string, 0)
+	tempMap := make(map[string]bool, len(newarr))
+	for _, v := range arr {
+		if tempMap[v] == false {
+			tempMap[v] = true
+			newarr = append(newarr, v)
+		}
+	}
+
+	return newarr
+}
+
+func getSubdirs(path string) []string {
+	var subdirs []string
+
+	// 循环获取每级子目录
+	for {
+		subdirs = append([]string{path}, subdirs...)
+		parent := filepath.Dir(path)
+		if parent == path {
+			break
+		}
+		path = parent
+	}
+
+	return subdirs
+}
+
+// 获取依赖文件的路径中是链接的路径
+func GetAllLinkDir(files []string) []string {
+	dirs := make([]string, 0, len(files))
+	for _, f := range files {
+		dirs = append(dirs, filepath.Dir(f))
+	}
+
+	uniqdirs := UniqArr(dirs)
+	if len(uniqdirs) > 0 {
+		subdirs := []string{}
+		for _, d := range uniqdirs {
+			subdirs = append(subdirs, getSubdirs(d)...)
+		}
+
+		uniqsubdirs := UniqArr(subdirs)
+		blog.Infof("common util: got all uniq sub dirs:%v", uniqsubdirs)
+
+		linkdirs := []string{}
+		for _, d := range uniqsubdirs {
+			i := dcFile.Lstat(d)
+			if i.Basic().Mode()&os.ModeSymlink != 0 {
+				fs := GetAllLinkFiles(d)
+				if len(fs) > 0 {
+					for i := len(fs) - 1; i >= 0; i-- {
+						linkdirs = append(linkdirs, fs[i])
+					}
+					linkdirs = append(linkdirs, d)
+				}
+			}
+		}
+
+		blog.Infof("common util: got all link sub dirs:%v", linkdirs)
+		return linkdirs
+	}
+
+	return nil
+}
+
+func GetPriority(i *dcFile.Info) dcSDK.FileDescPriority {
+	isLink := i.Basic().Mode()&os.ModeSymlink != 0
+	if !isLink {
+		if i.Basic().IsDir() {
+			return dcSDK.RealDirPriority
+		} else {
+			return dcSDK.RealFilePriority
+		}
+	}
+
+	// symlink 需要判断是指向文件还是目录
+	if i.LinkTarget != "" {
+		targetfs, err := GetFileInfo([]string{i.LinkTarget}, true, false, false)
+		if err == nil && len(targetfs) > 0 {
+			if targetfs[0].Basic().IsDir() {
+				return dcSDK.LinkDirPriority
+			} else {
+				return dcSDK.LinkFilePriority
+			}
+		}
+	}
+
+	// 尝试读文件
+	linkpath := i.Path()
+	targetPath, err := os.Readlink(linkpath)
+	if err != nil {
+		blog.Infof("common util: Error reading symbolic link: %v", err)
+		return dcSDK.LinkFilePriority
+	}
+
+	// 获取符号链接指向路径的文件信息
+	targetInfo, err := os.Stat(targetPath)
+	if err != nil {
+		blog.Infof("common util: Error getting target file info: %v", err)
+		return dcSDK.LinkFilePriority
+	}
+
+	// 判断符号链接指向的路径是否是目录
+	if targetInfo.IsDir() {
+		blog.Infof("common util: %s is a symbolic link to a directory", linkpath)
+		return dcSDK.LinkDirPriority
+	} else {
+		blog.Infof("common util: %s is a symbolic link, but not to a directory", linkpath)
+		return dcSDK.LinkFilePriority
+	}
 }
