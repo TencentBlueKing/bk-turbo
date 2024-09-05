@@ -448,7 +448,7 @@ func GetAllLinkDir(files []string) []string {
 		linkdirs := []string{}
 		for _, d := range uniqsubdirs {
 			i := dcFile.Lstat(d)
-			if i.Basic().Mode()&os.ModeSymlink != 0 {
+			if i.Exist() && i.Basic().Mode()&os.ModeSymlink != 0 {
 				fs := GetAllLinkFiles(d)
 				if len(fs) > 0 {
 					for i := len(fs) - 1; i >= 0; i-- {
