@@ -236,16 +236,18 @@ const (
 	FileSending
 	FileSendSucceed
 	FileSendFailed
+	FileSendRetrying
 	FileSendUnknown = 99
 )
 
 var (
 	fileStatusMap = map[FileSendStatus]string{
-		FileSendInit:    "sendinit",
-		FileSending:     "sending",
-		FileSendSucceed: "sendsucceed",
-		FileSendFailed:  "sendfailed",
-		FileSendUnknown: "unknown",
+		FileSendInit:     "sendinit",
+		FileSending:      "sending",
+		FileSendSucceed:  "sendsucceed",
+		FileSendFailed:   "sendfailed",
+		FileSendRetrying: "sendretrying",
+		FileSendUnknown:  "unknown",
 	}
 )
 

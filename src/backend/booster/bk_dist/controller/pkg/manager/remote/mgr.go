@@ -161,9 +161,9 @@ func (fsm *fileSendMap) matchOrInsert(desc dcSDK.FileDesc, retry bool) (*types.F
 
 	for _, ci := range *c {
 		if ci.Match(desc) {
-			//if worker is retrying and not send succeed, try to set send status to sending
+			//if worker is retrying and send failed before, try to set send status to retrying
 			if retry && ci.SendStatus == types.FileSendFailed {
-				ci.SendStatus = types.FileSending
+				ci.SendStatus = types.FileSendRetrying
 				return ci, false
 			}
 			return ci, true
@@ -209,15 +209,15 @@ func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc, retry bool) []ma
 		matched := false
 		for _, ci := range *c {
 			if ci.Match(*desc) {
-				fileMatch := true
-				//if worker is retrying and send failed, try to set send status to sending
+				fileMatched := true
+				//if worker is retrying and send failed before, try to set send status to retrying
 				if retry && ci.SendStatus == types.FileSendFailed {
-					fileMatch = false
-					ci.SendStatus = types.FileSending
+					fileMatched = false
+					ci.SendStatus = types.FileSendRetrying
 				}
 				result = append(result, matchResult{
 					info:  ci,
-					match: fileMatch,
+					match: fileMatched,
 				})
 				matched = true
 				break
@@ -952,7 +952,7 @@ func (m *Mgr) ensureSingleFile(
 		for status == types.FileSending {
 			select {
 			case <-tick.C:
-				// 不是发送文件的goroutine，不能修改状态
+				// 不是发送文件的goroutine，不需要发送failed文件
 				status, _ = m.checkOrLockSendFile(host.Server, desc, false)
 			}
 		}
@@ -964,6 +964,10 @@ func (m *Mgr) ensureSingleFile(
 			return types.ErrSendFileFailed
 		case types.FileSendSucceed:
 			blog.Debugf("remote: success to ensure single file(%s) for work(%s) to server(%s)",
+				desc.FilePath, m.work.ID(), host.Server)
+			return nil
+		case types.FileSendRetrying:
+			blog.Infof("remote: single file(%s) for work(%s) to server(%s) is retrying now",
 				desc.FilePath, m.work.ID(), host.Server)
 			return nil
 		default:
@@ -1062,6 +1066,9 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 		case types.FileSendSucceed:
 			blog.Debugf("remote: end ensure single cork file(%s) for work(%s) to server(%s) succeed",
 				desc.FilePath, m.work.ID(), host.Server)
+			return nil
+		case types.FileSendRetrying:
+			blog.Infof("remote: single cork file(%s) for work(%s) to server(%s) is retrying now", desc.FilePath, m.work.ID(), host.Server)
 			return nil
 		default:
 			blog.Errorf("remote: end ensure single cork file(%s) for work(%s) to server(%s), "+
@@ -1271,7 +1278,7 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) ([]*types.FileCollect
 	}
 	fcs := make([]*types.FileCollectionInfo, 0)
 	for _, re := range *target {
-		if re.SendStatus != types.FileSendSucceed {
+		if re.SendStatus == types.FileSendFailed {
 			fcs = append(fcs, re)
 		}
 	}
