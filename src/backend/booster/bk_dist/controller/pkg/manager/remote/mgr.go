@@ -967,9 +967,9 @@ func (m *Mgr) ensureSingleFile(
 				desc.FilePath, m.work.ID(), host.Server)
 			return nil
 		case types.FileSendRetrying:
-			blog.Infof("remote: single file(%s) for work(%s) to server(%s) is retrying now",
+			blog.Warnf("remote: single file(%s) for work(%s) to server(%s) is retrying now",
 				desc.FilePath, m.work.ID(), host.Server)
-			return nil
+			return types.ErrSendFileRetrying
 		default:
 			return fmt.Errorf("unknown file send status: %s", status.String())
 		}
@@ -1068,8 +1068,8 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 				desc.FilePath, m.work.ID(), host.Server)
 			return nil
 		case types.FileSendRetrying:
-			blog.Infof("remote: single cork file(%s) for work(%s) to server(%s) is retrying now", desc.FilePath, m.work.ID(), host.Server)
-			return nil
+			blog.Warnf("remote: single cork file(%s) for work(%s) to server(%s) is retrying now", desc.FilePath, m.work.ID(), host.Server)
+			return types.ErrSendFileRetrying
 		default:
 			blog.Errorf("remote: end ensure single cork file(%s) for work(%s) to server(%s), "+
 				" with unknown status", desc.FilePath, m.work.ID(), host.Server)
@@ -1278,12 +1278,17 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) ([]*types.FileCollect
 	}
 	fcs := make([]*types.FileCollectionInfo, 0)
 	for _, re := range *target {
+		//如果有fc未到终结状态，则直接返回
+		if !re.SendStatus.IsTerminated() {
+			return nil, fmt.Errorf("remote: found file collection(%s) in file send cache, but not finished", re.UniqID)
+		}
 		if re.SendStatus == types.FileSendFailed {
 			fcs = append(fcs, re)
 		}
 	}
 	return fcs, nil
 }
+
 func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest) {
 	if m.resource.CanWorkerRetry(req.Server) {
 		go func(handler dcSDK.RemoteWorkerHandler, req types.RemoteTaskExecuteRequest) {

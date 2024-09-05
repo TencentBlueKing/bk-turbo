@@ -260,6 +260,10 @@ func (f FileSendStatus) String() string {
 	return "unknown"
 }
 
+func (f FileSendStatus) IsTerminated() bool {
+	return f == FileSendSucceed || f == FileSendFailed
+}
+
 // FileCollectionInfo save file collection send status
 type FileCollectionInfo struct {
 	UniqID     string           `json:"uniq_id"`
