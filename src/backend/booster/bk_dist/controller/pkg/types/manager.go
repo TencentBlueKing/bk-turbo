@@ -260,7 +260,7 @@ func (f FileSendStatus) String() string {
 	return "unknown"
 }
 
-func (f FileSendStatus) IsTerminated() bool {
+func (f FileSendStatus) IsFinished() bool {
 	return f == FileSendSucceed || f == FileSendFailed
 }
 

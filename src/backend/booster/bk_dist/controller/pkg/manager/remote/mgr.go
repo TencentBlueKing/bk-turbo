@@ -1268,6 +1268,7 @@ func (m *Mgr) sendToolchain(handler dcSDK.RemoteWorkerHandler, req *types.Remote
 	return nil
 }
 
+// getFailedFileCollectionByHost 返回文件集合，如果文件集没有全部完成，返回false，否则返回true
 func (m *Mgr) getFailedFileCollectionByHost(server string) ([]*types.FileCollectionInfo, bool, error) {
 	m.fileCollectionSendMutex.RLock()
 	defer m.fileCollectionSendMutex.RUnlock()
@@ -1279,7 +1280,7 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) ([]*types.FileCollect
 	fcs := make([]*types.FileCollectionInfo, 0)
 	for _, re := range *target {
 		//如果有fc未到终结状态，则直接返回
-		if !re.SendStatus.IsTerminated() {
+		if !re.SendStatus.IsFinished() {
 			blog.Infof("remote: found file collection(%s) in file send cache, but not finished, status:%s", re.UniqID, re.SendStatus)
 			return nil, false, nil
 		}
