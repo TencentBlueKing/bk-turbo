@@ -841,9 +841,9 @@ func (m *Mgr) ensureFiles(
 
 				// 启动协程跟踪未发送完成的文件
 				c := (*fs)[i]
-				go func(err chan<- error, c *corkFile, r matchResult) {
-					err <- m.ensureSingleCorkFile(c, r)
-				}(wg, c, v)
+				go func(err chan<- error, c *corkFile, r matchResult, retry bool) {
+					err <- m.ensureSingleCorkFile(c, r, retry)
+				}(wg, c, v, retry)
 			}
 
 			// TODO : 检查是否在server端有缓存了，如果有，则无需发送，调用 checkBatchCache
@@ -949,7 +949,7 @@ func (m *Mgr) ensureSingleFile(
 		tick := time.NewTicker(m.checkSendFileTick)
 		defer tick.Stop()
 
-		for status == types.FileSending {
+		for status == types.FileSending || (retry && status == types.FileSendRetrying) {
 			select {
 			case <-tick.C:
 				// 不是发送文件的goroutine，不需要发送failed文件
@@ -1035,7 +1035,7 @@ func (m *Mgr) ensureSingleFile(
 }
 
 // ensureSingleCorkFile 保证给到的第一个文件被正确分发到目标机器上, 若给到的文件多于一个, 多余的部分会被忽略
-func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
+func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult, retry bool) (err error) {
 	status := r.info.SendStatus
 	host := c.host
 	desc := c.file
@@ -1050,7 +1050,7 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 		tick := time.NewTicker(m.checkSendFileTick)
 		defer tick.Stop()
 
-		for status == types.FileSending {
+		for status == types.FileSending || (retry && status == types.FileSendRetrying) {
 			select {
 			case <-tick.C:
 				// 不是发送文件的goroutine，不能修改状态
