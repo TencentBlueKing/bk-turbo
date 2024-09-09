@@ -236,16 +236,18 @@ const (
 	FileSending
 	FileSendSucceed
 	FileSendFailed
+	FileSendRetrying
 	FileSendUnknown = 99
 )
 
 var (
 	fileStatusMap = map[FileSendStatus]string{
-		FileSendInit:    "sendinit",
-		FileSending:     "sending",
-		FileSendSucceed: "sendsucceed",
-		FileSendFailed:  "sendfailed",
-		FileSendUnknown: "unknown",
+		FileSendInit:     "sendinit",
+		FileSending:      "sending",
+		FileSendSucceed:  "sendsucceed",
+		FileSendFailed:   "sendfailed",
+		FileSendRetrying: "sendretrying",
+		FileSendUnknown:  "unknown",
 	}
 )
 
@@ -256,6 +258,10 @@ func (f FileSendStatus) String() string {
 	}
 
 	return "unknown"
+}
+
+func (f FileSendStatus) IsFinished() bool {
+	return f == FileSendSucceed || f == FileSendFailed
 }
 
 // FileCollectionInfo save file collection send status

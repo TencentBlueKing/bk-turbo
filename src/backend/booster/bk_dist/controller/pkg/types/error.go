@@ -32,6 +32,7 @@ var (
 	ErrFileNotFound                 = fmt.Errorf("not found file info")
 	ErrWorkCannotBeUpdatedHeartbeat = fmt.Errorf("work can not be updated heartbeat")
 	ErrSendFileFailed               = fmt.Errorf("send file failed")
+	ErrSendFileRetrying             = fmt.Errorf("send file retrying")
 	ErrTaskCannotBeReleased         = fmt.Errorf("task can not be released")
 	ErrTaskAlreadyReleased          = fmt.Errorf("task already released")
 	ErrSlotsLockFailed              = fmt.Errorf("slots lock failed`")

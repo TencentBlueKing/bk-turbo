@@ -257,6 +257,75 @@ func (wo *workerOffer) DisableWorker(host *dcProtocol.Host) {
 	return
 }
 
+func (wo *workerOffer) EnableWorker(host *dcProtocol.Host) {
+	if host == nil {
+		return
+	}
+	wo.workerLock.Lock()
+	defer wo.workerLock.Unlock()
+
+	for _, w := range wo.worker {
+		if !host.Equal(w.host) {
+			continue
+		}
+		if !w.disabled {
+			blog.Infof("remote slot: host:%v enabled before,do nothing now", *host)
+			return // already enabled
+		}
+
+		w.disabled = false
+		w.status = Init
+		wo.validWorkerNum += 1
+		break
+	}
+
+	blog.Infof("remote slot: total slot:%d after enable host:%v", wo.validWorkerNum, *host)
+}
+
+func (wo *workerOffer) CanWorkerRetry(host *dcProtocol.Host) bool {
+	if host == nil {
+		return false
+	}
+
+	wo.workerLock.Lock()
+	defer wo.workerLock.Unlock()
+
+	for _, wk := range wo.worker {
+		if !wk.host.Equal(host) {
+			continue
+		}
+
+		if wk.dead {
+			blog.Infof("remote slot: host:%v is already dead,do nothing now", host)
+			return false
+		}
+
+		if wk.status == Retrying {
+			blog.Infof("remote slot: host:%v is retrying,do nothing now", host)
+			return true
+		}
+		blog.Info("remote slot: host:%v can retry, change worker from %s to %s", host, wk.status, Retrying)
+		wk.status = Retrying
+		return false
+	}
+
+	return false
+}
+
+func (wo *workerOffer) SetWorkerStatus(host *dcProtocol.Host, s Status) {
+	wo.workerLock.Lock()
+	defer wo.workerLock.Unlock()
+
+	for _, w := range wo.worker {
+		if !host.Equal(w.host) {
+			continue
+		}
+
+		w.status = s
+		break
+	}
+}
+
 func (wo *workerOffer) WorkerDead(w *worker) {
 	if w == nil || w.host == nil {
 		return
