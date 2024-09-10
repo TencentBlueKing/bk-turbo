@@ -462,3 +462,41 @@ func UniqID() string {
 		commonUtil.RandomString(5),
 		time.Now().Local().UnixNano())
 }
+
+var (
+	commonTargetPathSep = string(filepath.Separator)
+	commonInitPathSep1  = ""
+	commonInitPathSep2  = ""
+)
+
+func init() {
+	if runtime.GOOS == "windows" {
+		commonInitPathSep1 = "/"
+		commonInitPathSep2 = "\\\\"
+	} else {
+		commonInitPathSep1 = "\\"
+		commonInitPathSep2 = "//"
+	}
+}
+
+func FormatFilePath(f string) string {
+	f = strings.Replace(f, commonInitPathSep1, commonTargetPathSep, -1)
+	f = strings.Replace(f, commonInitPathSep2, commonTargetPathSep, -1)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, commonTargetPathSep)
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, commonTargetPathSep)
+	}
+
+	return f
+}

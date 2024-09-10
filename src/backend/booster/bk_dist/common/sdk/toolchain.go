@@ -18,6 +18,8 @@ import (
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 
+	// handleUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
+
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -107,6 +109,7 @@ func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
 		Targetrelativepath: remotepath,
 		Filemode:           i.Mode32(),
 		LinkTarget:         i.LinkTarget,
+		Priority:           GetPriority(i),
 	}
 
 	if i.LinkTarget == "" {

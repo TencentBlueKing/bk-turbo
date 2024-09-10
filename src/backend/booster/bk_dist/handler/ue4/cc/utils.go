@@ -674,10 +674,12 @@ func copyExtraArgs(option string) ([]string, error) {
 type ccArgs struct {
 	inputFile       string
 	outputFile      string
+	mfOutputFile    []string
 	args            []string
 	includeRspFiles []string // with @ in response file
 	includePaths    []string // with -I
 	includeFiles    []string // with -include
+	hasDependencies bool
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
@@ -708,6 +710,7 @@ func scanArgs(args []string) (*ccArgs, error) {
 			case "-MD", "-MMD":
 				// These two generate dependencies as a side effect.  They
 				// should work with the way we call cpp.
+				r.hasDependencies = true
 				continue
 
 			case "-MG", "-MP":
@@ -718,6 +721,9 @@ func scanArgs(args []string) (*ccArgs, error) {
 			case "-MF", "-MT", "-MQ":
 				// As above but with extra argument.
 				index++
+				if arg == "-MF" && index < len(args) {
+					r.mfOutputFile = append(r.mfOutputFile, args[index])
+				}
 				continue
 
 			case "-march=native":

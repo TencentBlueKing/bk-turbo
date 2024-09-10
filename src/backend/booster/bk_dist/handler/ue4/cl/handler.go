@@ -385,7 +385,7 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 
 	// if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
 	// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
-	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
+	return dcFile.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
 	// } else {
 	// 	includes := []*dcFile.Info{}
 	// 	for _, l := range uniqlines {
@@ -744,7 +744,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				Filemode:           fileMode,
 				Targetrelativepath: filepath.Dir(fpath),
 				NoDuplicated:       true,
-				Priority:           commonUtil.GetPriority(f),
+				Priority:           dcSDK.GetPriority(f),
 			})
 			// priority++
 

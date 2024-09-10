@@ -21,7 +21,6 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
-	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -65,134 +64,134 @@ func GetHandlerTmpDir(sandBox *dcSyscall.Sandbox) string {
 	return ""
 }
 
-var (
-	fileInfoCacheLock sync.RWMutex
-	fileInfoCache     = map[string]*dcFile.Info{}
-)
+// var (
+// 	fileInfoCacheLock sync.RWMutex
+// 	fileInfoCache     = map[string]*dcFile.Info{}
+// )
 
-func ResetFileInfoCache() {
-	fileInfoCacheLock.Lock()
-	defer fileInfoCacheLock.Unlock()
+// func ResetFileInfoCache() {
+// 	fileInfoCacheLock.Lock()
+// 	defer fileInfoCacheLock.Unlock()
 
-	fileInfoCache = map[string]*dcFile.Info{}
-}
+// 	fileInfoCache = map[string]*dcFile.Info{}
+// }
 
-// 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
-func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) ([]*dcFile.Info, error) {
-	// read
-	fileInfoCacheLock.RLock()
-	notfound := []string{}
-	is := make([]*dcFile.Info, 0, len(fs))
-	for _, f := range fs {
-		i, ok := fileInfoCache[f]
-		if !ok {
-			notfound = append(notfound, f)
-			continue
-		}
+// // 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
+// func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) ([]*dcFile.Info, error) {
+// 	// read
+// 	fileInfoCacheLock.RLock()
+// 	notfound := []string{}
+// 	is := make([]*dcFile.Info, 0, len(fs))
+// 	for _, f := range fs {
+// 		i, ok := fileInfoCache[f]
+// 		if !ok {
+// 			notfound = append(notfound, f)
+// 			continue
+// 		}
 
-		if !i.Exist() {
-			if mustexisted {
-				// continue
-				// TODO : return fail if not existed
-				blog.Warnf("common util: depend file:%s not existed ", f)
-				return nil, fmt.Errorf("%s not existed", f)
-			} else {
-				continue
-			}
-		}
+// 		if !i.Exist() {
+// 			if mustexisted {
+// 				// continue
+// 				// TODO : return fail if not existed
+// 				blog.Warnf("common util: depend file:%s not existed ", f)
+// 				return nil, fmt.Errorf("%s not existed", f)
+// 			} else {
+// 				continue
+// 			}
+// 		}
 
-		if notdir && i.Basic().IsDir() {
-			continue
-		}
-		is = append(is, i)
-	}
-	fileInfoCacheLock.RUnlock()
+// 		if notdir && i.Basic().IsDir() {
+// 			continue
+// 		}
+// 		is = append(is, i)
+// 	}
+// 	fileInfoCacheLock.RUnlock()
 
-	blog.Infof("common util: got %d file stat and %d not found", len(is), len(notfound))
-	if len(notfound) == 0 {
-		return is, nil
-	}
+// 	blog.Infof("common util: got %d file stat and %d not found", len(is), len(notfound))
+// 	if len(notfound) == 0 {
+// 		return is, nil
+// 	}
 
-	// query
-	tempis := make(map[string]*dcFile.Info, len(notfound))
-	for _, notf := range notfound {
-		tempf := notf
-		try := 0
-		maxtry := 10
-		for {
-			var i *dcFile.Info
-			if statbysearchdir {
-				i = dcFile.GetFileInfoByEnumDir(tempf)
-			} else {
-				i = dcFile.Lstat(tempf)
-			}
-			tempis[tempf] = i
-			try++
+// 	// query
+// 	tempis := make(map[string]*dcFile.Info, len(notfound))
+// 	for _, notf := range notfound {
+// 		tempf := notf
+// 		try := 0
+// 		maxtry := 10
+// 		for {
+// 			var i *dcFile.Info
+// 			if statbysearchdir {
+// 				i = dcFile.GetFileInfoByEnumDir(tempf)
+// 			} else {
+// 				i = dcFile.Lstat(tempf)
+// 			}
+// 			tempis[tempf] = i
+// 			try++
 
-			if !i.Exist() {
-				if mustexisted {
-					// TODO : return fail if not existed
-					// continue
-					blog.Warnf("common util: depend file:%s not existed ", tempf)
-					return nil, fmt.Errorf("%s not existed", tempf)
-				} else {
-					// continue
-					break
-				}
-			}
+// 			if !i.Exist() {
+// 				if mustexisted {
+// 					// TODO : return fail if not existed
+// 					// continue
+// 					blog.Warnf("common util: depend file:%s not existed ", tempf)
+// 					return nil, fmt.Errorf("%s not existed", tempf)
+// 				} else {
+// 					// continue
+// 					break
+// 				}
+// 			}
 
-			loopagain := false
-			if i.Basic().Mode()&os.ModeSymlink != 0 {
-				originFile, err := os.Readlink(tempf)
-				if err == nil {
-					if !filepath.IsAbs(originFile) {
-						originFile, err = filepath.Abs(filepath.Join(filepath.Dir(tempf), originFile))
-						if err == nil {
-							i.LinkTarget = originFile
-							blog.Infof("common util: symlink %s to %s", tempf, originFile)
-						} else {
-							blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
-								tempf, originFile, err)
-						}
-					} else {
-						i.LinkTarget = originFile
-						blog.Infof("common util: symlink %s to %s", tempf, originFile)
-					}
+// 			loopagain := false
+// 			if i.Basic().Mode()&os.ModeSymlink != 0 {
+// 				originFile, err := os.Readlink(tempf)
+// 				if err == nil {
+// 					if !filepath.IsAbs(originFile) {
+// 						originFile, err = filepath.Abs(filepath.Join(filepath.Dir(tempf), originFile))
+// 						if err == nil {
+// 							i.LinkTarget = originFile
+// 							blog.Infof("common util: symlink %s to %s", tempf, originFile)
+// 						} else {
+// 							blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
+// 								tempf, originFile, err)
+// 						}
+// 					} else {
+// 						i.LinkTarget = originFile
+// 						blog.Infof("common util: symlink %s to %s", tempf, originFile)
+// 					}
 
-					// 如果是链接，并且指向了其它文件，则需要将指向的文件也包含进来
-					// 增加寻找次数限制，避免死循环
-					if try < maxtry {
-						loopagain = true
-						tempf = originFile
-					}
-				} else {
-					blog.Infof("common util: symlink %s Readlink error:%s", tempf, err)
-				}
-			}
+// 					// 如果是链接，并且指向了其它文件，则需要将指向的文件也包含进来
+// 					// 增加寻找次数限制，避免死循环
+// 					if try < maxtry {
+// 						loopagain = true
+// 						tempf = originFile
+// 					}
+// 				} else {
+// 					blog.Infof("common util: symlink %s Readlink error:%s", tempf, err)
+// 				}
+// 			}
 
-			if notdir && i.Basic().IsDir() {
-				continue
-			}
+// 			if notdir && i.Basic().IsDir() {
+// 				continue
+// 			}
 
-			is = append(is, i)
+// 			is = append(is, i)
 
-			if !loopagain {
-				break
-			}
-		}
-	}
+// 			if !loopagain {
+// 				break
+// 			}
+// 		}
+// 	}
 
-	// write
-	go func(tempis *map[string]*dcFile.Info) {
-		fileInfoCacheLock.Lock()
-		for f, i := range *tempis {
-			fileInfoCache[f] = i
-		}
-		fileInfoCacheLock.Unlock()
-	}(&tempis)
+// 	// write
+// 	go func(tempis *map[string]*dcFile.Info) {
+// 		fileInfoCacheLock.Lock()
+// 		for f, i := range *tempis {
+// 			fileInfoCache[f] = i
+// 		}
+// 		fileInfoCacheLock.Unlock()
+// 	}(&tempis)
 
-	return is, nil
-}
+// 	return is, nil
+// }
 
 //-----------------------------------------------------------------------
 
@@ -466,49 +465,49 @@ func GetAllLinkDir(files []string) []string {
 	return nil
 }
 
-func GetPriority(i *dcFile.Info) dcSDK.FileDescPriority {
-	isLink := i.Basic().Mode()&os.ModeSymlink != 0
-	if !isLink {
-		if i.Basic().IsDir() {
-			return dcSDK.RealDirPriority
-		} else {
-			return dcSDK.RealFilePriority
-		}
-	}
+// func GetPriority(i *dcFile.Info) dcSDK.FileDescPriority {
+// 	isLink := i.Basic().Mode()&os.ModeSymlink != 0
+// 	if !isLink {
+// 		if i.Basic().IsDir() {
+// 			return dcSDK.RealDirPriority
+// 		} else {
+// 			return dcSDK.RealFilePriority
+// 		}
+// 	}
 
-	// symlink 需要判断是指向文件还是目录
-	if i.LinkTarget != "" {
-		targetfs, err := GetFileInfo([]string{i.LinkTarget}, true, false, false)
-		if err == nil && len(targetfs) > 0 {
-			if targetfs[0].Basic().IsDir() {
-				return dcSDK.LinkDirPriority
-			} else {
-				return dcSDK.LinkFilePriority
-			}
-		}
-	}
+// 	// symlink 需要判断是指向文件还是目录
+// 	if i.LinkTarget != "" {
+// 		targetfs, err := GetFileInfo([]string{i.LinkTarget}, true, false, false)
+// 		if err == nil && len(targetfs) > 0 {
+// 			if targetfs[0].Basic().IsDir() {
+// 				return dcSDK.LinkDirPriority
+// 			} else {
+// 				return dcSDK.LinkFilePriority
+// 			}
+// 		}
+// 	}
 
-	// 尝试读文件
-	linkpath := i.Path()
-	targetPath, err := os.Readlink(linkpath)
-	if err != nil {
-		blog.Infof("common util: Error reading symbolic link: %v", err)
-		return dcSDK.LinkFilePriority
-	}
+// 	// 尝试读文件
+// 	linkpath := i.Path()
+// 	targetPath, err := os.Readlink(linkpath)
+// 	if err != nil {
+// 		blog.Infof("common util: Error reading symbolic link: %v", err)
+// 		return dcSDK.LinkFilePriority
+// 	}
 
-	// 获取符号链接指向路径的文件信息
-	targetInfo, err := os.Stat(targetPath)
-	if err != nil {
-		blog.Infof("common util: Error getting target file info: %v", err)
-		return dcSDK.LinkFilePriority
-	}
+// 	// 获取符号链接指向路径的文件信息
+// 	targetInfo, err := os.Stat(targetPath)
+// 	if err != nil {
+// 		blog.Infof("common util: Error getting target file info: %v", err)
+// 		return dcSDK.LinkFilePriority
+// 	}
 
-	// 判断符号链接指向的路径是否是目录
-	if targetInfo.IsDir() {
-		blog.Infof("common util: %s is a symbolic link to a directory", linkpath)
-		return dcSDK.LinkDirPriority
-	} else {
-		blog.Infof("common util: %s is a symbolic link, but not to a directory", linkpath)
-		return dcSDK.LinkFilePriority
-	}
-}
+// 	// 判断符号链接指向的路径是否是目录
+// 	if targetInfo.IsDir() {
+// 		blog.Infof("common util: %s is a symbolic link to a directory", linkpath)
+// 		return dcSDK.LinkDirPriority
+// 	} else {
+// 		blog.Infof("common util: %s is a symbolic link, but not to a directory", linkpath)
+// 		return dcSDK.LinkFilePriority
+// 	}
+// }

@@ -3,10 +3,13 @@ package sdk
 import (
 	"fmt"
 	"net"
+	"os"
 
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // RemoteWorker describe the remote worker SDK
@@ -180,4 +183,51 @@ type BKQuerySlotResult struct {
 // BKSlotRspAck
 type BKSlotRspAck struct {
 	Consumeslotnum int32 `json:"consume_slot_num"`
+}
+
+func GetPriority(i *dcFile.Info) FileDescPriority {
+	isLink := i.Basic().Mode()&os.ModeSymlink != 0
+	if !isLink {
+		if i.Basic().IsDir() {
+			return RealDirPriority
+		} else {
+			return RealFilePriority
+		}
+	}
+
+	// symlink 需要判断是指向文件还是目录
+	if i.LinkTarget != "" {
+		targetfs, err := dcFile.GetFileInfo([]string{i.LinkTarget}, true, false, false)
+		if err == nil && len(targetfs) > 0 {
+			if targetfs[0].Basic().IsDir() {
+				return LinkDirPriority
+			} else {
+				return LinkFilePriority
+			}
+		}
+	}
+
+	// 尝试读文件
+	linkpath := i.Path()
+	targetPath, err := os.Readlink(linkpath)
+	if err != nil {
+		blog.Infof("common util: Error reading symbolic link: %v", err)
+		return LinkFilePriority
+	}
+
+	// 获取符号链接指向路径的文件信息
+	targetInfo, err := os.Stat(targetPath)
+	if err != nil {
+		blog.Infof("common util: Error getting target file info: %v", err)
+		return LinkFilePriority
+	}
+
+	// 判断符号链接指向的路径是否是目录
+	if targetInfo.IsDir() {
+		blog.Infof("common util: %s is a symbolic link to a directory", linkpath)
+		return LinkDirPriority
+	} else {
+		blog.Infof("common util: %s is a symbolic link, but not to a directory", linkpath)
+		return LinkFilePriority
+	}
 }
