@@ -572,7 +572,7 @@ func searchDefaultIncludeDirs(exe string) []string {
 		}
 
 		// 需要记录的目录
-		defaultdir = append(defaultdir, dcUtil.FormatFilePath(l))
+		defaultdir = append(defaultdir, dcUtil.FormatFilePath(strings.TrimSpace(l)))
 	}
 
 	return defaultdir
