@@ -6,7 +6,8 @@ import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
-import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST
+import com.tencent.devops.common.util.constants.BASE_EXCLUDED_COMMON_PLAN_ID
+import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST_FOR_DEV_CLOUD
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PROJECT_ID_LIST
 import com.tencent.devops.turbo.config.TodCostProperties
 import com.tencent.devops.turbo.dao.mongotemplate.TbsDaySummaryDao
@@ -50,8 +51,9 @@ class ProjectResourcesService @Autowired constructor(
         val pageSizeNum = pageSize?.coerceAtMost(10000) ?: 100
 
         // 获取需要过滤掉的方案id集合
-        val baseDataEntity = baseDataRepository.findFirstByParamCode(BASE_EXCLUDED_PLAN_ID_LIST)
-        val filterPlanIds = baseDataEntity?.paramValue?.split(",")?.toSet() ?: emptySet()
+        val baseDataEntityList = baseDataRepository.findByParamCodeIn(listOf(BASE_EXCLUDED_PLAN_ID_LIST_FOR_DEV_CLOUD,
+            BASE_EXCLUDED_COMMON_PLAN_ID))
+        val filterPlanIds = baseDataEntityList.flatMap { it.paramValue.split(",") }.toSet() ?: emptySet()
 
         // 获取需要过滤掉的项目id集合
         val projectExcludedEntity = baseDataRepository.findFirstByParamCode(BASE_EXCLUDED_PROJECT_ID_LIST)
@@ -120,7 +122,7 @@ class ProjectResourcesService @Autowired constructor(
         val end = endDate?.let { LocalDate.parse(it) } ?: today.withDayOfMonth(14)
         this.checkDatesInMonth(month, start, end)
 
-        val filterPlanIds = getFilterIds(BASE_EXCLUDED_PLAN_ID_LIST)
+        val filterPlanIds = getFilterIds(BASE_EXCLUDED_COMMON_PLAN_ID)
         val filterProjectIds = getFilterIds(BASE_EXCLUDED_PROJECT_ID_LIST)
         val properties = SpringContextHolder.getBean<TodCostProperties>()
 
