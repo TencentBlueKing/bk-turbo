@@ -175,12 +175,53 @@ func runDirect() (int, string, error) {
 	return exitCode, "", err
 }
 
+func getAbsPath(cmd string) string {
+	// absolute path
+	if filepath.IsAbs(cmd) {
+		return cmd
+	}
+
+	// relative path
+	if strings.Contains(cmd, "/") {
+		dir, _ := os.Getwd()
+		if realDir, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = realDir
+		}
+
+		newcmd := filepath.Join(dir, cmd)
+		if !filepath.IsAbs(newcmd) {
+			var err error
+			newcmd, err = filepath.Abs(newcmd)
+			if err == nil {
+				return newcmd
+			} else {
+				blog.Errorf("executor: get abs path for %s with error:%v", newcmd, err)
+				return cmd
+			}
+		}
+	}
+
+	// no path, only file name
+	newcmd, err := exec.LookPath(cmd)
+	if err == nil {
+		return newcmd
+	} else {
+		blog.Errorf("executor: LookPath for %s with error:%v", cmd, err)
+		return cmd
+	}
+}
+
 func (d *DistExecutor) runWork() (int, string, error) {
 	d.initStats()
 
 	if len(os.Args) < 2 {
 		blog.Errorf("executor: not enough args to execute")
 		return 0, "", fmt.Errorf("not enough args to execute")
+	}
+
+	// TODO : 如果支持了自动获取工具链，这儿将命令转为绝对路径
+	if dcSyscall.NeedSearchToolchain(nil) {
+		os.Args[1] = getAbsPath(os.Args[1])
 	}
 
 	retcode, retmsg, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "")

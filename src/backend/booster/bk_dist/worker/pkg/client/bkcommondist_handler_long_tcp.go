@@ -81,7 +81,7 @@ func (r *CommonRemoteHandler) executeTaskLongTCP(
 		return nil, err
 	}
 
-	blog.Infof("protocol: execute dist task commands: %v", req.Commands)
+	blog.Debugf("protocol: execute dist task commands: %v", req.Commands)
 	r.recordStats.RemoteWorkTimeoutSec = r.ioTimeout
 
 	// var err error
@@ -167,11 +167,11 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 	defer func() {
 		r.updateJobStatsFunc()
 	}()
-	blog.Infof("start send files to server %s", server)
+	blog.Infof("remotehandle: start send %d files to server %s", len(req.Files), server)
 	r.recordStats.RemoteWorker = server.Server
 
 	if len(req.Files) == 0 {
-		blog.Debugf("no files need sent")
+		blog.Infof("no files need sent")
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonStartTime)
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkPackCommonEndTime)
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonStartTime)
@@ -214,7 +214,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		if mgr != nil {
 			if mgr.LockSlots(dcSDK.JobUsageLocalExe, 1) {
 				locallocked = true
-				blog.Debugf("remotehandle: succeed to get one local lock")
+				blog.Infof("remotehandle: succeed to get one local lock")
 			}
 		}
 
@@ -236,7 +236,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 			if locksize > 0 {
 				if r.slot.Lock(locksize) {
 					memorylocked = true
-					blog.Debugf("remotehandle: succeed to get lock with size %d", totalsize)
+					blog.Infof("remotehandle: succeed to get memory lock with size %d", totalsize)
 				}
 			}
 		}
@@ -244,7 +244,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		defer func() {
 			if memorylocked {
 				r.slot.Unlock(locksize)
-				blog.Debugf("remotehandle: succeed to release lock with size %d", totalsize)
+				blog.Infof("remotehandle: succeed to release memory lock with size %d", totalsize)
 				memorylocked = false
 			}
 		}()
@@ -262,11 +262,11 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 
 		if locallocked {
 			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
-			blog.Debugf("remotehandle: succeed to release one local lock")
+			blog.Infof("remotehandle: succeed to release one local lock")
 		}
 
 		if err != nil {
-			blog.Warnf("error: %v", err)
+			blog.Warnf("remotehandle: error: %v", err)
 			return nil, err
 		}
 	}
@@ -286,7 +286,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		return nil, err
 	}
 
-	blog.Debugf("success connect to server %s", server)
+	blog.Infof("remotehandle: success connect to server %s", server)
 
 	reqdata := [][]byte{}
 	for _, m := range messages {
@@ -301,13 +301,13 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		dcSDK.StatsTimeNow(&r.recordStats.RemoteWorkSendCommonEndTime)
 		if memorylocked {
 			r.slot.Unlock(locksize)
-			blog.Debugf("remotehandle: succeed to release lock with size %d", locksize)
+			blog.Infof("remotehandle: succeed to release memory lock with size %d", locksize)
 			memorylocked = false
 		}
 		return nil
 	})
 	if ret.Err != nil {
-		blog.Warnf("send file failed with error: %v", ret.Err)
+		blog.Warnf("remotehandle: send file failed with error: %v", ret.Err)
 		return nil, ret.Err
 	}
 
@@ -317,17 +317,17 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 
 	debug.FreeOSMemory() // free memory anyway
 
-	blog.Debugf("success sent to server %s", server)
+	blog.Infof("remotehandle: success sent to server %s", server)
 	data, err := decodeSendFileRspLongTCP(ret.Data)
 
 	if err != nil {
-		blog.Warnf("error: %v", err)
+		blog.Warnf("remotehandle: error: %v", err)
 		return nil, err
 	}
 
 	result, err := decodeSendFileRsp(data)
 	if err != nil {
-		blog.Warnf("error: %v", err)
+		blog.Warnf("remotehandle: error: %v", err)
 		return nil, err
 	}
 
@@ -346,7 +346,7 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		dencodereq.Seconds(), dsend.Seconds(), drecv.Seconds(),
 		ddecode.Seconds(), dtotal.Seconds())
 
-	blog.Debugf("send file task done *")
+	// blog.Debugf("remotehandle: send file task done *")
 
 	return result, nil
 }

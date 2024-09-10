@@ -242,6 +242,9 @@ type BasicMgr interface {
 	// update toolchain
 	SetToolChain(toolchain *ToolChain) error
 
+	//is tool exsited
+	IsToolChainExsited(key string) bool
+
 	// get toolchain files by key
 	GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error)
 
@@ -262,4 +265,7 @@ type BasicMgr interface {
 
 	// minus registered count for batch mode
 	DecRegistered()
+
+	// search toolchain files by cmd, ensure only execute once
+	SearchToolChain(cmd string) error
 }

@@ -175,9 +175,10 @@ func (u *UE4) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理, 根据不同的command来确定不同的子场景
-func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	if command == nil || len(command) == 0 {
-		return nil, fmt.Errorf("command is nil")
+		blog.Warnf("command is nil")
+		return nil, dcType.ErrorUnknown
 	}
 
 	u.initInnerHandle(command)
@@ -189,7 +190,11 @@ func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		return u.innerhandler.PreExecute(command)
 	}
 
-	return nil, fmt.Errorf("not support for command %s", command[0])
+	blog.Warnf("not support for command %s", command[0])
+	return nil, dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf("not support for command %s", command[0]),
+	}
 }
 
 // PreExecute 预处理, 根据不同的command来确定不同的子场景
@@ -269,12 +274,12 @@ func (u *UE4) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (u *UE4) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+func (u *UE4) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	if u.innerhandler != nil {
 		return u.innerhandler.OnRemoteFail(command)
 	}
 
-	return nil, nil
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -287,12 +292,13 @@ func (u *UE4) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理
-func (u *UE4) PostExecute(r *dcSDK.BKDistResult) error {
+func (u *UE4) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if u.innerhandler != nil {
 		return u.innerhandler.PostExecute(r)
 	}
 
-	return fmt.Errorf("not support")
+	blog.Warnf("innerhandler is nil when ready post execute")
+	return dcType.ErrorUnknown
 }
 
 // LocalExecuteNeed no need
@@ -321,12 +327,12 @@ func (u *UE4) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (u *UE4) LocalExecute(command []string) (int, error) {
+func (u *UE4) LocalExecute(command []string) dcType.BKDistCommonError {
 	if u.innerhandler != nil {
 		return u.innerhandler.LocalExecute(command)
 	}
 
-	return 0, nil
+	return dcType.ErrorNone
 }
 
 // FinalExecute 清理临时文件

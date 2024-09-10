@@ -42,13 +42,14 @@ func NewMgr(pCtx context.Context, work *types.Work) types.BasicMgr {
 	ctx, _ := context.WithCancel(pCtx)
 
 	return &Mgr{
-		ctx:               ctx,
-		work:              work,
-		settings:          &types.WorkSettings{},
-		info:              types.NewInitWorkInfo(work.ID()),
-		waitWorkReadyTick: 100 * time.Millisecond,
-		analysisStatus:    types.NewWorkAnalysisStatus(),
-		toolchainMap:      make(map[string]toolchainCache, 1),
+		ctx:                  ctx,
+		work:                 work,
+		settings:             &types.WorkSettings{},
+		info:                 types.NewInitWorkInfo(work.ID()),
+		waitWorkReadyTick:    100 * time.Millisecond,
+		analysisStatus:       types.NewWorkAnalysisStatus(),
+		toolchainMap:         make(map[string]toolchainCache, 1),
+		searchToolChainCache: make(map[string]bool, 10),
 	}
 }
 
@@ -70,9 +71,13 @@ type Mgr struct {
 	toolchainLock sync.RWMutex
 	toolchainMap  map[string]toolchainCache
 
+	searchToolchainLock sync.RWMutex
+
 	aliveTask int64
 
 	registeredCounter int32
+
+	searchToolChainCache map[string]bool
 }
 
 // Alive return the current alive task number
@@ -443,6 +448,15 @@ func (m *Mgr) SetToolChain(toolchain *types.ToolChain) error {
 	return nil
 }
 
+// IsToolChainExsited return if toolchain files exsited
+func (m *Mgr) IsToolChainExsited(key string) bool {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	_, ok := m.toolchainMap[key]
+	return ok
+}
+
 // GetToolChainFiles return the toolchain files
 func (m *Mgr) GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error) {
 	m.toolchainLock.RLock()
@@ -506,4 +520,25 @@ func (m *Mgr) GetToolChainTimestamp(key string) (int64, error) {
 	}
 
 	return v.toolchain.Timestamp, nil
+}
+
+// SearchToolChain search toolchain files by cmd, ensure only execute once
+func (m *Mgr) SearchToolChain(cmd string) error {
+	m.searchToolchainLock.Lock()
+	defer m.searchToolchainLock.Unlock()
+
+	if _, ok := m.searchToolChainCache[cmd]; ok {
+		blog.Infof("basic: toolchain with key:%s search before, do nothing", cmd)
+		return nil
+	}
+
+	m.searchToolChainCache[cmd] = true
+
+	// TODO : search toolchain with cmd now
+	toolchain, err := searchToolChain(cmd)
+	if err == nil && toolchain != nil {
+		m.SetToolChain(toolchain)
+	}
+
+	return nil
 }

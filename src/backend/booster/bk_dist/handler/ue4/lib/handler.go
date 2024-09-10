@@ -95,7 +95,7 @@ func (l *TaskLib) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (l *TaskLib) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (l *TaskLib) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	return l.preExecute(command)
 }
 
@@ -115,8 +115,8 @@ func (l *TaskLib) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (l *TaskLib) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
-	return nil, nil
+func (l *TaskLib) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -125,7 +125,7 @@ func (l *TaskLib) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理
-func (l *TaskLib) PostExecute(r *dcSDK.BKDistResult) error {
+func (l *TaskLib) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	return l.postExecute(r)
 }
 
@@ -140,8 +140,8 @@ func (l *TaskLib) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (l *TaskLib) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (l *TaskLib) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // FinalExecute no need
@@ -163,19 +163,19 @@ func (l *TaskLib) workerSupportAbsPath() bool {
 	return true
 }
 
-func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("lib: start pre execute for: %v", command)
 
 	if !l.workerSupportAbsPath() {
 		blog.Infof("lib: remote worker do not support absolute path")
-		return nil, fmt.Errorf("remote worker do not support absolute path")
+		return nil, dcType.ErrorUnknown
 	}
 
 	l.originArgs = command
 	responseFile, args, err := ensureCompiler(command)
 	if err != nil {
 		blog.Errorf("lib: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	if responseFile != "" && !filepath.IsAbs(responseFile) {
@@ -187,7 +187,7 @@ func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	if err = l.scan(args); err != nil {
 		blog.Errorf("lib: scan args[%v] failed : %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	// add response file as input
@@ -201,7 +201,7 @@ func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		if !existed {
 			err := fmt.Errorf("input pre file %s not existed", v)
 			blog.Errorf("%v", err)
-			return nil, err
+			return nil, dcType.ErrorUnknown
 		}
 
 		// generate the input files for pre-process file
@@ -239,21 +239,28 @@ func (l *TaskLib) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 			},
 		},
 		CustomSave: true,
-	}, nil
+	}, dcType.ErrorNone
 }
 
-func (l *TaskLib) postExecute(r *dcSDK.BKDistResult) error {
+func (l *TaskLib) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("lib: start post execute for: %v", l.originArgs)
 	if r == nil || len(r.Results) == 0 {
-		return ErrorInvalidParam
+		blog.Warnf("lib: parameter is invalid")
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 
 	if len(r.Results[0].ResultFiles) > 0 {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f); err != nil {
-					blog.Errorf("lib: failed to save file [%s]", f.FilePath)
-					return err
+					blog.Errorf("lib: failed to save file [%s] with error:%v", f.FilePath, err)
+					return dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 			}
 		}
@@ -261,13 +268,18 @@ func (l *TaskLib) postExecute(r *dcSDK.BKDistResult) error {
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("lib: success done post execute for: %v", l.originArgs)
-		return nil
+		return dcType.ErrorNone
 	}
 
-	return fmt.Errorf("lib: failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("lib: failed to remote execute, retcode %d, error message:%s, output message:%s",
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
+
+	return dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+	}
 }
 
 func (l *TaskLib) scan(args []string) error {

@@ -248,6 +248,11 @@ func searchSymlink(dirPth string, files map[string]string) (err error) {
 	}
 
 	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error {
+		if err != nil {
+			blog.Infof("booster: search path:%s failed with error:%v", dirPth, err)
+			return err
+		}
+
 		if fi.IsDir() {
 			return nil
 		}

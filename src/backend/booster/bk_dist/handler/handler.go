@@ -47,7 +47,7 @@ type Handler interface {
 	PreLockWeight(command []string) int32
 
 	// PreExecute will be called before task is distributed
-	PreExecute(command []string) (*dcSDK.BKDistCommand, error)
+	PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError)
 
 	// LocalExecuteNeed decide whether executor should execute local command
 	LocalExecuteNeed(command []string) bool
@@ -56,7 +56,7 @@ type Handler interface {
 	LocalLockWeight(command []string) int32
 
 	// LocalExecute will execute this command by handler
-	LocalExecute(command []string) (int, error)
+	LocalExecute(command []string) dcType.BKDistCommonError
 
 	// NeedRemoteResource check whether this command need remote resource
 	NeedRemoteResource(command []string) bool
@@ -68,7 +68,7 @@ type Handler interface {
 	NeedRetryOnRemoteFail(command []string) bool
 
 	// OnRemoteFail give chance to try other way if failed to remote execute
-	OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error)
+	OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError)
 
 	// PostExecuteNeedLock decide whether executor should lock before post execution
 	PostExecuteNeedLock(result *dcSDK.BKDistResult) bool
@@ -77,7 +77,7 @@ type Handler interface {
 	PostLockWeight(result *dcSDK.BKDistResult) int32
 
 	// PostExecute will be called after task is distributed and executed
-	PostExecute(result *dcSDK.BKDistResult) error
+	PostExecute(result *dcSDK.BKDistResult) dcType.BKDistCommonError
 
 	// FinalExecute chance to finalize for handler, must be safe to call in goroutines
 	FinalExecute(command []string)

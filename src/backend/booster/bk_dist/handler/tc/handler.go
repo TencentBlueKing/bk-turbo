@@ -19,6 +19,7 @@ import (
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // NewTextureCompressor get a new tc handler
@@ -157,28 +158,33 @@ func (tc *TextureCompressor) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute parse the input and output file, and then just run the origin command in remote
-func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	if len(command) == 0 {
-		return nil, fmt.Errorf("invalid command")
+		blog.Warnf("tc: invalid command")
+		return nil, dcType.ErrorUnknown
 	}
 
 	t, err := getTCType(command[0])
 	if err != nil {
-		return nil, err
+		blog.Warnf("tc: get tc type with error:%v", err)
+		return nil, dcType.ErrorUnknown
 	}
 
 	inputFile, err := t.getInputFile(command[1:])
 	if err != nil {
-		return nil, err
+		blog.Warnf("tc: get tc input file with error:%v", err)
+		return nil, dcType.ErrorUnknown
 	}
 	outputFile, err := t.getOutputFile(command[1:])
 	if err != nil {
-		return nil, err
+		blog.Warnf("tc: get tc output file with error:%v", err)
+		return nil, dcType.ErrorUnknown
 	}
 
 	existed, fileSize, modifyTime, fileMode := dcFile.Stat(inputFile).Batch()
 	if !existed {
-		return nil, fmt.Errorf("input file %s not exist", inputFile)
+		blog.Warnf("tc: input file %s not exist", inputFile)
+		return nil, dcType.ErrorUnknown
 	}
 
 	return &dcSDK.BKDistCommand{
@@ -199,7 +205,7 @@ func (tc *TextureCompressor) PreExecute(command []string) (*dcSDK.BKDistCommand,
 				ResultFiles: []string{outputFile},
 			},
 		},
-	}, nil
+	}, dcType.ErrorNone
 }
 
 // NeedRemoteResource check whether this command need remote resource
@@ -218,8 +224,8 @@ func (tc *TextureCompressor) NeedRetryOnRemoteFail(command []string) bool {
 }
 
 // OnRemoteFail give chance to try other way if failed to remote execute
-func (tc *TextureCompressor) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
-	return nil, nil
+func (tc *TextureCompressor) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -228,17 +234,19 @@ func (tc *TextureCompressor) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute judge the result
-func (tc *TextureCompressor) PostExecute(r *dcSDK.BKDistResult) error {
+func (tc *TextureCompressor) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r == nil || len(r.Results) == 0 {
-		return fmt.Errorf("invalid param")
+		blog.Warnf("tc: parameter is invalid")
+		return dcType.ErrorUnknown
 	}
 	result := r.Results[0]
 
 	if result.RetCode != 0 {
-		return fmt.Errorf("failed to execute on remote: %s", string(result.ErrorMessage))
+		blog.Warnf("tc: failed to execute on remote: %s", string(result.ErrorMessage))
+		return dcType.ErrorUnknown
 	}
 
-	return nil
+	return dcType.ErrorNone
 }
 
 // LocalExecuteNeed no need
@@ -252,8 +260,8 @@ func (tc *TextureCompressor) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (tc *TextureCompressor) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (tc *TextureCompressor) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // FinalExecute no need

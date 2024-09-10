@@ -11,10 +11,14 @@ package basic
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -209,3 +213,311 @@ func getToolchainID() string {
 	uniqRemoteToolchainID = fmt.Sprintf("tc_%s", dcUtil.UniqID())
 	return uniqRemoteToolchainID
 }
+
+// ++++++++++++++++++++to search toolchain++++++++++++++++++++
+
+func searchToolChain(cmd string) (*types.ToolChain, error) {
+	blog.Infof("basic: real start search toolchian for cmd:%s", cmd)
+	defer blog.Infof("basic: end search toolchian for cmd:%s", cmd)
+
+	cmdbase := filepath.Base(cmd)
+	switch cmdbase {
+	case "clang", "clang++":
+		return searchClang(cmd)
+	case "gcc", "g++":
+		return searchGcc(cmd)
+	case "cc", "c++":
+		return searchGcc(cmd)
+	}
+
+	return nil, nil
+}
+
+func searchCC(exe string) []string {
+	// search cc1
+	cmd := fmt.Sprintf("%s -print-prog-name=cc1", exe)
+	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
+	sandbox := dcSyscall.Sandbox{}
+	_, out, _, err := sandbox.ExecScriptsWithMessage(cmd)
+	if err != nil {
+		blog.Warnf("basic: search as with out:%s,error:%+v", out, err)
+		return nil
+	}
+
+	blog.Infof("basic: got output:[%s] for cmd:[%s]", out, cmd)
+
+	cc1 := strings.TrimSpace(string(out))
+	i := dcFile.Lstat(cc1)
+	if !i.Exist() {
+		err := fmt.Errorf("file %s not existed", cc1)
+		blog.Errorf("basic: %v", err)
+		return nil
+	}
+
+	// cc1plus
+	cc1plus := cc1 + "plus"
+	i = dcFile.Lstat(cc1plus)
+	if !i.Exist() {
+		err := fmt.Errorf("file %s not existed", cc1plus)
+		blog.Errorf("basic: %v", err)
+		return nil
+	}
+
+	return []string{cc1, cc1plus}
+}
+
+func searchAS(exe string) []string {
+	cmd := "which as"
+	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
+	sandbox := dcSyscall.Sandbox{}
+	_, out, _, err := sandbox.ExecScriptsWithMessage(cmd)
+	if err != nil {
+		blog.Warnf("basic: search as with out:%s,error:%+v", out, err)
+		return nil
+	}
+
+	blog.Infof("basic: got output:[%s] for cmd:[%s]", out, cmd)
+	f := strings.TrimSpace(string(out))
+	i := dcFile.Lstat(f)
+	if !i.Exist() {
+		err := fmt.Errorf("file %s not existed", f)
+		blog.Errorf("basic: %v", err)
+		return nil
+	}
+
+	return []string{f}
+}
+
+var soWhiteList = []string{
+	"libstdc++",
+	"libmpc",
+	"libmpfr",
+	"libgmp",
+	"libopcodes",
+	"libbfd",
+}
+
+var specialSOFiles = []string{
+	"/lib64/libstdc++.so.6",
+}
+
+func getLddFiles(exe string) []string {
+	cmd := fmt.Sprintf("ldd %s", exe)
+	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
+	sandbox := dcSyscall.Sandbox{}
+	_, out, _, err := sandbox.ExecScriptsWithMessage(cmd)
+	if err != nil {
+		blog.Warnf("basic: search as with out:%s,error:%+v", out, err)
+		return nil
+	}
+
+	blog.Infof("basic: got output:[%s] for cmd:[%s]", out, cmd)
+	fields := strings.Fields(string(out))
+	files := []string{}
+	for _, f := range fields {
+		// 这个好像会导致异常，先屏蔽
+		if strings.HasSuffix(f, "libc.so.6") {
+			continue
+		}
+		if filepath.IsAbs(f) && strings.Contains(f, ".so") {
+			inWhiteList := false
+			for _, w := range soWhiteList {
+				if strings.Contains(f, w) {
+					inWhiteList = true
+					break
+				}
+			}
+
+			if inWhiteList && dcFile.Lstat(f).Exist() {
+				files = append(files, f)
+			}
+		}
+	}
+
+	blog.Infof("basic: got ldd files:%v for exe:%s", files, exe)
+	return files
+}
+
+func searchGcc(cmd string) (*types.ToolChain, error) {
+	blog.Infof("basic: search gcc toolchain with exe:%s", cmd)
+
+	i := dcFile.Lstat(cmd)
+	if !i.Exist() {
+		err := fmt.Errorf("cmd %s not existed", cmd)
+		blog.Errorf("basic: %v", err)
+		return nil, err
+	}
+
+	t := &types.ToolChain{
+		ToolKey:                cmd,
+		ToolName:               filepath.Base(cmd),
+		ToolLocalFullPath:      cmd,
+		ToolRemoteRelativePath: filepath.Dir(cmd),
+		Files:                  make([]dcSDK.ToolFile, 0),
+		Timestamp:              time.Now().Local().UnixNano(),
+	}
+
+	exefiles := []string{cmd}
+
+	// search cc1 / cc1plus
+	fs := searchCC(cmd)
+	for _, i := range fs {
+		t.Files = append(t.Files, dcSDK.ToolFile{
+			LocalFullPath:      i,
+			RemoteRelativePath: filepath.Dir(i),
+		})
+		exefiles = append(exefiles, i)
+	}
+
+	// search as
+	fs = searchAS(cmd)
+	for _, i := range fs {
+		t.Files = append(t.Files, dcSDK.ToolFile{
+			LocalFullPath:      i,
+			RemoteRelativePath: filepath.Dir(i),
+		})
+		exefiles = append(exefiles, i)
+	}
+
+	// ldd files for executable files
+	for _, i := range exefiles {
+		fs = getLddFiles(i)
+		for _, i := range fs {
+			t.Files = append(t.Files, dcSDK.ToolFile{
+				LocalFullPath:      i,
+				RemoteRelativePath: filepath.Dir(i),
+			})
+		}
+	}
+
+	// add special so
+	for _, f := range specialSOFiles {
+		if dcFile.Lstat(f).Exist() {
+			t.Files = append(t.Files, dcSDK.ToolFile{
+				LocalFullPath:      f,
+				RemoteRelativePath: filepath.Dir(f),
+			})
+		}
+	}
+
+	blog.Infof("basic: got gcc/g++ toolchian:%+v", *t)
+	return t, nil
+}
+
+// search clang crtbegin.o
+func searchCrtbegin(exe string) []string {
+	cmd := fmt.Sprintf("%s -v", exe)
+	blog.Infof("basic: ready run cmd:[%s]", cmd)
+	sandbox := dcSyscall.Sandbox{}
+	_, out, errmsg, err := sandbox.ExecScriptsWithMessage(cmd)
+	if err != nil {
+		blog.Warnf("basic: search clang crtbegin with out:%s,error:%+v", out, err)
+		return nil
+	}
+	blog.Infof("basic: got output:[%s] errmsg:[%s] for cmd:[%s]", out, errmsg, cmd)
+
+	// resolve output message
+	gccpath := ""
+	key := "Selected GCC installation:"
+	lines := strings.Split(string(errmsg), "\n")
+	for _, l := range lines {
+		blog.Infof("basic: check line:[%s]", l)
+		if strings.HasPrefix(l, key) {
+			fields := strings.Split(l, ":")
+			blog.Infof("basic: got fields:%+v,len(fields):%d", fields, len(fields))
+			if len(fields) == 2 {
+				gccpath = strings.TrimSpace(fields[1])
+				i := dcFile.Lstat(gccpath)
+				if !i.Exist() {
+					err := fmt.Errorf("path %s not existed", gccpath)
+					blog.Errorf("basic: %v", err)
+					return nil
+				} else {
+					blog.Infof("basic: gcc path:[%s] existed", gccpath)
+				}
+			}
+			break
+		}
+	}
+
+	fs := make([]string, 0, 2)
+	if gccpath != "" {
+		err := filepath.Walk(gccpath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.HasPrefix(info.Name(), "crt") && strings.HasSuffix(info.Name(), ".o") {
+				fs = append(fs, path)
+			}
+			return nil
+		})
+
+		if err != nil {
+			blog.Warnf("basic: walk dir:%s with error:%v", gccpath, err)
+		}
+	}
+
+	if len(fs) > 0 {
+		blog.Infof("basic: got crtbegin files:%v", fs)
+		return fs
+	}
+
+	return nil
+}
+
+func searchClang(cmd string) (*types.ToolChain, error) {
+	blog.Infof("basic: search clang toolchain with exe:%s", cmd)
+
+	i := dcFile.Lstat(cmd)
+	if !i.Exist() {
+		err := fmt.Errorf("cmd %s not existed", cmd)
+		blog.Errorf("basic: %v", err)
+		return nil, err
+	}
+
+	t := &types.ToolChain{
+		ToolKey:                cmd,
+		ToolName:               filepath.Base(cmd),
+		ToolLocalFullPath:      cmd,
+		ToolRemoteRelativePath: filepath.Dir(cmd),
+		Files:                  make([]dcSDK.ToolFile, 0),
+		Timestamp:              time.Now().Local().UnixNano(),
+	}
+
+	// search clang crtbegin.o
+	fs := searchCrtbegin(cmd)
+	for _, i := range fs {
+		t.Files = append(t.Files, dcSDK.ToolFile{
+			LocalFullPath:      i,
+			RemoteRelativePath: filepath.Dir(i),
+		})
+	}
+
+	exefiles := []string{cmd}
+
+	// ldd files for executable files
+	for _, i := range exefiles {
+		fs = getLddFiles(i)
+		for _, i := range fs {
+			t.Files = append(t.Files, dcSDK.ToolFile{
+				LocalFullPath:      i,
+				RemoteRelativePath: filepath.Dir(i),
+			})
+		}
+	}
+
+	// add special so
+	for _, f := range specialSOFiles {
+		if dcFile.Lstat(f).Exist() {
+			t.Files = append(t.Files, dcSDK.ToolFile{
+				LocalFullPath:      f,
+				RemoteRelativePath: filepath.Dir(f),
+			})
+		}
+	}
+
+	blog.Infof("basic: got clang/clang++ toolchian:%+v", *t)
+	return t, nil
+}
+
+// --------------------to search toolchain--------------------

@@ -128,6 +128,19 @@ func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
 // 得到所有关联文件；如果是链接，则递归搜索，直到找到非链接为止
 // 如果发现链接循环，则报错
 func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
+	// 如果远端路径和本地不一致，则需要将链接替换为真实文件发送过去
+	localdir := filepath.Dir(f)
+	if localdir != remotepath {
+		i := dcFile.Stat(f)
+		if !i.Exist() {
+			err := fmt.Errorf("file %s not existed", f)
+			blog.Errorf("%v", err)
+			return err
+		}
+
+		return checkAndAdd(i, remotepath, files)
+	}
+
 	i := dcFile.Lstat(f)
 	if !i.Exist() {
 		err := fmt.Errorf("file %s not existed", f)
@@ -135,7 +148,7 @@ func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
 		return err
 	}
 
-	// 链接，需要递归
+	// 如果远端路径和本地一致，则将链接相关的文件都包含进来
 	if i.Basic().Mode()&os.ModeSymlink != 0 {
 		originFile, err := os.Readlink(f)
 		if err == nil {
@@ -247,7 +260,11 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 		}
 	}
 
-	blog.Infof("toolchain: get all files:%v", toolfiles)
+	blog.Debugf("toolchain: get all files:%v", toolfiles)
 
 	return toolfiles, nil
+}
+
+func GetAdditionFileKey() string {
+	return "addition\\file|key"
 }
