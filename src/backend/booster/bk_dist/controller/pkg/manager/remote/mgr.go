@@ -593,6 +593,12 @@ func (m *Mgr) ensureFilesWithPriority(
 	sandbox *dcSyscall.Sandbox,
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
+	// 刷新优先级
+	freshPriority(fileDetails)
+	for _, v := range fileDetails {
+		blog.Debugf("remote: after fresh Priority, file:%+v", *v)
+	}
+
 	fileMap := make(map[dcSDK.FileDescPriority]*[]*types.FilesDetails)
 	posMap := make(map[dcSDK.FileDescPriority]*[]int)
 	var maxP dcSDK.FileDescPriority = 0

@@ -18,6 +18,7 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -144,4 +145,91 @@ func isCaredNetError(err error) bool {
 	}
 
 	return false
+}
+
+// calculateDependencies 计算依赖关系
+func calculateDependencies(fileDetails []*types.FilesDetails) [][]int {
+	// 初始化依赖列表
+	dependencies := make([][]int, 0, len(fileDetails))
+	for range len(fileDetails) {
+		dependencies = append(dependencies, make([]int, 0, 0))
+	}
+
+	// 遍历字符串数组，计算依赖关系
+	for i, s1 := range fileDetails {
+		for j, s2 := range fileDetails {
+			if i != j && depend(s1, s2) {
+				dependencies[i] = append(dependencies[i], j)
+			}
+		}
+	}
+
+	return dependencies
+}
+
+// depend 检查 s1 是否依赖 s2
+func depend(s1, s2 *types.FilesDetails) bool {
+	// 如果是s2是s1的子目录，则s1依赖s2
+	if len(s2.File.FilePath) < len(s1.File.FilePath) &&
+		strings.HasPrefix(s1.File.FilePath, s2.File.FilePath) {
+		return true
+	}
+
+	// 如果s1是链接，并且指向s2，则s1依赖s2
+	if s1.File.LinkTarget != "" && s1.File.LinkTarget == s2.File.FilePath {
+		return true
+	}
+
+	return false
+}
+
+func freshPriority(fileDetails []*types.FilesDetails) error {
+	for _, v := range fileDetails {
+		// 重置优先级为-1
+		v.File.Priority = -1
+	}
+
+	// 得到路径的依赖关系
+	dependencies := calculateDependencies(fileDetails)
+
+	// 计算权重
+	for {
+		allok := true
+		for i := range fileDetails {
+			if len(dependencies[i]) == 0 {
+				if fileDetails[i].File.Priority < 0 {
+					fileDetails[i].File.Priority = 0
+				}
+			} else {
+				maxPriority := -1
+				alldependok := true
+				for _, v := range dependencies[i] {
+					dependPriority := int(fileDetails[v].File.Priority)
+					if dependPriority >= 0 {
+						if dependPriority > maxPriority {
+							maxPriority = dependPriority
+						}
+					} else {
+						blog.Debugf("remote uitl: %s wait %s",
+							fileDetails[i].File.FilePath, fileDetails[v].File.FilePath)
+						alldependok = false
+					}
+				}
+				if alldependok {
+					dependencies[i] = nil
+					fileDetails[i].File.Priority = sdk.FileDescPriority(maxPriority + 1)
+					blog.Debugf("remote uitl: %s set Priority to %d",
+						fileDetails[i].File.FilePath, maxPriority+1)
+				} else {
+					allok = false
+				}
+			}
+		}
+
+		if allok {
+			break
+		}
+	}
+
+	return nil
 }

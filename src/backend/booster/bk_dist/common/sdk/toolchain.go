@@ -232,7 +232,7 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 	// 将文件集合中涉及到目录的链接列出来，这种需要提前发送
 	getAllLinkDirs(&toolfiles)
 
-	blog.Infof("toolchain: get all files:%v", toolfiles)
+	blog.Infof("toolchain: get all files:%+v", toolfiles)
 
 	return toolfiles, nil
 }
