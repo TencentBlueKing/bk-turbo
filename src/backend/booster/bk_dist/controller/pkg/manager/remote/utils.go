@@ -151,7 +151,7 @@ func isCaredNetError(err error) bool {
 func calculateDependencies(fileDetails []*types.FilesDetails) [][]int {
 	// 初始化依赖列表
 	dependencies := make([][]int, 0, len(fileDetails))
-	for range len(fileDetails) {
+	for range fileDetails {
 		dependencies = append(dependencies, make([]int, 0, 0))
 	}
 
