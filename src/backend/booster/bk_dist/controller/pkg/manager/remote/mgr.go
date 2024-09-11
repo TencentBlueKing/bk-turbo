@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -593,10 +594,12 @@ func (m *Mgr) ensureFilesWithPriority(
 	sandbox *dcSyscall.Sandbox,
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
-	// 刷新优先级
-	freshPriority(fileDetails)
-	for _, v := range fileDetails {
-		blog.Debugf("remote: after fresh Priority, file:%+v", *v)
+	// 刷新优先级，windows的先不实现
+	if runtime.GOOS != "windows" {
+		freshPriority(fileDetails)
+		for _, v := range fileDetails {
+			blog.Debugf("remote: after fresh Priority, file:%+v", *v)
+		}
 	}
 
 	fileMap := make(map[dcSDK.FileDescPriority]*[]*types.FilesDetails)

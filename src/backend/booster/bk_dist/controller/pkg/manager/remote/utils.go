@@ -170,11 +170,12 @@ func calculateDependencies(fileDetails []*types.FilesDetails) [][]int {
 
 // depend 检查 s1 是否依赖 s2
 func depend(s1, s2 *types.FilesDetails) bool {
-	// 如果是s2是s1的子目录，则s1依赖s2
+	// 如果是s2是s1的子目录，且s2不是根目录，则s1依赖s2
 	dir1 := filepath.Dir(s1.File.FilePath)
 	dir2 := filepath.Dir(s2.File.FilePath)
 	if len(dir2) < len(dir1) &&
-		strings.HasPrefix(dir1, dir2) {
+		strings.HasPrefix(dir1, dir2) &&
+		dir2 != "/" {
 		return true
 	}
 
