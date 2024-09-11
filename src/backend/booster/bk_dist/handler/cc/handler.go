@@ -235,7 +235,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string) ([]*dcFile.Info, error) {
 
 	sep := "\n"
 	lines := strings.Split(string(data), sep)
-	uniqlines := commonUtil.UniqArr(lines)
+	uniqlines := dcUtil.UniqArr(lines)
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
 	return dcFile.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
@@ -295,10 +295,10 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
 				}
 
-				*includes = append(*includes, commonUtil.FormatFilePath(targetf))
+				*includes = append(*includes, dcUtil.FormatFilePath(targetf))
 
 				// 如果是链接，则将相关指向的文件都包含进来
-				fs := commonUtil.GetAllLinkFiles(targetf)
+				fs := dcUtil.GetAllLinkFiles(targetf)
 				if len(fs) > 0 {
 					*includes = append(*includes, fs...)
 				}
@@ -326,7 +326,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -337,7 +337,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -348,7 +348,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -359,7 +359,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
-	uniqlines := commonUtil.UniqArr(includes)
+	uniqlines := dcUtil.UniqArr(includes)
 
 	// append symlink or symlinked if need
 	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
@@ -368,7 +368,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	}
 
 	// TODO :将链接路径找出并放到前面
-	linkdirs := commonUtil.GetAllLinkDir(uniqlines)
+	linkdirs := dcUtil.GetAllLinkDir(uniqlines)
 	if len(linkdirs) > 0 {
 		uniqlines = append(linkdirs, uniqlines...)
 	}

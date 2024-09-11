@@ -380,7 +380,7 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 	}
 
 	lines := strings.Split(string(data), "\r\n")
-	uniqlines := commonUtil.UniqArr(lines)
+	uniqlines := dcUtil.UniqArr(lines)
 	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
 
 	// if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
@@ -480,16 +480,16 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 
 			for _, l := range depend.Data.Includes {
 				if !filepath.IsAbs(l) {
 					l, _ = filepath.Abs(filepath.Join(workdir, l))
 				}
-				includes = append(includes, commonUtil.FormatFilePath(l))
+				includes = append(includes, dcUtil.FormatFilePath(l))
 
 				// 如果是链接，则将相关指向的文件都包含进来
-				fs := commonUtil.GetAllLinkFiles(l)
+				fs := dcUtil.GetAllLinkFiles(l)
 				if len(fs) > 0 {
 					includes = append(includes, fs...)
 				}
@@ -505,10 +505,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 
 			// 如果是链接，则将相关指向的文件都包含进来
-			fs := commonUtil.GetAllLinkFiles(l)
+			fs := dcUtil.GetAllLinkFiles(l)
 			if len(fs) > 0 {
 				includes = append(includes, fs...)
 			}
@@ -521,7 +521,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		if !filepath.IsAbs(l) {
 			l, _ = filepath.Abs(filepath.Join(workdir, l))
 		}
-		includes = append(includes, commonUtil.FormatFilePath(l))
+		includes = append(includes, dcUtil.FormatFilePath(l))
 	}
 
 	// copy includeRspFiles
@@ -531,7 +531,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -542,7 +542,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -556,10 +556,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	// for i := range includes {
 	// 	includes[i] = strings.Replace(includes[i], "/", "\\", -1)
 	// }
-	uniqlines := commonUtil.UniqArr(includes)
+	uniqlines := dcUtil.UniqArr(includes)
 
 	if dcPump.PumpCorrectCap(cl.sandbox.Env) {
-		uniqlines, _ = commonUtil.CorrectPathCap(uniqlines)
+		uniqlines, _ = dcUtil.CorrectPathCap(uniqlines)
 	}
 
 	// TODO : save to cc.pumpHeadFile
