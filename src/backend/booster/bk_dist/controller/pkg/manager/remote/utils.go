@@ -168,15 +168,37 @@ func calculateDependencies(fileDetails []*types.FilesDetails) [][]int {
 	return dependencies
 }
 
+func isSubString(s1, s2 string) bool {
+	return len(s1) > len(s2) &&
+		strings.HasPrefix(s1, s2) &&
+		s2 != "/"
+}
+
 // depend 检查 s1 是否依赖 s2
 func depend(s1, s2 *types.FilesDetails) bool {
-	// 如果是s2是s1的子目录，且s2不是根目录，则s1依赖s2
-	dir1 := filepath.Dir(s1.File.FilePath)
-	dir2 := filepath.Dir(s2.File.FilePath)
-	if len(dir2) < len(dir1) &&
-		strings.HasPrefix(dir1, dir2) &&
-		dir2 != "/" {
-		return true
+	is1File := s1.File.Priority == sdk.RealFilePriority || s1.File.Priority == sdk.LinkFilePriority
+	is2File := s2.File.Priority == sdk.RealFilePriority || s2.File.Priority == sdk.LinkFilePriority
+	// 如果s1是文件，s2是目录
+	if is1File {
+		if is2File { // 如果s1是文件，s2是文件
+			if isSubString(filepath.Dir(s1.File.FilePath), filepath.Dir(s2.File.FilePath)) {
+				return true
+			}
+		} else { // 如果s1是文件，s2是目录
+			if isSubString(s1.File.FilePath, s2.File.FilePath) {
+				return true
+			}
+		}
+	} else {
+		if is2File { // 如果s1是目录，s2是文件
+			if isSubString(s1.File.FilePath, filepath.Dir(s2.File.FilePath)) {
+				return true
+			}
+		} else { // 如果s1是目录，s2是目录
+			if isSubString(s1.File.FilePath, s2.File.FilePath) {
+				return true
+			}
+		}
 	}
 
 	// 如果s1是链接，并且指向s2，则s1依赖s2
@@ -188,28 +210,43 @@ func depend(s1, s2 *types.FilesDetails) bool {
 }
 
 func freshPriority(fileDetails []*types.FilesDetails) error {
-	for _, v := range fileDetails {
-		// 重置优先级为-1
-		v.File.Priority = -1
-	}
-
 	// 得到路径的依赖关系
 	dependencies := calculateDependencies(fileDetails)
 
+	// 重置优先级为-1
+	for _, v := range fileDetails {
+		v.File.Priority = -1
+	}
+
 	// 计算权重
+	maxPriority := 0
+	maxTry := 30
+	tryNum := 0
 	for {
+		tryNum++
 		allok := true
 		for i := range fileDetails {
+			// 如果超过遍历次数，则剩余的全部赋值，避免死循环
+			if tryNum >= maxTry {
+				if fileDetails[i].File.Priority < 0 {
+					fileDetails[i].File.Priority = sdk.FileDescPriority(maxPriority + 1)
+				}
+				continue
+			}
+
 			if len(dependencies[i]) == 0 {
 				if fileDetails[i].File.Priority < 0 {
 					fileDetails[i].File.Priority = 0
 				}
 			} else {
-				maxPriority := -1
+				maxDependPriority := -1
 				alldependok := true
 				for _, v := range dependencies[i] {
 					dependPriority := int(fileDetails[v].File.Priority)
 					if dependPriority >= 0 {
+						if dependPriority > maxDependPriority {
+							maxDependPriority = dependPriority
+						}
 						if dependPriority > maxPriority {
 							maxPriority = dependPriority
 						}
@@ -221,16 +258,17 @@ func freshPriority(fileDetails []*types.FilesDetails) error {
 				}
 				if alldependok {
 					dependencies[i] = nil
-					fileDetails[i].File.Priority = sdk.FileDescPriority(maxPriority + 1)
+					fileDetails[i].File.Priority = sdk.FileDescPriority(maxDependPriority + 1)
 					blog.Debugf("remote uitl: %s set Priority to %d",
-						fileDetails[i].File.FilePath, maxPriority+1)
+						fileDetails[i].File.FilePath, maxDependPriority+1)
 				} else {
 					allok = false
 				}
 			}
 		}
 
-		if allok {
+		if allok || tryNum >= maxTry {
+			blog.Infof("remote uitl: finished set Priority after %d try", tryNum)
 			break
 		}
 	}
