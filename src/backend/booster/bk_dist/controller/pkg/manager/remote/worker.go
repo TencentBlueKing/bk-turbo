@@ -28,6 +28,9 @@ const (
 	DetectFailed
 	Refused
 	InService
+	Retrying
+	RetrySucceed
+	RetryFailed
 	Unknown = 99
 )
 
@@ -39,6 +42,9 @@ var (
 		DetectFailed:  "detectfailed",
 		Refused:       "refused",
 		InService:     "inservice",
+		Retrying:      "retrying",
+		RetrySucceed:  "retrysucceed",
+		RetryFailed:   "retryfailed",
 		Unknown:       "unknown",
 	}
 )

@@ -27,6 +27,9 @@ type RemoteSlotMgr interface {
 	GetDeadWorkers() []*worker
 	RecoverDeadWorker(w *worker)
 	DisableWorker(host *dcProtocol.Host)
+	EnableWorker(host *dcProtocol.Host)
+	CanWorkerRetry(host *dcProtocol.Host) bool // check if worker can retry, if can set worker status to retrying
+	SetWorkerStatus(host *dcProtocol.Host, status Status)
 	Lock(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host
 	Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host)
 	TotalSlots() int
@@ -265,6 +268,80 @@ func (wr *resource) DisableWorker(host *dcProtocol.Host) {
 
 	blog.Infof("remote slot: total slot:%d after disable host:%v", wr.totalSlots, *host)
 	return
+}
+
+func (wr *resource) EnableWorker(host *dcProtocol.Host) {
+	if host == nil {
+		return
+	}
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+
+	for _, w := range wr.worker {
+		if !host.Equal(w.host) {
+			continue
+		}
+		if !w.disabled {
+			blog.Infof("remote slot: host:%v enabled before, do nothing now", *host)
+			return // already enabled
+		}
+
+		w.disabled = false
+		wr.totalSlots += w.totalSlots
+		w.status = RetrySucceed
+		break
+	}
+
+	for _, v := range wr.usageMap {
+		v.limit = wr.totalSlots
+		blog.Infof("remote slot: usage map:%v after enable host:%v", *v, *host)
+	}
+	blog.Infof("remote slot: total slot:%d after enable host:%v", wr.totalSlots, *host)
+}
+
+func (wr *resource) CanWorkerRetry(host *dcProtocol.Host) bool {
+	if host == nil {
+		return false
+	}
+
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+	for _, wk := range wr.worker {
+		if !wk.host.Equal(host) {
+			continue
+		}
+
+		if wk.dead {
+			blog.Infof("remote slot: host:%v is already dead, do nothing now", host)
+			return false
+		}
+		if !wk.disabled {
+			return false
+		}
+		if wk.status == Retrying {
+			blog.Infof("remote slot: host:%v is retrying, do nothing now", host)
+			return false
+		}
+		blog.Info("remote slot: host:%v can retry, change worker from %s to %s", host, wk.status, Retrying)
+		wk.status = Retrying
+		return true
+	}
+
+	return false
+}
+
+func (wr *resource) SetWorkerStatus(host *dcProtocol.Host, s Status) {
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+
+	for _, w := range wr.worker {
+		if !w.host.Equal(host) {
+			continue
+		}
+
+		w.status = s
+		break
+	}
 }
 
 func (wr *resource) WorkerDead(w *worker) {
