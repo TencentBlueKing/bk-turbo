@@ -278,6 +278,11 @@ func freshPriority(fileDetails []*types.FilesDetails) error {
 				continue
 			}
 
+			// 已经设置了权重
+			if fileDetails[i].File.Priority >= 0 {
+				continue
+			}
+
 			if len(dependencies[i]) == 0 {
 				if fileDetails[i].File.Priority < 0 {
 					fileDetails[i].File.Priority = 0
