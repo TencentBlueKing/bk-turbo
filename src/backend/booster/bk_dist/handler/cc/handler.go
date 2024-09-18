@@ -12,6 +12,7 @@ package cc
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -78,7 +79,8 @@ type TaskCC struct {
 	supportDirectives bool
 
 	responseFile     string
-	sourcedependfile string
+	origindependfile string // 原始命令指定的依赖文件
+	sourcedependfile string // pump模式需要的依赖文件
 	pumpHeadFile     string
 	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
 	// 在rsp中-I后面的参数，需要将这些目录全部发送到远端
@@ -424,13 +426,17 @@ func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, f
 
 // TODO : 如果原始命令有 -MD 或者 -MMD，则需要根据规则得到 .d 文件
 func (cc *TaskCC) forceDepend(arg *ccArgs) error {
+	cc.sourcedependfile = makeTmpFileName(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc_depend", ".d")
+	cc.sourcedependfile = strings.Replace(cc.sourcedependfile, "\\", "/", -1)
+	cc.addTmpFile(cc.sourcedependfile)
+
 	if arg.hasDependencies {
 		if len(arg.mfOutputFile) > 0 { // 已经指定了依赖文件
 			dependfile := arg.mfOutputFile[0]
 			if !filepath.IsAbs(dependfile) {
 				dependfile, _ = filepath.Abs(filepath.Join(cc.sandbox.Dir, dependfile))
 			}
-			cc.sourcedependfile = dependfile
+			cc.origindependfile = dependfile
 		} else {
 			if arg.outputFile != "" { // 从 -o 得到依赖文件，替换后缀
 				ext := filepath.Ext(arg.outputFile)
@@ -439,7 +445,7 @@ func (cc *TaskCC) forceDepend(arg *ccArgs) error {
 				if !filepath.IsAbs(dependfile) {
 					dependfile, _ = filepath.Abs(filepath.Join(cc.sandbox.Dir, dependfile))
 				}
-				cc.sourcedependfile = dependfile
+				cc.origindependfile = dependfile
 			} else { // 从输入文件得到，只取文件名
 				if arg.inputFile != "" {
 					ext := filepath.Ext(arg.inputFile)
@@ -449,14 +455,15 @@ func (cc *TaskCC) forceDepend(arg *ccArgs) error {
 					if !filepath.IsAbs(dependfile) {
 						dependfile, _ = filepath.Abs(filepath.Join(cc.sandbox.Dir, dependfile))
 					}
-					cc.sourcedependfile = dependfile
+					cc.origindependfile = dependfile
 				}
 			}
 		}
 	} else {
-		cc.sourcedependfile = makeTmpFileName(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc_depend", ".d")
-		cc.sourcedependfile = strings.Replace(cc.sourcedependfile, "\\", "/", -1)
-		cc.addTmpFile(cc.sourcedependfile)
+		// cc.sourcedependfile = makeTmpFileName(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc_depend", ".d")
+		// cc.sourcedependfile = strings.Replace(cc.sourcedependfile, "\\", "/", -1)
+		// cc.addTmpFile(cc.sourcedependfile)
+		cc.origindependfile = cc.sourcedependfile
 	}
 
 	if cc.sourcedependfile != "" {
@@ -868,7 +875,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			args = append(args, "-MD")
 		}
 		args = append(args, "-MF")
-		args = append(args, cc.sourcedependfile)
+		args = append(args, cc.origindependfile)
 	}
 
 	if err = cc.preBuild(args); err != nil {
@@ -877,6 +884,31 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			Code:  dcType.UnknowCode,
 			Error: err,
 		}
+	}
+
+	// 备份依赖文件，因为默认的依赖文件可能会被其它构建程序修改
+	if dcFile.Stat(cc.origindependfile).Exist() {
+		data, _ := os.ReadFile(cc.origindependfile)
+		// only for debug by tomtian
+		blog.Infof("cc: [%s] debug depend %s:[%s]", cc.tag, cc.origindependfile, data)
+
+		if cc.origindependfile != cc.sourcedependfile {
+			src, err := os.Open(cc.origindependfile)
+			if err == nil {
+				defer src.Close()
+				dst, err := os.Create(cc.sourcedependfile)
+				if err == nil {
+					defer dst.Close()
+					_, err = io.Copy(dst, src)
+					blog.Infof("cc: [%s] debug depend copy %s to %s",
+						cc.tag,
+						cc.origindependfile,
+						cc.sourcedependfile)
+				}
+			}
+		}
+	} else {
+		blog.Infof("cc: [%s] debug depend %s not existed", cc.tag, cc.origindependfile)
 	}
 
 	// generate the input files for pre-process file

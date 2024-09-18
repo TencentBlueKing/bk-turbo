@@ -1438,7 +1438,7 @@ func (m *Mgr) ensureOneFileCollection(
 			File:    f,
 		})
 	}
-	_, err = m.ensureFiles(handler, pid, sandbox, fileDetails, retry)
+	_, err = m.ensureFilesWithPriority(handler, pid, sandbox, fileDetails)
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
