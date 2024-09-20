@@ -888,9 +888,9 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	// 备份依赖文件，因为默认的依赖文件可能会被其它构建程序修改
 	if dcFile.Stat(cc.origindependfile).Exist() {
-		data, _ := os.ReadFile(cc.origindependfile)
-		// only for debug by tomtian
-		blog.Infof("cc: [%s] debug depend %s:[%s]", cc.tag, cc.origindependfile, data)
+		// data, _ := os.ReadFile(cc.origindependfile)
+		// // only for debug by tomtian
+		// blog.Debugf("cc: [%s] debug depend %s:[%s]", cc.tag, cc.origindependfile, data)
 
 		if cc.origindependfile != cc.sourcedependfile {
 			src, err := os.Open(cc.origindependfile)
@@ -900,7 +900,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				if err == nil {
 					defer dst.Close()
 					_, err = io.Copy(dst, src)
-					blog.Infof("cc: [%s] debug depend copy %s to %s",
+					blog.Infof("cc: [%s] depend copy %s to %s",
 						cc.tag,
 						cc.origindependfile,
 						cc.sourcedependfile)
@@ -908,7 +908,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			}
 		}
 	} else {
-		blog.Infof("cc: [%s] debug depend %s not existed", cc.tag, cc.origindependfile)
+		blog.Infof("cc: [%s] depend %s not exist", cc.tag, cc.origindependfile)
 	}
 
 	// generate the input files for pre-process file

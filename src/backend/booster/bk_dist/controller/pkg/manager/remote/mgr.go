@@ -878,9 +878,13 @@ func (m *Mgr) ensureFiles(
 		// 等待接收协程完成或者报错
 		err := <-receiveResult
 		if err != nil {
+			blog.Infof("remote: failed to ensure multi %d files for work(%s) from pid(%d) to server with error:%v",
+				count, m.work.ID(), pid, err)
 			return nil, err
 		}
 
+		blog.Infof("remote: success to ensure multi %d files for work(%s) from pid(%d) to server",
+			count, m.work.ID(), pid)
 		return r, nil
 	}
 
