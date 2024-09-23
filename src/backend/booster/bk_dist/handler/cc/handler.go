@@ -1250,7 +1250,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.rewriteCrossArgs = targetArgs
 
 	// handle the pch options
-	finalArgs := cc.scanPchFile(targetArgs)
+	finalArgs := cc.scanPchFile(targetArgs, cc.needcopypumpheadfile)
 
 	cc.serverSideArgs = finalArgs
 	if checkFiles, ok, pumpErr := cc.tryPump(); !ok {
@@ -1514,7 +1514,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 // try to get pch file desc and the args according to firstIncludeFile
 // if pch is valid, there must be a option -include xx.h(xx.hpp)
 // and must be the first seen -include option(if there are multiple -include)
-func (cc *TaskCC) scanPchFile(args []string) []string {
+func (cc *TaskCC) scanPchFile(args []string, isPump bool) []string {
 	if cc.firstIncludeFile == "" {
 		return args
 	}
@@ -1554,7 +1554,13 @@ func (cc *TaskCC) scanPchFile(args []string) []string {
 		}
 	}
 
-	return append(args, pchPreProcessOption)
+	// pchPreProcessOption 会导致得到的依赖文件列表不全，pump模式不加该参数
+	// 但是不加该选项，会导致生成 .ii 时完全展开，性能变差
+	if !isPump {
+		return append(args, pchPreProcessOption)
+	}
+
+	return args
 }
 
 func (cc *TaskCC) statisticsCCache() (*types.Ccache, error) {
