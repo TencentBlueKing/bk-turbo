@@ -38,6 +38,8 @@ const (
 	corkMaxSize = 1024 * 1024 * 10
 	// corkMaxSize   = 1024 * 1024 * 1024
 	largeFileSize = 1024 * 1024 * 100 // 100MB
+
+	fileMaxFailCount = 5
 )
 
 // NewMgr get a new Remote Mgr
@@ -129,11 +131,11 @@ type Mgr struct {
 }
 
 type fileSendMap struct {
-	sync.Mutex
+	sync.RWMutex
 	cache map[string]*[]*types.FileInfo
 }
 
-func (fsm *fileSendMap) matchOrInsert(desc dcSDK.FileDesc, retry bool) (*types.FileInfo, bool) {
+func (fsm *fileSendMap) matchOrInsert(desc dcSDK.FileDesc, query bool) (*types.FileInfo, bool) {
 	fsm.Lock()
 	defer fsm.Unlock()
 
@@ -161,9 +163,10 @@ func (fsm *fileSendMap) matchOrInsert(desc dcSDK.FileDesc, retry bool) (*types.F
 
 	for _, ci := range *c {
 		if ci.Match(desc) {
-			//if worker is retrying and send failed before, try to set send status to retrying
-			if retry && ci.SendStatus == types.FileSendFailed {
-				ci.SendStatus = types.FileSendRetrying
+			//if worker is send failed before, try to send it again
+			if ci.SendStatus == types.FileSendFailed && !query {
+				blog.Debugf("file: retry send file %s, fail count %d", desc.FilePath, ci.FailCount)
+				ci.SendStatus = types.FileSending
 				return ci, false
 			}
 			return ci, true
@@ -174,7 +177,7 @@ func (fsm *fileSendMap) matchOrInsert(desc dcSDK.FileDesc, retry bool) (*types.F
 	return info, false
 }
 
-func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc, retry bool) []matchResult {
+func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc) []matchResult {
 	fsm.Lock()
 	defer fsm.Unlock()
 
@@ -210,10 +213,10 @@ func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc, retry bool) []ma
 		for _, ci := range *c {
 			if ci.Match(*desc) {
 				fileMatched := true
-				//if worker is retrying and send failed before, try to set send status to retrying
-				if retry && ci.SendStatus == types.FileSendFailed {
+				//if worker is send failed before, try to set send status to retrying
+				if ci.SendStatus == types.FileSendFailed {
 					fileMatched = false
-					ci.SendStatus = types.FileSendRetrying
+					ci.SendStatus = types.FileSending
 				}
 				result = append(result, matchResult{
 					info:  ci,
@@ -254,6 +257,7 @@ func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendS
 		FileMode:           desc.Filemode,
 		LinkTarget:         desc.LinkTarget,
 		SendStatus:         status,
+		FailCount:          0,
 	}
 
 	c, ok := fsm.cache[desc.FilePath]
@@ -266,12 +270,43 @@ func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendS
 	for _, ci := range *c {
 		if ci.Match(desc) {
 			ci.SendStatus = status
+			if status == types.FileSendFailed {
+				ci.FailCount++
+			}
+			if status == types.FileSendSucceed {
+				ci.FailCount = 0
+			}
+			//ci.LastModifyTime = time.Now().Unix()
 			return
 		}
 	}
 
 	*c = append(*c, info)
 	return
+}
+
+func (fsm *fileSendMap) ReachFailCount(descs []dcSDK.FileDesc) bool {
+	fsm.RLock()
+	defer fsm.RUnlock()
+
+	if fsm.cache == nil {
+		return true
+	}
+	for _, desc := range descs {
+		c, ok := fsm.cache[desc.FilePath]
+		if !ok || c == nil || len(*c) == 0 {
+			continue
+		}
+		for _, ci := range *fsm.cache[desc.FilePath] {
+			if ci.Match(desc) {
+				if ci.FailCount > fileMaxFailCount {
+					return false
+				}
+			}
+		}
+	}
+
+	return true
 }
 
 // Init do the initialization for remote manager
@@ -526,6 +561,9 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		return nil, err
 	}
 
+	if !m.isFilesNeedSend(req.Server.Server, req.Req.Commands) {
+		return nil, fmt.Errorf("remote: no need to send files for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
+	}
 	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
 	if err != nil {
 		req.BanWorkerList = append(req.BanWorkerList, req.Server)
@@ -599,6 +637,22 @@ func (m *Mgr) SendFiles(req *types.RemoteTaskSendFileRequest) ([]string, error) 
 		req.Sandbox,
 		getFileDetailsFromSendFileRequest(req),
 	)
+}
+
+// check if files need send to remote worker
+func (m *Mgr) isFilesNeedSend(server string, commands []dcSDK.BKCommand) bool {
+	m.fileSendMutex.Lock()
+	target, ok := m.fileSendMap[server]
+	if !ok {
+		m.fileSendMutex.Unlock()
+		return true
+	}
+	m.fileSendMutex.Unlock()
+	var fds []dcSDK.FileDesc
+	for _, c := range commands {
+		fds = append(fds, c.Inputfiles...)
+	}
+	return target.ReachFailCount(fds)
 }
 
 func (m *Mgr) ensureFilesWithPriority(
@@ -744,7 +798,7 @@ func (m *Mgr) ensureFiles(
 			if !m.conf.SendCork {
 				go func(err chan<- error, host *dcProtocol.Host, req *dcSDK.BKDistFileSender, retry bool) {
 					t := time.Now().Local()
-					err <- m.ensureSingleFile(handler, host, req, sandbox, retry)
+					err <- m.ensureSingleFile(handler, host, req, sandbox)
 					d := time.Now().Local().Sub(t)
 					if d > 200*time.Millisecond {
 						blog.Debugf("remote: single file cost time for work(%s) from pid(%d) to server(%s): %s, %s",
@@ -819,7 +873,7 @@ func (m *Mgr) ensureFiles(
 			for _, v := range *fs {
 				descs = append(descs, v.file)
 			}
-			results := m.checkOrLockCorkFiles(server, descs, retry)
+			results := m.checkOrLockCorkFiles(server, descs)
 			blog.Debugf("remote: got %d results for %d cork files count:%d for work(%s) from pid(%d) to server",
 				len(results), len(descs), count, m.work.ID(), pid)
 			needSendCorkFiles := make([]*corkFile, 0, totalFileNum)
@@ -841,9 +895,9 @@ func (m *Mgr) ensureFiles(
 
 				// 启动协程跟踪未发送完成的文件
 				c := (*fs)[i]
-				go func(err chan<- error, c *corkFile, r matchResult, retry bool) {
-					err <- m.ensureSingleCorkFile(c, r, retry)
-				}(wg, c, v, retry)
+				go func(err chan<- error, c *corkFile, r matchResult) {
+					err <- m.ensureSingleCorkFile(c, r)
+				}(wg, c, v)
 			}
 
 			// TODO : 检查是否在server端有缓存了，如果有，则无需发送，调用 checkBatchCache
@@ -930,30 +984,29 @@ func (m *Mgr) ensureSingleFile(
 	handler dcSDK.RemoteWorkerHandler,
 	host *dcProtocol.Host,
 	req *dcSDK.BKDistFileSender,
-	sandbox *dcSyscall.Sandbox,
-	retry bool) (err error) {
+	sandbox *dcSyscall.Sandbox) (err error) {
 	if len(req.Files) == 0 {
 		return fmt.Errorf("empty files")
 	}
 	req.Files = req.Files[:1]
 	desc := req.Files[0]
-	blog.Debugf("remote: try to ensure single file(%s) for work(%s) to server(%s) with retry %t",
-		desc.FilePath, m.work.ID(), host.Server, retry)
+	blog.Debugf("remote: try to ensure single file(%s) for work(%s) to server(%s)",
+		desc.FilePath, m.work.ID(), host.Server)
 
-	status, ok := m.checkOrLockSendFile(host.Server, desc, retry)
+	status, ok := m.checkOrLockSendFile(host.Server, desc, false)
 
 	// 已经有人发送了文件, 等待文件就绪
 	if ok {
 		blog.Debugf("remote: try to ensure single file(%s) for work(%s) to server(%s), "+
-			"some one is sending this file with retry %t", desc.FilePath, m.work.ID(), host.Server, retry)
+			"some one is sending this file", desc.FilePath, m.work.ID(), host.Server)
 		tick := time.NewTicker(m.checkSendFileTick)
 		defer tick.Stop()
 
-		for status == types.FileSending || (retry && status == types.FileSendRetrying) {
+		for status == types.FileSending {
 			select {
 			case <-tick.C:
-				// 不是发送文件的goroutine，不需要发送failed文件
-				status, _ = m.checkOrLockSendFile(host.Server, desc, false)
+				// 不是发送文件的goroutine，不需要修改状态，仅查询状态
+				status, _ = m.checkOrLockSendFile(host.Server, desc, true)
 			}
 		}
 
@@ -966,10 +1019,6 @@ func (m *Mgr) ensureSingleFile(
 			blog.Debugf("remote: success to ensure single file(%s) for work(%s) to server(%s)",
 				desc.FilePath, m.work.ID(), host.Server)
 			return nil
-		case types.FileSendRetrying:
-			blog.Warnf("remote: single file(%s) for work(%s) to server(%s) is retrying now",
-				desc.FilePath, m.work.ID(), host.Server)
-			return types.ErrSendFileRetrying
 		default:
 			return fmt.Errorf("unknown file send status: %s", status.String())
 		}
@@ -993,8 +1042,8 @@ func (m *Mgr) ensureSingleFile(
 	// 	}
 	// }
 
-	blog.Debugf("remote: try to ensure single file(%s) for work(%s) to server(%s), going to send this file with retry %t",
-		desc.FilePath, m.work.ID(), host.Server, retry)
+	blog.Debugf("remote: try to ensure single file(%s) for work(%s) to server(%s), going to send this file",
+		desc.FilePath, m.work.ID(), host.Server)
 	req.Messages = m.fileMessageBank.get(desc)
 
 	// 同步发送文件
@@ -1019,8 +1068,8 @@ func (m *Mgr) ensureSingleFile(
 	}
 
 	if err != nil {
-		blog.Errorf("remote: execute send file(%s) for work(%s) to server(%s) failed with retry %t: %v",
-			desc.FilePath, m.work.ID(), host.Server, retry, err)
+		blog.Errorf("remote: execute send file(%s) for work(%s) to server(%s) failed: %v",
+			desc.FilePath, m.work.ID(), host.Server, err)
 		return err
 	}
 
@@ -1029,13 +1078,13 @@ func (m *Mgr) ensureSingleFile(
 			desc.FilePath, m.work.ID(), host.Server, retCode)
 	}
 
-	blog.Debugf("remote: success to execute send file(%s) for work(%s) to server(%s) with retry %t",
-		desc.FilePath, m.work.ID(), host.Server, retry)
+	blog.Debugf("remote: success to execute send file(%s) for work(%s) to server(%s)",
+		desc.FilePath, m.work.ID(), host.Server)
 	return nil
 }
 
 // ensureSingleCorkFile 保证给到的第一个文件被正确分发到目标机器上, 若给到的文件多于一个, 多余的部分会被忽略
-func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult, retry bool) (err error) {
+func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 	status := r.info.SendStatus
 	host := c.host
 	desc := c.file
@@ -1050,11 +1099,11 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult, retry bool) (err 
 		tick := time.NewTicker(m.checkSendFileTick)
 		defer tick.Stop()
 
-		for status == types.FileSending || (retry && status == types.FileSendRetrying) {
+		for status == types.FileSending {
 			select {
 			case <-tick.C:
 				// 不是发送文件的goroutine，不能修改状态
-				status, _ = m.checkOrLockSendFile(host.Server, *desc, false)
+				status, _ = m.checkOrLockSendFile(host.Server, *desc, true)
 			}
 		}
 
@@ -1067,9 +1116,6 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult, retry bool) (err 
 			blog.Debugf("remote: end ensure single cork file(%s) for work(%s) to server(%s) succeed",
 				desc.FilePath, m.work.ID(), host.Server)
 			return nil
-		case types.FileSendRetrying:
-			blog.Warnf("remote: single cork file(%s) for work(%s) to server(%s) is retrying now", desc.FilePath, m.work.ID(), host.Server)
-			return types.ErrSendFileRetrying
 		default:
 			blog.Errorf("remote: end ensure single cork file(%s) for work(%s) to server(%s), "+
 				" with unknown status", desc.FilePath, m.work.ID(), host.Server)
@@ -1168,7 +1214,7 @@ func (m *Mgr) checkBatchCache(
 }
 
 // checkOrLockFile 检查目标file的sendStatus, 如果已经被发送, 则返回当前状态和true; 如果没有被发送过, 则将其置于sending, 并返回false
-func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc, retry bool) (types.FileSendStatus, bool) {
+func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc, query bool) (types.FileSendStatus, bool) {
 	t1 := time.Now().Local()
 	m.fileSendMutex.Lock()
 
@@ -1190,7 +1236,7 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc, retry bool
 	}
 	m.fileSendMutex.Unlock()
 
-	info, match := target.matchOrInsert(desc, retry)
+	info, match := target.matchOrInsert(desc, query)
 	return info.SendStatus, match
 }
 
@@ -1200,7 +1246,7 @@ type matchResult struct {
 }
 
 // checkOrLockCorkFiles 批量检查目标file的sendStatus, 如果已经被发送, 则返回当前状态和true; 如果没有被发送过, 则将其置于sending, 并返回false
-func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry bool) []matchResult {
+func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc) []matchResult {
 	m.fileSendMutex.Lock()
 	target, ok := m.fileSendMap[server]
 	if !ok {
@@ -1209,7 +1255,7 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry
 	}
 	m.fileSendMutex.Unlock()
 
-	return target.matchOrInserts(descs, retry)
+	return target.matchOrInserts(descs)
 }
 
 func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.FileSendStatus) {
