@@ -629,6 +629,11 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 		return nil, err, ErrorNotSupportRemote
 	}
 
+	// 有可能objectfile为空
+	if objectfile == "" {
+		objectfile = ccargs.outputFile
+	}
+
 	inblack, _ := cc.inPumpBlack(responseFile, args)
 	if inblack {
 		return nil, ErrorInPumpBlack, nil
