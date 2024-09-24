@@ -1012,7 +1012,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cc: [%s] success done post execute", cc.tag)
 		// set output to inputFile
-		r.Results[0].OutputMessage = []byte(filepath.Base(cc.inputFile))
+		// r.Results[0].OutputMessage = []byte(filepath.Base(cc.inputFile))
 		// if remote succeed with pump,do not need copy head file
 		if cc.pumpremote {
 			cc.needcopypumpheadfile = false
