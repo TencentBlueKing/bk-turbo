@@ -214,7 +214,7 @@ func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc) []matchResult {
 		for _, ci := range *c {
 			if ci.Match(*desc) {
 				fileMatched := true
-				//if worker is send failed before, try to set send status to retrying
+				//if file is send failed before, try to send it again
 				if ci.SendStatus == types.FileSendFailed {
 					fileMatched = false
 					ci.SendStatus = types.FileSending
@@ -277,7 +277,6 @@ func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendS
 			if status == types.FileSendSucceed {
 				ci.FailCount = 0
 			}
-			//ci.LastModifyTime = time.Now().Unix()
 			return
 		}
 	}
@@ -562,7 +561,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		return nil, err
 	}
 
-	if !m.isFilesNeedSend(req.Server.Server, req.Req.Commands) {
+	if !m.isFilesAlreadySendFailed(req.Server.Server, req.Req.Commands) {
 		return nil, fmt.Errorf("remote: no need to send files for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
 	}
 	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
@@ -640,8 +639,8 @@ func (m *Mgr) SendFiles(req *types.RemoteTaskSendFileRequest) ([]string, error) 
 	)
 }
 
-// check if files need send to remote worker
-func (m *Mgr) isFilesNeedSend(server string, commands []dcSDK.BKCommand) bool {
+// check if files send to remote worker failed and no need to send again
+func (m *Mgr) isFilesAlreadySendFailed(server string, commands []dcSDK.BKCommand) bool {
 	m.fileSendMutex.Lock()
 	target, ok := m.fileSendMap[server]
 	if !ok {
