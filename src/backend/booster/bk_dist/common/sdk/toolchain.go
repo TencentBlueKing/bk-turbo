@@ -18,6 +18,7 @@ import (
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -107,6 +108,7 @@ func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
 		Targetrelativepath: remotepath,
 		Filemode:           i.Mode32(),
 		LinkTarget:         i.LinkTarget,
+		Priority:           GetPriority(i),
 	}
 
 	if i.LinkTarget == "" {
@@ -200,22 +202,6 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 	// TODO : 将链接展开，直到得到所有相关文件，比如 a->b,b->c，则需要将a/b/c都包含进来
 	toolfiles := make([]FileDesc, 0, 0)
 	for _, v := range t.Toolchains {
-		// existed, fileSize, modifyTime, fileMode := dcFile.Stat(v.ToolLocalFullPath).Batch()
-		// if !existed {
-		// 	err := fmt.Errorf("tool chain file %s not existed", v.ToolLocalFullPath)
-		// 	blog.Errorf("%v", err)
-		// 	return nil, err
-		// }
-
-		// toolfiles = append(toolfiles, FileDesc{
-		// 	FilePath:           v.ToolLocalFullPath,
-		// 	Compresstype:       protocol.CompressLZ4,
-		// 	FileSize:           fileSize,
-		// 	Lastmodifytime:     modifyTime,
-		// 	Md5:                "",
-		// 	Targetrelativepath: v.ToolRemoteRelativePath,
-		// 	Filemode:           fileMode,
-		// })
 		files, err := getAssociatedFiles(v.ToolLocalFullPath, v.ToolRemoteRelativePath)
 		if err != nil {
 			return nil, err
@@ -229,23 +215,6 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 		}
 
 		for _, f := range v.Files {
-			// existed, fileSize, modifyTime, fileMode = dcFile.Stat(f.LocalFullPath).Batch()
-			// if !existed {
-			// 	err := fmt.Errorf("tool chain file %s not existed", f.LocalFullPath)
-			// 	blog.Errorf("%v", err)
-			// 	return nil, err
-			// }
-
-			// toolfiles = append(toolfiles, FileDesc{
-			// 	FilePath:           f.LocalFullPath,
-			// 	Compresstype:       protocol.CompressLZ4,
-			// 	FileSize:           fileSize,
-			// 	Lastmodifytime:     modifyTime,
-			// 	Md5:                "",
-			// 	Targetrelativepath: f.RemoteRelativePath,
-			// 	Filemode:           fileMode,
-			// })
-
 			files, err := getAssociatedFiles(f.LocalFullPath, f.RemoteRelativePath)
 			if err != nil {
 				return nil, err
@@ -260,9 +229,29 @@ func (t *Toolchain) ToFileDesc() ([]FileDesc, error) {
 		}
 	}
 
-	blog.Debugf("toolchain: get all files:%v", toolfiles)
+	// 将文件集合中涉及到目录的链接列出来，这种需要提前发送
+	getAllLinkDirs(&toolfiles)
+
+	blog.Infof("toolchain: get all files:%+v", toolfiles)
 
 	return toolfiles, nil
+}
+
+func getAllLinkDirs(files *[]FileDesc) ([]FileDesc, error) {
+	lines := make([]string, 0, len(*files))
+	for _, v := range *files {
+		lines = append(lines, v.FilePath)
+	}
+
+	uniqlines := dcUtil.UniqArr(lines)
+	linkdirs := dcUtil.GetAllLinkDir(uniqlines)
+	if len(linkdirs) > 0 {
+		for _, v := range linkdirs {
+			getRecursiveFiles(v, filepath.Dir(v), files)
+		}
+	}
+
+	return nil, nil
 }
 
 func GetAdditionFileKey() string {

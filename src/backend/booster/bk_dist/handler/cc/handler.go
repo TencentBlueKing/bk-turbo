@@ -12,6 +12,7 @@ package cc
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -78,7 +79,8 @@ type TaskCC struct {
 	supportDirectives bool
 
 	responseFile     string
-	sourcedependfile string
+	origindependfile string // 原始命令指定的依赖文件
+	sourcedependfile string // pump模式需要的依赖文件
 	pumpHeadFile     string
 	includeRspFiles  []string // 在rsp中通过@指定的其它rsp文件，需要发送到远端
 	// 在rsp中-I后面的参数，需要将这些目录全部发送到远端
@@ -235,10 +237,10 @@ func (cc *TaskCC) analyzeIncludes(dependf string) ([]*dcFile.Info, error) {
 
 	sep := "\n"
 	lines := strings.Split(string(data), sep)
-	uniqlines := commonUtil.UniqArr(lines)
+	uniqlines := dcUtil.UniqArr(lines)
 	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
 
-	return commonUtil.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+	return dcFile.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 }
 
 func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
@@ -288,17 +290,17 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 					continue
 				}
 
-				if strings.HasSuffix(targetf, ".o:") || strings.HasSuffix(targetf, ".gch:") {
+				if strings.HasSuffix(targetf, ":") {
 					continue
 				}
 				if !filepath.IsAbs(targetf) {
 					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
 				}
 
-				*includes = append(*includes, commonUtil.FormatFilePath(targetf))
+				*includes = append(*includes, dcUtil.FormatFilePath(targetf))
 
 				// 如果是链接，则将相关指向的文件都包含进来
-				fs := commonUtil.GetAllLinkFiles(targetf)
+				fs := dcUtil.GetAllLinkFiles(targetf)
 				if len(fs) > 0 {
 					*includes = append(*includes, fs...)
 				}
@@ -326,7 +328,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -337,7 +339,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -348,7 +350,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
-			includes = append(includes, commonUtil.FormatFilePath(l))
+			includes = append(includes, dcUtil.FormatFilePath(l))
 		}
 	}
 
@@ -359,7 +361,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
-	uniqlines := commonUtil.UniqArr(includes)
+	uniqlines := dcUtil.UniqArr(includes)
 
 	// append symlink or symlinked if need
 	links, _ := getIncludeLinks(cc.sandbox.Env, uniqlines)
@@ -368,7 +370,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	}
 
 	// TODO :将链接路径找出并放到前面
-	linkdirs := commonUtil.GetAllLinkDir(uniqlines)
+	linkdirs := dcUtil.GetAllLinkDir(uniqlines)
 	if len(linkdirs) > 0 {
 		uniqlines = append(linkdirs, uniqlines...)
 	}
@@ -422,12 +424,54 @@ func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, f
 	return nil, ErrorNoPumpHeadFile
 }
 
-func (cc *TaskCC) forceDepend() error {
+// TODO : 如果原始命令有 -MD 或者 -MMD，则需要根据规则得到 .d 文件
+func (cc *TaskCC) forceDepend(arg *ccArgs) error {
 	cc.sourcedependfile = makeTmpFileName(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc_depend", ".d")
 	cc.sourcedependfile = strings.Replace(cc.sourcedependfile, "\\", "/", -1)
 	cc.addTmpFile(cc.sourcedependfile)
 
-	cc.forcedepend = true
+	if arg.hasDependencies {
+		if len(arg.mfOutputFile) > 0 { // 已经指定了依赖文件
+			dependfile := arg.mfOutputFile[0]
+			if !filepath.IsAbs(dependfile) {
+				dependfile, _ = filepath.Abs(filepath.Join(cc.sandbox.Dir, dependfile))
+			}
+			cc.origindependfile = dependfile
+		} else {
+			if arg.outputFile != "" { // 从 -o 得到依赖文件，替换后缀
+				ext := filepath.Ext(arg.outputFile)
+				withoutext := strings.TrimSuffix(arg.outputFile, ext)
+				dependfile := withoutext + ".d"
+				if !filepath.IsAbs(dependfile) {
+					dependfile, _ = filepath.Abs(filepath.Join(cc.sandbox.Dir, dependfile))
+				}
+				cc.origindependfile = dependfile
+			} else { // 从输入文件得到，只取文件名
+				if arg.inputFile != "" {
+					ext := filepath.Ext(arg.inputFile)
+					base := filepath.Base(arg.inputFile)
+					withoutext := strings.TrimSuffix(base, ext)
+					dependfile := withoutext + ".d"
+					if !filepath.IsAbs(dependfile) {
+						dependfile, _ = filepath.Abs(filepath.Join(cc.sandbox.Dir, dependfile))
+					}
+					cc.origindependfile = dependfile
+				}
+			}
+		}
+	} else {
+		// cc.sourcedependfile = makeTmpFileName(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc_depend", ".d")
+		// cc.sourcedependfile = strings.Replace(cc.sourcedependfile, "\\", "/", -1)
+		// cc.addTmpFile(cc.sourcedependfile)
+		cc.origindependfile = cc.sourcedependfile
+	}
+
+	if cc.sourcedependfile != "" {
+		blog.Infof("cc: got depend file: %s", cc.sourcedependfile)
+		cc.forcedepend = true
+	} else {
+		blog.Warnf("cc: failed to get depend file with scan arg:%v", *arg)
+	}
 
 	return nil
 }
@@ -519,7 +563,7 @@ func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
 		// 得到最终的 文件信息列表
 		if len(gchdependfiles) > 0 {
 			blog.Infof("cc: got pch depends files:%v", gchdependfiles)
-			fs, err := commonUtil.GetFileInfo(gchdependfiles, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
+			fs, err := dcFile.GetFileInfo(gchdependfiles, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 			if err != nil {
 				return nil, err
 			}
@@ -579,10 +623,15 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 		blog.Infof("cc: need resolve dpend for gch file:%s", objectfile)
 	}
 
-	_, err = scanArgs(args, cc.sandbox)
+	ccargs, err := scanArgs(args, cc.sandbox)
 	if err != nil {
 		blog.Debugf("cc: try pump not support, scan args %v: %v", args, err)
 		return nil, err, ErrorNotSupportRemote
+	}
+
+	// 有可能objectfile为空
+	if objectfile == "" {
+		objectfile = ccargs.outputFile
 	}
 
 	inblack, _ := cc.inPumpBlack(responseFile, args)
@@ -600,7 +649,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 		} else {
 			// 主动加上参数得到依赖列表，生成一个临时的 sourcedependfile 文件
 			blog.Infof("cc: trypump not found depend file, try append it")
-			if cc.forceDepend() != nil {
+			if cc.forceDepend(ccargs) != nil {
 				return nil, ErrorNoDependFile, nil
 			}
 		}
@@ -667,7 +716,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 				Targetrelativepath: filepath.Dir(fpath),
 				LinkTarget:         f.LinkTarget,
 				NoDuplicated:       true,
-				Priority:           commonUtil.GetPriority(f),
+				Priority:           dcSDK.GetPriority(f),
 			})
 			// priority++
 			// blog.Infof("cc: added include file:%s with modify time %d", fpath, modifyTime)
@@ -818,9 +867,20 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	if cc.forcedepend {
-		args = append(args, "-MD")
+		// TODO : 如果存在 -MMD，则替换为 -MD，否则，追加 -MD
+		hasFlag := false
+		for i := range args {
+			if args[i] == "-MMD" {
+				args[i] = "-MD"
+				hasFlag = true
+				break
+			}
+		}
+		if !hasFlag {
+			args = append(args, "-MD")
+		}
 		args = append(args, "-MF")
-		args = append(args, cc.sourcedependfile)
+		args = append(args, cc.origindependfile)
 	}
 
 	if err = cc.preBuild(args); err != nil {
@@ -829,6 +889,31 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			Code:  dcType.UnknowCode,
 			Error: err,
 		}
+	}
+
+	// 备份依赖文件，因为默认的依赖文件可能会被其它构建程序修改
+	if dcFile.Stat(cc.origindependfile).Exist() {
+		// data, _ := os.ReadFile(cc.origindependfile)
+		// // only for debug by tomtian
+		// blog.Debugf("cc: [%s] debug depend %s:[%s]", cc.tag, cc.origindependfile, data)
+
+		if cc.origindependfile != cc.sourcedependfile {
+			src, err := os.Open(cc.origindependfile)
+			if err == nil {
+				defer src.Close()
+				dst, err := os.Create(cc.sourcedependfile)
+				if err == nil {
+					defer dst.Close()
+					_, err = io.Copy(dst, src)
+					blog.Infof("cc: [%s] depend copy %s to %s",
+						cc.tag,
+						cc.origindependfile,
+						cc.sourcedependfile)
+				}
+			}
+		}
+	} else {
+		blog.Infof("cc: [%s] depend %s not exist", cc.tag, cc.origindependfile)
 	}
 
 	// generate the input files for pre-process file
@@ -1170,7 +1255,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.rewriteCrossArgs = targetArgs
 
 	// handle the pch options
-	finalArgs := cc.scanPchFile(targetArgs)
+	finalArgs := cc.scanPchFile(targetArgs, cc.needcopypumpheadfile)
 
 	cc.serverSideArgs = finalArgs
 	if checkFiles, ok, pumpErr := cc.tryPump(); !ok {
@@ -1434,7 +1519,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 // try to get pch file desc and the args according to firstIncludeFile
 // if pch is valid, there must be a option -include xx.h(xx.hpp)
 // and must be the first seen -include option(if there are multiple -include)
-func (cc *TaskCC) scanPchFile(args []string) []string {
+func (cc *TaskCC) scanPchFile(args []string, isPump bool) []string {
 	if cc.firstIncludeFile == "" {
 		return args
 	}
@@ -1474,7 +1559,13 @@ func (cc *TaskCC) scanPchFile(args []string) []string {
 		}
 	}
 
-	return append(args, pchPreProcessOption)
+	// pchPreProcessOption 会导致得到的依赖文件列表不全，pump模式不加该参数
+	// 但是不加该选项，会导致生成 .ii 时完全展开，性能变差
+	if !isPump {
+		return append(args, pchPreProcessOption)
+	}
+
+	return args
 }
 
 func (cc *TaskCC) statisticsCCache() (*types.Ccache, error) {

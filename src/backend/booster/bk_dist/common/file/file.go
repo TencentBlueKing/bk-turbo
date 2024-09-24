@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -167,4 +168,133 @@ func (i *Info) Md5() (string, error) {
 
 	md5string := fmt.Sprintf("%x", md5hash.Sum(nil))
 	return md5string, nil
+}
+
+var (
+	fileInfoCacheLock sync.RWMutex
+	fileInfoCache     = map[string]*Info{}
+)
+
+func ResetFileInfoCache() {
+	fileInfoCacheLock.Lock()
+	defer fileInfoCacheLock.Unlock()
+
+	fileInfoCache = map[string]*Info{}
+}
+
+// 支持并发read，但会有重复Stat操作，考虑并发和去重的平衡
+func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) ([]*Info, error) {
+	// read
+	fileInfoCacheLock.RLock()
+	notfound := []string{}
+	is := make([]*Info, 0, len(fs))
+	for _, f := range fs {
+		i, ok := fileInfoCache[f]
+		if !ok {
+			notfound = append(notfound, f)
+			continue
+		}
+
+		if !i.Exist() {
+			if mustexisted {
+				// continue
+				// TODO : return fail if not existed
+				blog.Warnf("common util: depend file:%s not existed ", f)
+				return nil, fmt.Errorf("%s not existed", f)
+			} else {
+				continue
+			}
+		}
+
+		if notdir && i.Basic().IsDir() {
+			continue
+		}
+		is = append(is, i)
+	}
+	fileInfoCacheLock.RUnlock()
+
+	blog.Infof("common util: got %d file stat and %d not found", len(is), len(notfound))
+	if len(notfound) == 0 {
+		return is, nil
+	}
+
+	// query
+	tempis := make(map[string]*Info, len(notfound))
+	for _, notf := range notfound {
+		tempf := notf
+		try := 0
+		maxtry := 10
+		for {
+			var i *Info
+			if statbysearchdir {
+				i = GetFileInfoByEnumDir(tempf)
+			} else {
+				i = Lstat(tempf)
+			}
+			tempis[tempf] = i
+			try++
+
+			if !i.Exist() {
+				if mustexisted {
+					// TODO : return fail if not existed
+					// continue
+					blog.Warnf("common util: depend file:%s not existed ", tempf)
+					return nil, fmt.Errorf("%s not existed", tempf)
+				} else {
+					// continue
+					break
+				}
+			}
+
+			loopagain := false
+			if i.Basic().Mode()&os.ModeSymlink != 0 {
+				originFile, err := os.Readlink(tempf)
+				if err == nil {
+					if !filepath.IsAbs(originFile) {
+						originFile, err = filepath.Abs(filepath.Join(filepath.Dir(tempf), originFile))
+						if err == nil {
+							i.LinkTarget = originFile
+							blog.Infof("common util: symlink %s to %s", tempf, originFile)
+						} else {
+							blog.Infof("common util: symlink %s origin %s, got abs path error:%s",
+								tempf, originFile, err)
+						}
+					} else {
+						i.LinkTarget = originFile
+						blog.Infof("common util: symlink %s to %s", tempf, originFile)
+					}
+
+					// 如果是链接，并且指向了其它文件，则需要将指向的文件也包含进来
+					// 增加寻找次数限制，避免死循环
+					if try < maxtry {
+						loopagain = true
+						tempf = originFile
+					}
+				} else {
+					blog.Infof("common util: symlink %s Readlink error:%s", tempf, err)
+				}
+			}
+
+			if notdir && i.Basic().IsDir() {
+				continue
+			}
+
+			is = append(is, i)
+
+			if !loopagain {
+				break
+			}
+		}
+	}
+
+	// write
+	go func(tempis *map[string]*Info) {
+		fileInfoCacheLock.Lock()
+		for f, i := range *tempis {
+			fileInfoCache[f] = i
+		}
+		fileInfoCacheLock.Unlock()
+	}(&tempis)
+
+	return is, nil
 }
