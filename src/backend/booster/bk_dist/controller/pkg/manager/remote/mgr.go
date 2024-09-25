@@ -703,7 +703,7 @@ func (m *Mgr) ensureFilesWithPriority(
 
 		blog.Infof("remote: try to ensure priority(%d) files(%d) for work(%s) from pid(%d) dir(%s) to server",
 			i, len(*f), m.work.ID(), pid, sandbox.Dir)
-		r, err := m.ensureFiles(handler, pid, sandbox, *f, false)
+		r, err := m.ensureFiles(handler, pid, sandbox, *f)
 		if err != nil {
 			return nil, err
 		}
@@ -722,8 +722,7 @@ func (m *Mgr) ensureFiles(
 	handler dcSDK.RemoteWorkerHandler,
 	pid int,
 	sandbox *dcSyscall.Sandbox,
-	fileDetails []*types.FilesDetails,
-	retry bool) ([]string, error) {
+	fileDetails []*types.FilesDetails) ([]string, error) {
 
 	settings := m.work.Basic().Settings()
 	blog.Infof("remote: try to ensure multi %d files for work(%s) from pid(%d) dir(%s) to server",
@@ -898,9 +897,9 @@ func (m *Mgr) ensureFiles(
 
 					// 启动协程跟踪未发送完成的文件
 					c := (*fs)[i]
-					go func(err chan<- error, c *corkFile, r matchResult, retry bool) {
+					go func(err chan<- error, c *corkFile, r matchResult) {
 						err <- m.ensureSingleCorkFile(c, r)
-					}(wg, c, v, retry)
+					}(wg, c, v)
 				}
 
 				// TODO : 检查是否在server端有缓存了，如果有，则无需发送，调用 checkBatchCache
@@ -916,7 +915,7 @@ func (m *Mgr) ensureFiles(
 			// 单个文件发送模式
 			for _, f := range singleFiles {
 				sender := &dcSDK.BKDistFileSender{Files: []dcSDK.FileDesc{*f.file}}
-				go func(err chan<- error, host *dcProtocol.Host, req *dcSDK.BKDistFileSender, retry bool) {
+				go func(err chan<- error, host *dcProtocol.Host, req *dcSDK.BKDistFileSender) {
 					t := time.Now().Local()
 					err <- m.ensureSingleFile(handler, host, req, sandbox)
 					d := time.Now().Local().Sub(t)
@@ -924,7 +923,7 @@ func (m *Mgr) ensureFiles(
 						blog.Debugf("remote: single file cost time for work(%s) from pid(%d) to server(%s): %s, %s",
 							m.work.ID(), pid, host.Server, d.String(), req.Files[0].FilePath)
 					}
-				}(wg, f.host, sender, retry)
+				}(wg, f.host, sender)
 			}
 		}
 
@@ -1446,8 +1445,8 @@ func (m *Mgr) ensureOneFileCollection(
 	}
 
 	blog.Infof("remote: try to ensure one file collection(%s) timestamp(%d) filenum(%d) cache-hit(%d) "+
-		"for work(%s) to server(%s), going to send this collection with retry:%t",
-		fc.UniqID, fc.Timestamp, len(needSentFiles), hit, m.work.ID(), host.Server, retry)
+		"for work(%s) to server(%s), going to send this collection",
+		fc.UniqID, fc.Timestamp, len(needSentFiles), hit, m.work.ID(), host.Server)
 
 	// ！！ 这个地方不需要了，需要注释掉，影响性能
 	// req := &dcSDK.BKDistFileSender{Files: needSentFiles}
@@ -1497,13 +1496,13 @@ func (m *Mgr) ensureOneFileCollection(
 	}()
 
 	if err != nil {
-		blog.Errorf("remote: execute send file collection(%s) for work(%s) to server(%s) failed with retry %t: %v ",
-			fc.UniqID, m.work.ID(), host.Server, retry, err)
+		blog.Errorf("remote: execute send file collection(%s) for work(%s) to server(%s) failed : %v ",
+			fc.UniqID, m.work.ID(), host.Server, err)
 		return err
 	}
 
 	blog.Debugf("remote: success to execute send file collection(%s) files(%+v) timestamp(%d) filenum(%d) "+
-		"for work(%s) to server(%s) with retry %t", fc.UniqID, fc.Files, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server, retry)
+		"for work(%s) to server(%s)", fc.UniqID, fc.Files, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
 	return nil
 }
 
@@ -1515,9 +1514,6 @@ func (m *Mgr) checkOrLockFileCollection(server string, fc *types.FileCollectionI
 
 	target, ok := m.fileCollectionSendMap[server]
 	if !ok {
-		if retry {
-			blog.Warnf("remote: file collection(%s) not found in cache with retry %t", fc.UniqID, retry)
-		}
 		filecollections := make([]*types.FileCollectionInfo, 0, 10)
 		m.fileCollectionSendMap[server] = &filecollections
 		target = m.fileCollectionSendMap[server]
