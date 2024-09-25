@@ -267,13 +267,21 @@ func searchCC(exe string) []string {
 }
 
 func searchAS(exe string) []string {
-	cmd := "which as"
+	cmd := fmt.Sprintf("%s -print-prog-name=as", exe)
 	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
 	sandbox := dcSyscall.Sandbox{}
 	_, out, _, err := sandbox.ExecScriptsWithMessage(cmd)
 	if err != nil {
 		blog.Warnf("basic: search as with out:%s,error:%+v", out, err)
-		return nil
+
+		cmd = "which as"
+		blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
+		sandbox = dcSyscall.Sandbox{}
+		_, out, _, err = sandbox.ExecScriptsWithMessage(cmd)
+		if err != nil {
+			blog.Warnf("basic: search as with out:%s,error:%+v", out, err)
+			return nil
+		}
 	}
 
 	blog.Infof("basic: got output:[%s] for cmd:[%s]", out, cmd)
