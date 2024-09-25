@@ -285,7 +285,7 @@ func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendS
 	return
 }
 
-func (fsm *fileSendMap) ReachFailCount(descs []dcSDK.FileDesc) bool {
+func (fsm *fileSendMap) hasReachedFailCount(descs []dcSDK.FileDesc) bool {
 	fsm.RLock()
 	defer fsm.RUnlock()
 
@@ -652,7 +652,7 @@ func (m *Mgr) isFilesAlreadySendFailed(server string, commands []dcSDK.BKCommand
 	for _, c := range commands {
 		fds = append(fds, c.Inputfiles...)
 	}
-	return target.ReachFailCount(fds)
+	return target.hasReachedFailCount(fds)
 }
 
 func (m *Mgr) ensureFilesWithPriority(
