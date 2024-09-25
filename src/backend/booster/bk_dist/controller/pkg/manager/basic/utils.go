@@ -271,7 +271,8 @@ func searchAS(exe string) []string {
 	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
 	sandbox := dcSyscall.Sandbox{}
 	_, out, _, err := sandbox.ExecScriptsWithMessage(cmd)
-	if err != nil {
+	// 出错，或者只返回了as(没有完整路径，需要从系统得到)
+	if err != nil || strings.TrimSpace(string(out)) == "as" {
 		blog.Warnf("basic: search as with out:%s,error:%+v", out, err)
 
 		cmd = "which as"
