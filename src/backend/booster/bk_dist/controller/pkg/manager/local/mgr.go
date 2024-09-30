@@ -108,7 +108,8 @@ func (m *Mgr) GetPumpCache() (*analyser.FileCache, *analyser.RootCache) {
 func (m *Mgr) ExecuteTask(
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
-	withlocalresource bool) (*types.LocalTaskExecuteResult, error) {
+	canUseLocalIdleResource bool,
+	f types.CallbackCheckLocalResource) (*types.LocalTaskExecuteResult, error) {
 	blog.Infof("local: try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
 		strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
 
@@ -136,11 +137,14 @@ func (m *Mgr) ExecuteTask(
 		return e.executeLocalTask(), nil
 	}
 
+	// TODO : 本地空闲资源执行任务需要更多条件判断
 	// 该任务已确定用本地资源运行，则直接走本地执行
-	if withlocalresource {
-		blog.Infof("local: execute task for work(%s) from pid(%d) degrade to local for with local resource",
-			m.work.ID(), req.Pid)
-		return e.executeLocalTask(), nil
+	if canUseLocalIdleResource {
+		if e.canExecuteWithLocalIdleResource() && f() {
+			blog.Infof("local: execute task [%s] for work(%s) from pid(%d) degrade to local with local idle resource",
+				req.Commands[0], m.work.ID(), req.Pid)
+			return e.executeLocalTask(), nil
+		}
 	}
 
 	// 优化没有远程资源转本地的逻辑； 如果没有远程资源，则先获取本地锁，然后转本地执行

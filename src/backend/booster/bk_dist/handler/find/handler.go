@@ -152,6 +152,10 @@ func (c *Finder) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (c *Finder) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 // PreExecuteNeedLock decide whether should lock when executor do the pre-process
 func (c *Finder) PreExecuteNeedLock(command []string) bool {
 	return false

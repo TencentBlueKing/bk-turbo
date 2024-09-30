@@ -90,6 +90,14 @@ func (cf *TaskCLFilter) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.Pr
 	return nil, nil
 }
 
+func (cf *TaskCLFilter) CanExecuteWithLocalIdleResource(command []string) bool {
+	if cf.clhandle != nil {
+		return cf.clhandle.CanExecuteWithLocalIdleResource(command)
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 防止预处理跑满本机CPU
 func (cf *TaskCLFilter) PreExecuteNeedLock(command []string) bool {
 	return true

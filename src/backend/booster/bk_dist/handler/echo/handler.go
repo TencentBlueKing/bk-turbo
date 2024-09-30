@@ -107,6 +107,10 @@ func (c *Echo) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (c *Echo) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 // PreExecuteNeedLock decide whether should lock when executor do the pre-process
 func (c *Echo) PreExecuteNeedLock(command []string) bool {
 	return false

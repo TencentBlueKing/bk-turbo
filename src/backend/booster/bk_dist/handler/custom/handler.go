@@ -139,6 +139,10 @@ func (c *Custom) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDi
 	return c.innerHandler.PreExecute(command)
 }
 
+func (c *Custom) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 // PreExecuteNeedLock 决定是否需要在执行PreExecute之前获取一个pre-lock
 func (c *Custom) PreExecuteNeedLock(command []string) bool {
 	return c.innerHandler.PreExecuteNeedLock(command)

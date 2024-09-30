@@ -40,6 +40,10 @@ type Handler interface {
 	// GetFilterRules return files which will be used by multi-executor, send only once
 	GetFilterRules() ([]dcSDK.FilterRuleItem, error)
 
+	// CanExecuteWithLocalIdleResource return whether can execute this with local idle resource,
+	// true by default
+	CanExecuteWithLocalIdleResource(command []string) bool
+
 	// PreExecuteNeedLock decide whether executor should lock before pre execution
 	PreExecuteNeedLock(command []string) bool
 

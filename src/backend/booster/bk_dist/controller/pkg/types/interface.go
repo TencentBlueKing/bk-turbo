@@ -112,6 +112,8 @@ type RemoteMgr interface {
 	DecRemoteJobs()
 }
 
+type CallbackCheckLocalResource func() bool
+
 // LocalMgr describe a manager for handling all actions with local execution for work
 type LocalMgr interface {
 	// init handler
@@ -131,7 +133,8 @@ type LocalMgr interface {
 	// do task execution
 	ExecuteTask(req *LocalTaskExecuteRequest,
 		globalWork *Work,
-		withlocalresource bool) (*LocalTaskExecuteResult, error)
+		canUseLocalIdleResource bool,
+		f CallbackCheckLocalResource) (*LocalTaskExecuteResult, error)
 
 	// get caches in pump mode
 	GetPumpCache() (*analyser.FileCache, *analyser.RootCache)

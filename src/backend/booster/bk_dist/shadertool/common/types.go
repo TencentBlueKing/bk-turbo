@@ -86,6 +86,7 @@ type ApplyParameters struct {
 	MaxLocalPostJobs              int               `json:"max_Local_post_jobs"`
 	Env                           map[string]string `json:"env"`
 	ContinueOnError               bool              `json:"continue_on_error" usage:"if false, the program will stop on error immediately"`
+	ControllerUseLocalCPUPercent  int               `json:"controller_use_local_cpu_percent"`
 }
 
 // Actionresult define action result

@@ -150,6 +150,20 @@ func (u *UE4) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	}, nil
 }
 
+func (u *UE4) CanExecuteWithLocalIdleResource(command []string) bool {
+	if u.innerhandler == nil {
+		u.initInnerHandle(command)
+	}
+	if u.innerhandler != nil {
+		if u.sandbox != nil {
+			u.innerhandler.InitSandbox(u.sandbox.Fork())
+		}
+		return u.innerhandler.CanExecuteWithLocalIdleResource(command)
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 防止预处理跑满本机CPU
 func (u *UE4) PreExecuteNeedLock(command []string) bool {
 	return true

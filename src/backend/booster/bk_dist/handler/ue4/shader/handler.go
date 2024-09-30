@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -81,6 +82,17 @@ func (u *UE4Shader) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.Preloa
 // GetFilterRules no filter rules need
 func (u *UE4Shader) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
+}
+
+func (u *UE4Shader) CanExecuteWithLocalIdleResource(command []string) bool {
+	// only for debug
+	blog.Infof("shader: BK_DIST_UE_SHADER_NOT_USE_LOCAL=[%v]", u.sandbox.Env.GetEnv(env.KeyExecutorUEShaderNotUseLocal))
+
+	if u.sandbox.Env.GetEnv(env.KeyExecutorUEShaderNotUseLocal) == "true" {
+		return false
+	}
+
+	return true
 }
 
 // PreExecuteNeedLock 没有在本地执行的预处理步骤, 无需pre-lock
@@ -366,6 +378,14 @@ func (u *UE4Shader) LocalExecuteNeed(command []string) bool {
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (u *UE4Shader) LocalLockWeight(command []string) int32 {
+	envvalue := u.sandbox.Env.GetEnv(env.KeyExecutorUEShaderLocalCPUWeight)
+	if envvalue != "" {
+		w, err := strconv.Atoi(envvalue)
+		if err == nil && w > 0 && w <= runtime.NumCPU() {
+			return int32(w)
+		}
+	}
+
 	/*	// default setting of ue 4.26
 		; Make sure we don't starve loading threads
 		NumUnusedShaderCompilingThreads=3

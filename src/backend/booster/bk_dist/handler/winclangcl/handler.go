@@ -69,6 +69,10 @@ func (cc *WinClangCl) RenderArgs(config dcType.BoosterConfig, originArgs string)
 	return originArgs
 }
 
+func (cc *WinClangCl) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 func (cc *WinClangCl) PreExecuteNeedLock(command []string) bool {
 
 	return true

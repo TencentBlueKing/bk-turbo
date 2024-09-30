@@ -195,6 +195,7 @@ func (h *ShaderTool) getControllerConfig() dcSDK.ControllerConfig {
 		LongTCP:             h.settings.ControllerLongTCP,
 		DynamicPort:         h.settings.ControllerDynamicPort,
 		WorkerOfferSlot:     h.settings.ControllerWorkerOfferSlot,
+		UseLocalCPUPercent:  h.settings.ControllerUseLocalCPUPercent,
 	}
 
 	return *h.controllerconfig

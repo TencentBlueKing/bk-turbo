@@ -80,6 +80,14 @@ func (lf *TaskLinkFilter) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.
 	return nil, nil
 }
 
+func (lf *TaskLinkFilter) CanExecuteWithLocalIdleResource(command []string) bool {
+	if lf.handle != nil {
+		return lf.handle.CanExecuteWithLocalIdleResource(command)
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 防止预处理跑满本机CPU
 func (lf *TaskLinkFilter) PreExecuteNeedLock(command []string) bool {
 	return true
