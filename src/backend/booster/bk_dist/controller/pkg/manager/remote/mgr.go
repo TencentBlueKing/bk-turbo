@@ -290,7 +290,7 @@ func (fsm *fileSendMap) hasReachedFailCount(descs []dcSDK.FileDesc) bool {
 	defer fsm.RUnlock()
 
 	if fsm.cache == nil {
-		return true
+		return false
 	}
 	for _, desc := range descs {
 		c, ok := fsm.cache[desc.FilePath]
@@ -300,13 +300,13 @@ func (fsm *fileSendMap) hasReachedFailCount(descs []dcSDK.FileDesc) bool {
 		for _, ci := range *fsm.cache[desc.FilePath] {
 			if ci.Match(desc) {
 				if ci.FailCount > fileMaxFailCount {
-					return false
+					return true
 				}
 			}
 		}
 	}
 
-	return true
+	return false
 }
 
 // Init do the initialization for remote manager
@@ -561,7 +561,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		return nil, err
 	}
 
-	if !m.isFilesAlreadySendFailed(req.Server.Server, req.Req.Commands) {
+	if m.isFilesAlreadySendFailed(req.Server.Server, req.Req.Commands) {
 		return nil, fmt.Errorf("remote: no need to send files for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
 	}
 	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
@@ -645,7 +645,7 @@ func (m *Mgr) isFilesAlreadySendFailed(server string, commands []dcSDK.BKCommand
 	target, ok := m.fileSendMap[server]
 	if !ok {
 		m.fileSendMutex.Unlock()
-		return true
+		return false
 	}
 	m.fileSendMutex.Unlock()
 	var fds []dcSDK.FileDesc
