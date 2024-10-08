@@ -12,6 +12,7 @@ package lib
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -79,6 +80,14 @@ func (l *TaskLib) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.PreloadC
 	return nil, nil
 }
 
+func (l *TaskLib) CanExecuteWithLocalIdleResource(command []string) bool {
+	if l.sandbox.Env.GetEnv(env.KeyExecutorUELibNotUseLocal) == "true" {
+		return false
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 没有在本地执行的预处理步骤, 无需pre-lock
 func (l *TaskLib) PreExecuteNeedLock(command []string) bool {
 	return false
@@ -136,6 +145,14 @@ func (l *TaskLib) LocalExecuteNeed(command []string) bool {
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (l *TaskLib) LocalLockWeight(command []string) int32 {
+	envvalue := l.sandbox.Env.GetEnv(env.KeyExecutorUELibLocalCPUWeight)
+	if envvalue != "" {
+		w, err := strconv.Atoi(envvalue)
+		if err == nil && w > 0 && w <= runtime.NumCPU() {
+			return int32(w)
+		}
+	}
+
 	return 1
 }
 

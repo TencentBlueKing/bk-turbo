@@ -120,6 +120,10 @@ func (tc *TextureCompressor) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (cc *TextureCompressor) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 // PreExecuteNeedLock no need
 func (tc *TextureCompressor) PreExecuteNeedLock(command []string) bool {
 	return false

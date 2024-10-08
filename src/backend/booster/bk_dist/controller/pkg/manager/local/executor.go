@@ -523,3 +523,11 @@ func (e *executor) retryAndSuccessTooManyAndDegradeDirectly() bool {
 
 	return false
 }
+
+func (e *executor) canExecuteWithLocalIdleResource() bool {
+	if e.handler != nil {
+		return e.handler.CanExecuteWithLocalIdleResource(e.req.Commands)
+	}
+
+	return false
+}

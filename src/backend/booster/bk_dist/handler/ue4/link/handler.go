@@ -12,6 +12,7 @@ package link
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -95,6 +96,14 @@ func (l *TaskLink) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.Preload
 	return nil, nil
 }
 
+func (l *TaskLink) CanExecuteWithLocalIdleResource(command []string) bool {
+	if l.sandbox.Env.GetEnv(env.KeyExecutorUELinkNotUseLocal) == "true" {
+		return false
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 没有在本地执行的预处理步骤, 无需pre-lock
 func (l *TaskLink) PreExecuteNeedLock(command []string) bool {
 	return false
@@ -152,6 +161,14 @@ func (l *TaskLink) LocalExecuteNeed(command []string) bool {
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (l *TaskLink) LocalLockWeight(command []string) int32 {
+	envvalue := l.sandbox.Env.GetEnv(env.KeyExecutorUELinkLocalCPUWeight)
+	if envvalue != "" {
+		w, err := strconv.Atoi(envvalue)
+		if err == nil && w > 0 && w <= runtime.NumCPU() {
+			return int32(w)
+		}
+	}
+
 	return 1
 }
 

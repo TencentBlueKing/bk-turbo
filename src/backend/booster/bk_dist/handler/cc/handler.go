@@ -127,6 +127,10 @@ func (cc *TaskCC) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	cc.sandbox = sandbox
 }
 
+func (cc *TaskCC) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 // PreExecuteNeedLock 如果编译本身是预处理, 那么不需要pre-lock, 因为它会在pre-execute中转本地, 不会真正地执行预处理
 func (cc *TaskCC) PreExecuteNeedLock(command []string) bool {
 	for _, arg := range command {

@@ -407,11 +407,23 @@ func (m *mgr) ExecuteLocalTask(
 	dcSDK.StatsTimeNow(&req.Stats.EnterTime)
 	defer dcSDK.StatsTimeNow(&req.Stats.LeaveTime)
 	work.Basic().UpdateJobStats(req.Stats)
-	withlocalresource := m.checkRunWithLocalResource(work)
+
+	// TODO : 是否转本地执行的判断，下放到basic执行，结合handle的信息
+	//        另外，本地锁需要加上本地权重
+	// withlocalresource := m.checkRunWithLocalResource(work)
+	// if withlocalresource {
+	// 	defer m.decLocalResourceTask()
+	// }
+	var withlocalresource bool
+	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() bool {
+		withlocalresource = m.checkRunWithLocalResource(work)
+		blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got %v",
+			workID, req.Pid, withlocalresource)
+		return withlocalresource
+	})
 	if withlocalresource {
-		defer m.decLocalResourceTask()
+		m.decLocalResourceTask()
 	}
-	result, err := work.Local().ExecuteTask(req, globalWork, withlocalresource)
 	if err != nil {
 		if result == nil {
 			result = &types.LocalTaskExecuteResult{Result: &dcSDK.LocalTaskResult{
@@ -821,6 +833,10 @@ func sdkToolChain2Types(sdkToolChain *dcSDK.OneToolChain) *types.ToolChain {
 	}
 }
 
+func (m *mgr) canUseLocalIdleResource() bool {
+	return m.conf.UseLocalCPUPercent > 0 && m.conf.UseLocalCPUPercent <= 100
+}
+
 func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	if m.conf.UseLocalCPUPercent <= 0 || m.conf.UseLocalCPUPercent > 100 {
 		return false
@@ -880,6 +896,7 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 		work.Basic().Info().WorkID())
 
 	atomic.AddInt32(&m.localResourceTaskNum, 1)
+
 	return true
 }
 

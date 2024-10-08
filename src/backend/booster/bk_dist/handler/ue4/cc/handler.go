@@ -127,6 +127,14 @@ func (cc *TaskCC) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	cc.sandbox = sandbox
 }
 
+func (cc *TaskCC) CanExecuteWithLocalIdleResource(command []string) bool {
+	if cc.sandbox.Env.GetEnv(env.KeyExecutorUECCNotUseLocal) == "true" {
+		return false
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 需要pre-lock来保证预处理不会跑满本地资源
 func (cc *TaskCC) PreExecuteNeedLock(command []string) bool {
 	return true
@@ -154,6 +162,14 @@ func (cc *TaskCC) LocalExecuteNeed(command []string) bool {
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (cc *TaskCC) LocalLockWeight(command []string) int32 {
+	envvalue := cc.sandbox.Env.GetEnv(env.KeyExecutorUECCLocalCPUWeight)
+	if envvalue != "" {
+		w, err := strconv.Atoi(envvalue)
+		if err == nil && w > 0 && w <= runtime.NumCPU() {
+			return int32(w)
+		}
+	}
+
 	return 1
 }
 
@@ -1129,7 +1145,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("cc: success done post execute for: %v", cc.originArgs)
 		// set output to inputFile
-		r.Results[0].OutputMessage = []byte(filepath.Base(cc.inputFile))
+		// r.Results[0].OutputMessage = []byte(filepath.Base(cc.inputFile))
 		// if remote succeed with pump,do not need copy head file
 		if cc.pumpremote {
 			cc.needcopypumpheadfile = false

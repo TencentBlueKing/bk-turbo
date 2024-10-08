@@ -223,6 +223,14 @@ func (cl *TaskCL) getPreLoadConfigPath(config dcType.BoosterConfig) string {
 	return dcConfig.GetFile(hookConfigPathCCCommon)
 }
 
+func (cl *TaskCL) CanExecuteWithLocalIdleResource(command []string) bool {
+	if cl.sandbox.Env.GetEnv(env.KeyExecutorUECLNotUseLocal) == "true" {
+		return false
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 防止预处理跑满本机CPU
 func (cl *TaskCL) PreExecuteNeedLock(command []string) bool {
 	return true
@@ -280,6 +288,14 @@ func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.B
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (cl *TaskCL) LocalLockWeight(command []string) int32 {
+	envvalue := cl.sandbox.Env.GetEnv(env.KeyExecutorUECLLocalCPUWeight)
+	if envvalue != "" {
+		w, err := strconv.Atoi(envvalue)
+		if err == nil && w > 0 && w <= runtime.NumCPU() {
+			return int32(w)
+		}
+	}
+
 	return 1
 }
 
@@ -1071,7 +1087,7 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			}
 		} else {
 			// simulate output with inputFile
-			r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
+			// r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
 		}
 
 		// if remote succeed with pump,do not need copy head file
