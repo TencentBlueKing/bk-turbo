@@ -321,7 +321,7 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		blog.Infof("executor:ready run cmd:%v", e.req.Commands)
+		blog.Infof("executor: ready from pid(%d) run cmd:%v", e.req.Pid, e.req.Commands)
 		cmd := e.req.Commands[0]
 		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") {
 			arg := strings.Join(e.req.Commands, " ")
