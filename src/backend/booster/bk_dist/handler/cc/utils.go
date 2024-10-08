@@ -756,12 +756,12 @@ func scanArgs(args []string, sandbox *dcSyscall.Sandbox) (*ccArgs, error) {
 				return nil, ErrorNotSupportDr
 			}
 
-			// ++ by tomtian 2021-05-18
-			if strings.HasPrefix(arg, "-fsanitize") {
-				blog.Warnf("cc: scan args: clang option %s need read origin source file; running locally", arg)
-				return nil, ErrorNotSupportFsanitize
-			}
-			// --
+			// // ++ by tomtian 2021-05-18
+			// if strings.HasPrefix(arg, "-fsanitize") {
+			// 	blog.Warnf("cc: scan args: clang option %s need read origin source file; running locally", arg)
+			// 	return nil, ErrorNotSupportFsanitize
+			// }
+			// // --
 
 			if strings.HasPrefix(arg, "-I") {
 				// if -I just a prefix, save the remain of this line.
