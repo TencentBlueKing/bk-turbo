@@ -216,6 +216,7 @@ func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc) []matchResult {
 				fileMatched := true
 				//if file is send failed before, try to send it again
 				if ci.SendStatus == types.FileSendFailed {
+					blog.Debugf("file: retry send file %s, fail count %d", desc.FilePath, ci.FailCount)
 					fileMatched = false
 					ci.SendStatus = types.FileSending
 				}
@@ -648,11 +649,13 @@ func (m *Mgr) isFilesAlreadySendFailed(server string, commands []dcSDK.BKCommand
 		return false
 	}
 	m.fileSendMutex.Unlock()
-	var fds []dcSDK.FileDesc
+
 	for _, c := range commands {
-		fds = append(fds, c.Inputfiles...)
+		if target.hasReachedFailCount(c.Inputfiles) {
+			return true
+		}
 	}
-	return target.hasReachedFailCount(fds)
+	return false
 }
 
 func (m *Mgr) ensureFilesWithPriority(
