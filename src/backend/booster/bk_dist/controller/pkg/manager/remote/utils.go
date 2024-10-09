@@ -334,9 +334,11 @@ func printLeftDepend(fileDetails []*types.FilesDetails, dependencies [][]int) {
 		if fileDetails[i].File.Priority < 0 {
 			dependfiles := []string{}
 			for _, v := range dependencies[i] {
-				dependPriority := int(fileDetails[v].File.Priority)
-				if dependPriority < 0 {
-					dependfiles = append(dependfiles, fileDetails[v].File.FilePath)
+				if v >= 0 {
+					dependPriority := int(fileDetails[v].File.Priority)
+					if dependPriority < 0 {
+						dependfiles = append(dependfiles, fileDetails[v].File.FilePath)
+					}
 				}
 			}
 			blog.Warnf("remote util: after max try, %s wait %s",
