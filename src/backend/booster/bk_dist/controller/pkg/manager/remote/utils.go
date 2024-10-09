@@ -204,6 +204,7 @@ func calculateDependencies(fileDetails []*types.FilesDetails) [][]int {
 	return dependencies
 }
 
+// 判断s2是否是s1的子串
 func isSubString(s1, s2 string) bool {
 	return len(s1) > len(s2) &&
 		strings.HasPrefix(s1, s2) &&
@@ -211,37 +212,54 @@ func isSubString(s1, s2 string) bool {
 }
 
 // dirDepend 检查 s1的目录 是否依赖 s2的目录
+// 优化规则：只有s2是指向目录的链接时，才需要判断依赖关系；
+// 因为普通目录（非链接）不影响远端路径的生成；而指向目录的链接，会在保存依赖时提炼出来
 func dirDepend(s1, s2 *types.FilesDetails) bool {
-	is1File := s1.File.Priority == sdk.RealFilePriority || s1.File.Priority == sdk.LinkFilePriority
-	is2File := s2.File.Priority == sdk.RealFilePriority || s2.File.Priority == sdk.LinkFilePriority
-	// 如果s1是文件，s2是目录
-	if is1File {
-		if is2File { // 如果s1是文件，s2是文件
-			if isSubString(s1.File.Targetrelativepath, s2.File.Targetrelativepath) {
-				return true
-			}
-		} else { // 如果s1是文件，s2是目录
-			if isSubString(s1.File.FilePath, s2.File.FilePath) {
-				return true
-			}
-		}
-	} else {
-		if is2File { // 如果s1是目录，s2是文件
-			if isSubString(s1.File.FilePath, s2.File.Targetrelativepath) {
-				return true
-			}
-		} else { // 如果s1是目录，s2是目录
-			if isSubString(s1.File.FilePath, s2.File.FilePath) {
-				return true
-			}
-		}
+	if s2.File.Priority != sdk.LinkDirPriority {
+		return false
+	}
+
+	if isSubString(s1.File.FilePath, s2.File.FilePath) {
+		return true
 	}
 
 	return false
+
+	// is1File := s1.File.Priority == sdk.RealFilePriority || s1.File.Priority == sdk.LinkFilePriority
+	// is2File := s2.File.Priority == sdk.RealFilePriority || s2.File.Priority == sdk.LinkFilePriority
+
+	// // 如果s1是文件，s2是目录
+	// if is1File {
+	// 	if is2File { // 如果s1是文件，s2是文件
+	// 		if isSubString(s1.File.Targetrelativepath, s2.File.Targetrelativepath) {
+	// 			return true
+	// 		}
+	// 	} else { // 如果s1是文件，s2是目录
+	// 		if isSubString(s1.File.FilePath, s2.File.FilePath) {
+	// 			return true
+	// 		}
+	// 	}
+	// } else {
+	// 	if is2File { // 如果s1是目录，s2是文件
+	// 		if isSubString(s1.File.FilePath, s2.File.Targetrelativepath) {
+	// 			return true
+	// 		}
+	// 	} else { // 如果s1是目录，s2是目录
+	// 		if isSubString(s1.File.FilePath, s2.File.FilePath) {
+	// 			return true
+	// 		}
+	// 	}
+	// }
+
+	// return false
 }
 
 // linkDepend 检查 s1 是否链接到了 s2
 func linkDepend(s1, s2 *types.FilesDetails) bool {
+	if s1.File.Priority != sdk.LinkDirPriority && s1.File.Priority != sdk.LinkFilePriority {
+		return false
+	}
+
 	if s1.File.LinkTarget != "" && s1.File.LinkTarget == s2.File.FilePath {
 		return true
 	}
