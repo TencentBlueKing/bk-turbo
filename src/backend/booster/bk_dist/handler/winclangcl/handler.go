@@ -182,14 +182,15 @@ func (cc *WinClangCl) FinalExecute(args []string) {
 
 // GetFilterRules add file send filter
 func (cc *WinClangCl) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
-	return []dcSDK.FilterRuleItem{
-		{
-			Rule:       dcSDK.FilterRuleFileSuffix,
-			Operator:   dcSDK.FilterRuleOperatorEqual,
-			Standard:   ".gch",
-			HandleType: dcSDK.FilterRuleHandleAllDistribution,
-		},
-	}, nil
+	// return []dcSDK.FilterRuleItem{
+	// 	{
+	// 		Rule:       dcSDK.FilterRuleFileSuffix,
+	// 		Operator:   dcSDK.FilterRuleOperatorEqual,
+	// 		Standard:   ".gch",
+	// 		HandleType: dcSDK.FilterRuleHandleAllDistribution,
+	// 	},
+	// }, nil
+	return nil, nil
 }
 
 func (cc *WinClangCl) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.PreloadConfig, error) {

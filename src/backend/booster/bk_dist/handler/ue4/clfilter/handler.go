@@ -187,13 +187,14 @@ func (cf *TaskCLFilter) FinalExecute(args []string) {
 
 // GetFilterRules add file send filter
 func (cf *TaskCLFilter) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
-	return []dcSDK.FilterRuleItem{
-		{
-			Rule:     dcSDK.FilterRuleFileSuffix,
-			Operator: dcSDK.FilterRuleOperatorEqual,
-			Standard: ".pch",
-		},
-	}, nil
+	// return []dcSDK.FilterRuleItem{
+	// 	{
+	// 		Rule:     dcSDK.FilterRuleFileSuffix,
+	// 		Operator: dcSDK.FilterRuleOperatorEqual,
+	// 		Standard: ".pch",
+	// 	},
+	// }, nil
+	return nil, nil
 }
 
 func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {

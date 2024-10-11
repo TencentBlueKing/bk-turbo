@@ -82,14 +82,31 @@ func GetFileInfoByEnumDir(fp string) *Info {
 	}
 }
 
+type FileType int
+
+const (
+	Unknown FileType = 0
+
+	RealFile FileType = 10
+	RealDir  FileType = 11
+	LinkFile FileType = 12
+	LinkDir  FileType = 13
+)
+
 // Info describe the os.FileInfo and handle some actions
 type Info struct {
 	filePath   string
 	LinkTarget string
+	FileType   FileType
 
 	// info and err are return from os.Stat
 	info os.FileInfo
 	err  error
+}
+
+// Key return the uniq key of this file info
+func (i *Info) Key() string {
+	return i.filePath
 }
 
 // Path return the file path
@@ -224,6 +241,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 		tempf := notf
 		try := 0
 		maxtry := 10
+		var oldi *Info
 		for {
 			var i *Info
 			if statbysearchdir {
@@ -231,6 +249,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 			} else {
 				i = Lstat(tempf)
 			}
+			i.FileType = RealFile
 			tempis[tempf] = i
 			try++
 
@@ -279,6 +298,30 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 				continue
 			}
 
+			// 根据当前文件属性，给上一次的文件属性赋值
+			if loopagain { // 需要等链接的属性
+				i.FileType = LinkFile // 先假设是指向普通文件的链接
+				if oldi != nil {
+					oldi.FileType = LinkFile
+					blog.Infof("common util: set %s to LinkFile by assume", oldi.filePath)
+				}
+			} else {
+				if i.Basic().IsDir() {
+					i.FileType = RealDir
+					if oldi != nil {
+						oldi.FileType = LinkDir
+						blog.Infof("common util: set %s to LinkDir", oldi.filePath)
+					}
+				} else {
+					i.FileType = RealFile
+					if oldi != nil {
+						oldi.FileType = LinkFile
+						blog.Infof("common util: set %s to LinkFile", oldi.filePath)
+					}
+				}
+			}
+			oldi = i
+
 			is = append(is, i)
 
 			if !loopagain {
@@ -297,4 +340,22 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 	}(&tempis)
 
 	return is, nil
+}
+
+func Uniq(input []*Info) []*Info {
+	if input == nil {
+		return input
+	}
+
+	newarr := make([]*Info, 0, len(input)/2)
+	tempMap := make(map[string]struct{}, len(newarr))
+	for _, v := range input {
+		if _, ok := tempMap[v.Key()]; !ok {
+			tempMap[v.Key()] = struct{}{}
+			newarr = append(newarr, v)
+		}
+	}
+
+	return newarr
+
 }
