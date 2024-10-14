@@ -408,6 +408,26 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*
 	return result, nil
 }
 
+func (o *operator) getPodList(clusterID string) (*coreV1.PodList, error) {
+	blog.Debugf("k8s-operator: begin to get federation podlist %s, %s", clusterID, o.conf.BcsNamespace)
+
+	if o.conf.BcsNamespace == "" {
+		return nil, fmt.Errorf("k8s-operator: get podlist failed clusterID(%s): namespace is nil", clusterID)
+	}
+	client, err := o.getClientSet(clusterID)
+	if err != nil {
+		blog.Errorf("k8s-operator: try to get podlist clusterID(%s) namespace(%s)"+
+			"and get client set failed: %v", clusterID, o.conf.BcsNamespace, err)
+		return nil, err
+	}
+	podList, err := client.clientSet.CoreV1().Pods(o.conf.BcsNamespace).List(context.TODO(), metaV1.ListOptions{})
+	if err != nil {
+		blog.Errorf("k8s-operator: get pod list from k8s failed clusterID(%s): %v", clusterID, err)
+		return nil, err
+	}
+	return podList, nil
+}
+
 func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, error) {
 	blog.Debugf("k8s-operator: begin to get federation resource %s, %s", clusterID, o.conf.BcsNamespace)
 	nodeInfoList := make([]*op.NodeInfo, 0, 1000)
@@ -415,6 +435,11 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 		return nil, fmt.Errorf("crm: get federation resource request failed clusterID(%s): namespace is nil", clusterID)
 	}
 	url := fmt.Sprintf(bcsAPIFederatedURI, o.conf.BcsAPIPool.GetAddress(), clusterID, o.conf.BcsNamespace)
+	podList, err := o.getPodList(clusterID)
+	if err != nil {
+		return nodeInfoList, fmt.Errorf("crm: get federation resource request failed clusterID(%s): %s", clusterID, err)
+	}
+
 	for _, ist := range o.conf.InstanceType {
 		result, err := o.getFederationTotalNum(url, ist)
 		if err != nil { //接口请求失败，直接返回错误
@@ -433,12 +458,37 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			return nodeInfoList, err
 		}
 		totalIst := float64(result.Data.Total)
+		resourceUsed := make(coreV1.ResourceList)
+		for _, pod := range podList.Items {
+			if pod.Status.Phase == coreV1.PodSucceeded || pod.Status.Phase == coreV1.PodFailed {
+				continue
+			}
+			if pod.Spec.NodeSelector != nil {
+				if pod.Spec.NodeSelector[o.platformLabelKey] != ist.Platform ||
+					pod.Spec.NodeSelector[o.cityLabelKey] != ist.Group {
+					continue
+				}
+			}
+			for podName, podLimitValue := range podLimits(&pod) {
+				if value, ok := resourceUsed[podName]; !ok {
+					resourceUsed[podName] = podLimitValue.DeepCopy()
+				} else {
+					value.Add(podLimitValue)
+					resourceUsed[podName] = value
+				}
+			}
+		}
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			DiskLeft: totalIst,
-			CPULeft:  totalIst * ist.CPUPerInstance,
-			MemLeft:  totalIst * ist.MemPerInstance,
+			//CPULeft:  totalIst * ist.CPUPerInstance,
+			//MemLeft:  totalIst * ist.MemPerInstance,
+			MemUsed:  float64(resourceUsed.Memory().Value()) / 1024 / 1024,
+			CPUUsed:  float64(resourceUsed.Cpu().Value()),
+			DiskUsed: float64(resourceUsed.StorageEphemeral().Value()),
+			CPUTotal: float64(resourceUsed.Cpu().Value()) + totalIst*ist.CPUPerInstance,
+			MemTotal: float64(resourceUsed.Memory().Value())/1024/1024 + totalIst*ist.MemPerInstance,
 			Attributes: map[string]string{
 				op.AttributeKeyPlatform: ist.Platform,
 				op.AttributeKeyCity:     ist.Group,
@@ -982,6 +1032,19 @@ func podRequests(pod *coreV1.Pod) coreV1.ResourceList {
 	}
 
 	return requests
+}
+
+func podLimits(pod *coreV1.Pod) coreV1.ResourceList {
+	limits := coreV1.ResourceList{}
+	for _, container := range pod.Spec.Containers {
+		addResourceList(limits, container.Resources.Limits)
+	}
+	// init containers define the minimum of any resource
+	for _, container := range pod.Spec.InitContainers {
+		maxResourceList(limits, container.Resources.Limits)
+	}
+
+	return limits
 }
 
 // addResourceList adds the resources in newList to list

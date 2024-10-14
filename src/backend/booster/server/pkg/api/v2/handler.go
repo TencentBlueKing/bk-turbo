@@ -16,10 +16,11 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/manager"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 
 	"github.com/emicklei/go-restful"
 )
@@ -167,7 +168,7 @@ func ReleaseResource(req *restful.Request, resp *restful.Response) {
 		blog.Errorf("release resource: release task(%s) failed, url(%s): %v",
 			param.TaskID, req.Request.URL.String(), err)
 
-		if err == engine.ErrorUnterminatedTaskNoFound {
+		if err == engine.ErrorUnterminatedTaskNoFound || err == types.ErrorTaskAlreadyTerminated {
 			api.ReturnRest(&api.RestResponse{Resp: resp, Message: err.Error()})
 			return
 		}
@@ -210,7 +211,7 @@ func getApplyParam(req *restful.Request) (*manager.TaskCreateParam, error) {
 	}
 
 	param := &manager.TaskCreateParam{
-		ProjectID:     types.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene),
+		ProjectID:     commonTypes.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene),
 		BuildID:       protocol.BuildID,
 		ClientVersion: protocol.ClientVersion,
 		ClientCPU:     protocol.ClientCPU,
@@ -240,7 +241,7 @@ func getMessageParam(req *restful.Request) (*ParamMessage, error) {
 	if protocol.Type == "" {
 		protocol.Type = MessageTask
 	}
-	protocol.ProjectID = types.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene)
+	protocol.ProjectID = commonTypes.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene)
 
 	blog.Debugf("get message param: get message: %s", string(body))
 	return &protocol, nil
