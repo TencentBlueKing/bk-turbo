@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -186,6 +187,17 @@ type BKSlotRspAck struct {
 }
 
 func GetPriority(i *dcFile.Info) FileDescPriority {
+	switch i.FileType {
+	case file.RealDir:
+		return RealDirPriority
+	case file.LinkDir:
+		return LinkDirPriority
+	case file.RealFile:
+		return RealFilePriority
+	case file.LinkFile:
+		return LinkFilePriority
+	}
+
 	isLink := i.Basic().Mode()&os.ModeSymlink != 0
 	if !isLink {
 		if i.Basic().IsDir() {

@@ -665,7 +665,7 @@ func (m *Mgr) ensureFilesWithPriority(
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
 	// 刷新优先级，windows的先不实现
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 		freshPriority(fileDetails)
 		for _, v := range fileDetails {
 			blog.Debugf("remote: after fresh Priority, file:%+v", *v)

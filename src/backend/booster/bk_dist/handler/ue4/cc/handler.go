@@ -225,14 +225,15 @@ func (cc *TaskCC) FinalExecute(args []string) {
 
 // GetFilterRules add file send filter
 func (cc *TaskCC) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
-	return []dcSDK.FilterRuleItem{
-		{
-			Rule:       dcSDK.FilterRuleFileSuffix,
-			Operator:   dcSDK.FilterRuleOperatorEqual,
-			Standard:   ".gch",
-			HandleType: dcSDK.FilterRuleHandleAllDistribution,
-		},
-	}, nil
+	// return []dcSDK.FilterRuleItem{
+	// 	{
+	// 		Rule:       dcSDK.FilterRuleFileSuffix,
+	// 		Operator:   dcSDK.FilterRuleOperatorEqual,
+	// 		Standard:   ".gch",
+	// 		HandleType: dcSDK.FilterRuleHandleAllDistribution,
+	// 	},
+	// }, nil
+	return nil, nil
 }
 
 func (cc *TaskCC) getIncludeExe() (string, error) {
@@ -816,8 +817,6 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	// }
 
 	if err == nil {
-		blog.Infof("cc: parse command,got total %d includes files", len(includes))
-
 		// add pch file as input
 		if pchfile != "" {
 			// includes = append(includes, pchfile)
@@ -835,6 +834,10 @@ func (cc *TaskCC) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				includes = append(includes, finfo)
 			}
 		}
+
+		oldlen := len(includes)
+		includes = dcFile.Uniq(includes)
+		blog.Infof("cc: parse command,got total %d uniq %d includes files", oldlen, len(includes))
 
 		inputFiles := []dcSDK.FileDesc{}
 		// priority := dcSDK.MaxFileDescPriority

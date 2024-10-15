@@ -339,13 +339,14 @@ func (cl *TaskCL) FinalExecute(args []string) {
 
 // GetFilterRules add file send filter
 func (cl *TaskCL) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
-	return []dcSDK.FilterRuleItem{
-		{
-			Rule:     dcSDK.FilterRuleFileSuffix,
-			Operator: dcSDK.FilterRuleOperatorEqual,
-			Standard: ".pch",
-		},
-	}, nil
+	// return []dcSDK.FilterRuleItem{
+	// 	{
+	// 		Rule:     dcSDK.FilterRuleFileSuffix,
+	// 		Operator: dcSDK.FilterRuleOperatorEqual,
+	// 		Standard: ".pch",
+	// 	},
+	// }, nil
+	return nil, nil
 }
 
 func (cl *TaskCL) getIncludeExe() (string, error) {
@@ -719,8 +720,6 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	tstart = tend
 
 	if err == nil {
-		blog.Infof("cl: parse command,got total %d includes files", len(includes))
-
 		// add pch file as input
 		if pchfile != "" {
 			// includes = append(includes, pchfile)
@@ -738,6 +737,10 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				includes = append(includes, finfo)
 			}
 		}
+
+		oldlen := len(includes)
+		includes = dcFile.Uniq(includes)
+		blog.Infof("cc: parse command,got total %d uniq %d includes files", oldlen, len(includes))
 
 		inputFiles := []dcSDK.FileDesc{}
 		// priority := dcSDK.MaxFileDescPriority
