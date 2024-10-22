@@ -10,15 +10,23 @@
 package types
 
 import (
+	"fmt"
 	"os"
 	"os/user"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/websocket"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
+	"github.com/emicklei/go-restful"
 )
 
 // WorkRegisterConfig describe the config of registering work
@@ -191,6 +199,9 @@ type RemoteTaskExecuteRequest struct {
 	Sandbox       *dcSyscall.Sandbox
 	IOTimeout     int
 	BanWorkerList []*dcProtocol.Host
+
+	HttpConnKey   string
+	HttpConnCache *HttpConnCache
 }
 
 // RemoteTaskExecuteResult describe the remote task execution result
@@ -212,6 +223,102 @@ type RemoteTaskSendFileResult struct {
 	Result *dcSDK.BKSendFileResult
 }
 
+// ++++++++++++++++ TODO : 增加http连接缓存
+func getHttpNetKey(req *restful.Request) string {
+	return fmt.Sprintf("%s_%d", req.Request.RemoteAddr, time.Now().Nanosecond())
+}
+
+type connStatus int
+
+const (
+	Connected connStatus = iota
+	Disconnected
+	Unknown = 99
+)
+
+type httpConn struct {
+	status         connStatus
+	delayCleanSecs int
+	ErrorStartTime time.Time
+}
+
+type HttpConnCache struct {
+	cache map[string]*httpConn
+	mutex sync.RWMutex
+}
+
+func NewHttpConnCache() *HttpConnCache {
+	return &HttpConnCache{
+		cache: make(map[string]*httpConn),
+	}
+}
+
+func (c *HttpConnCache) InsertOnce(key string, delayCleanSecs int) bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	_, ok := c.cache[key]
+	if !ok {
+		c.cache[key] = &httpConn{status: Connected, delayCleanSecs: delayCleanSecs}
+		return true
+	} else {
+		return false
+	}
+}
+
+func (c *HttpConnCache) IsConnStatusOk(key string) bool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	v, ok := c.cache[key]
+	if !ok {
+		return false
+	}
+
+	return v.status == Connected
+}
+
+func (c *HttpConnCache) OnConnStatusError(key string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	v, ok := c.cache[key]
+	if ok {
+		if v.delayCleanSecs == 0 {
+			delete(c.cache, key)
+		} else {
+			v.status = Disconnected
+			v.ErrorStartTime = time.Now()
+		}
+	}
+}
+
+func (c *HttpConnCache) Check() {
+	blog.Infof("types: httpconncache: start go routine to check http conn status")
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.mutex.Lock()
+			for k, v := range c.cache {
+				if v.status != Connected {
+					old := v.ErrorStartTime.Add(time.Duration(v.delayCleanSecs) * time.Second)
+					if old.Before(time.Now()) {
+						delete(c.cache, k)
+						blog.Infof("types: httpconncache: deleted %s from cache after wait", k)
+					}
+				}
+			}
+			c.mutex.Unlock()
+		}
+	}
+}
+
+// ----------------
+
 // LocalTaskExecuteRequest describe the local task execution param
 type LocalTaskExecuteRequest struct {
 	Pid          int
@@ -220,6 +327,116 @@ type LocalTaskExecuteRequest struct {
 	Commands     []string
 	Environments []string
 	Stats        *dcSDK.ControllerJobStats
+
+	// 该请求的执行是否依赖http连接状态，默认依赖，即ignoreHttpStatus为false;
+	// 如果依赖连接状态，当连接断开时，该请求直接返回失败
+	ignoreHttpStatus  bool
+	checkedHttpStatus bool
+	HttpConnKey       string
+	HttpConnCache     *HttpConnCache
+}
+
+// 这个正常只有一个协程调用，无需加锁
+func (r *LocalTaskExecuteRequest) InitHttpConnStatus(req *restful.Request,
+	cache *HttpConnCache,
+	s *websocket.Session,
+	delaysecs int) error {
+	shouldcheck := r.shouldCheckHttpStatus()
+	if shouldcheck && req != nil && cache != nil {
+		key := ""
+		if s == nil {
+			key = getHttpNetKey(req)
+		} else {
+			key = s.GetConnKey()
+		}
+
+		// TODO : 检查该连接的检查协程是否已启动
+		firstInsert := cache.InsertOnce(key, delaysecs)
+		if firstInsert {
+			blog.Infof("types: httpconncache: inserted %s to cache", key)
+
+			// 确保协程启动
+			var wg = sync.WaitGroup{}
+			wg.Add(1)
+			if s == nil {
+				go func(wg *sync.WaitGroup) {
+					wg.Done()
+					ctx := req.Request.Context()
+					select {
+					case <-ctx.Done():
+						err := ctx.Err()
+						cache.OnConnStatusError(key)
+						blog.Infof("types: httpconncache: found %s disconnected with error:%v", key, err)
+					}
+				}(&wg)
+			} else {
+				go func(wg *sync.WaitGroup) {
+					wg.Done()
+					ticker := time.NewTicker(3 * time.Second)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-ticker.C:
+							if !s.IsValid() {
+								cache.OnConnStatusError(key)
+								blog.Infof("types: httpconncache: found websocket %s disconnected", key)
+								return
+							}
+						}
+					}
+				}(&wg)
+			}
+			wg.Wait()
+		}
+
+		r.HttpConnKey = key
+		r.HttpConnCache = cache
+		return nil
+	} else {
+		r.HttpConnKey = ""
+		r.HttpConnCache = nil
+		return nil
+	}
+}
+
+func IsHttpConnStatusOk(cache *HttpConnCache, key string) bool {
+	if cache == nil || key == "" {
+		return true
+	}
+
+	return cache.IsConnStatusOk(key)
+}
+
+func (r *LocalTaskExecuteRequest) shouldCheckHttpStatus() bool {
+	if r.checkedHttpStatus {
+		return !r.ignoreHttpStatus
+	}
+
+	// check env.KeyExecutorIgnoreHttpStatus
+	for _, e := range r.Environments {
+		if strings.HasPrefix(e, env.GetEnvKey(env.KeyExecutorIgnoreHttpStatus)) {
+			for i := 0; i < len(e); i++ {
+				if e[i] == '=' {
+					b, err1 := strconv.ParseBool(e[i+1:])
+					if err1 == nil {
+						r.ignoreHttpStatus = b
+						r.checkedHttpStatus = true
+						return !r.ignoreHttpStatus
+					} else {
+						r.ignoreHttpStatus = false
+						r.checkedHttpStatus = true
+						return !r.ignoreHttpStatus
+					}
+				}
+			}
+			break
+		}
+	}
+
+	r.ignoreHttpStatus = false
+	r.checkedHttpStatus = true
+
+	return !r.ignoreHttpStatus
 }
 
 // LocalTaskExecuteResult describe the local task execution result

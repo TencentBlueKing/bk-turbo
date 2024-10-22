@@ -40,4 +40,5 @@ var (
 	ErrFileLock                     = fmt.Errorf("lock file failed")
 	ErrWorkIDEmpty                  = fmt.Errorf("work id is empty")
 	ErrWorkNotRead                  = fmt.Errorf("work is not ready")
+	ErrLocalHttpConnDisconnected    = fmt.Errorf("local http connection disconnected")
 )

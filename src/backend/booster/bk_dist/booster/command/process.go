@@ -316,6 +316,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			IdleKeepSecs:         c.Int(FlagIdleKeepSecs),
 			CleanTmpFilesDayAgo:  cleanTmpFilesDayAgo,
 			SearchToolchain:      c.Bool(FlagSearchToolchain),
+			IgnoreHttpStatus:     c.Bool(FlagIgnoreHttpStatus),
 		},
 
 		Transport: dcType.BoosterTransport{
@@ -323,7 +324,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			ServerHost:             ServerHost,
 			Timeout:                5 * time.Second,
 			HeartBeatTick:          5 * time.Second,
-			InspectTaskTick:        100 * time.Millisecond,
+			InspectTaskTick:        1000 * time.Millisecond,
 			TaskPreparingTimeout:   time.Duration(waitResourceSeconds) * time.Second,
 			PrintTaskInfoEveryTime: 5,
 			CommitSuicideCheckTick: 5 * time.Second,

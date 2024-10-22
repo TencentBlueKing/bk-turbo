@@ -25,6 +25,15 @@ import (
 	"github.com/emicklei/go-restful"
 )
 
+var (
+	gHttpConnCache *types.HttpConnCache
+)
+
+func init() {
+	gHttpConnCache = types.NewHttpConnCache()
+	go gHttpConnCache.Check()
+}
+
 func available(_ *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &AvailableResp{Pid: os.Getpid()}})
 }
@@ -477,6 +486,9 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	// TODO : 需要关注http的连接状态
+	config.InitHttpConnStatus(req, gHttpConnCache, nil, 0)
+
 	result, err := defaultManager.ExecuteLocalTask(workID, config)
 	if err != nil {
 		// blog.Errorf("api: executeLocalTask execute local task failed, work: %s, err: %v", workID, err)
@@ -504,7 +516,10 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 	r.Write2Resp(&api.RestResponse{Resp: resp})
 }
 
-func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data []byte, s *websocket.Session) error {
+func callbackOfLocalExecute(req *restful.Request,
+	id websocket.MessageID,
+	data []byte,
+	s *websocket.Session) error {
 	workID := req.PathParameter(pathParamWorkID)
 	r := &LocalTaskExecuteResp{}
 
@@ -525,6 +540,9 @@ func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data [
 		// ret won't be nil
 		return ret.Err
 	}
+
+	// TODO : 需要关注http的连接状态
+	config.InitHttpConnStatus(req, gHttpConnCache, s, 20)
 
 	result, err := defaultManager.ExecuteLocalTask(workID, config)
 	if err != nil {

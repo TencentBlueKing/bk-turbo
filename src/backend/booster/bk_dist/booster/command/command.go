@@ -111,6 +111,7 @@ const (
 	FlagDynamicPort          = "dynamic_port"
 	FlagWorkerOfferSlot      = "worker_offer_slot"
 	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
+	FlagIgnoreHttpStatus     = "ignore_http_status"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"

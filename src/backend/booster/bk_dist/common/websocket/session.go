@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,10 +68,11 @@ type Session struct {
 
 	req *restful.Request
 
-	ip    string // 远端的ip
-	port  int32  // 远端的port
-	conn  net.Conn
-	valid bool // 连接是否可用
+	ip      string // 远端的ip
+	port    int32  // 远端的port
+	conn    net.Conn
+	connKey string
+	valid   bool // 连接是否可用
 
 	// 收到数据后的回调函数
 	callback WebSocketFunc
@@ -98,7 +98,7 @@ type Session struct {
 type WebSocketFunc func(r *restful.Request, id MessageID, data []byte, s *Session) error
 
 // server端创建session，需要指定http处理函数
-func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSocketFunc) *Session {
+func NewServerSession(w *restful.Response, r *restful.Request, callback WebSocketFunc) *Session {
 	conn, _, _, err := ws.UpgradeHTTP(r.Request, w)
 	if err != nil || conn == nil {
 		blog.Errorf("[session] UpgradeHTTP failed with error:%v", err)
@@ -127,6 +127,7 @@ func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSoc
 		ip:             ip,
 		port:           int32(port),
 		conn:           conn,
+		connKey:        fmt.Sprintf("%s_%d", remoteaddr, time.Now().Nanosecond()),
 		sendNotifyChan: sendNotifyChan,
 		sendQueue:      sendQueue,
 		waitMap:        make(map[MessageID]*Message),
@@ -139,6 +140,10 @@ func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSoc
 	s.serverStart()
 
 	return s
+}
+
+func (s *Session) GetConnKey() string {
+	return s.connKey
 }
 
 // client端创建session，需要指定目标server的ip和端口
@@ -454,7 +459,6 @@ func (s *Session) serverReceive(wg *sync.WaitGroup) {
 	}
 }
 
-//
 func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	blog.Debugf("[session] notify send and wait for response now...")
 
@@ -567,10 +571,11 @@ func (s *Session) check(wg *sync.WaitGroup) {
 	wg.Done()
 	for {
 		select {
-		case <-s.ctx.Done():
-			blog.Infof("[session] session check canceled by context")
-			s.clean(ErrorContextCanceled)
-			return
+		// 在用户环境上发现s.ctx.Done()异常触发的，不清楚原因，先屏蔽
+		// case <-s.ctx.Done():
+		// 	blog.Infof("[session] session check canceled by context")
+		// 	s.clean(ErrorContextCanceled)
+		// 	return
 		case err := <-s.errorChan:
 			blog.Warnf("[session] session check found error:%v", err)
 			s.clean(err)
