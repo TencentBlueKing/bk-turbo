@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
-	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -630,7 +629,7 @@ func (b *Booster) unregisterWork() error {
 	return nil
 }
 
-func (b *Booster) sendAdditionFile() {
+/*func (b *Booster) sendAdditionFile() {
 	if b.config.Works.Local || b.config.Works.Degraded {
 		return
 	}
@@ -679,7 +678,7 @@ func (b *Booster) sendAdditionFile() {
 		return
 	}
 	blog.Infof("booster: finish send addition files: %v", b.config.Works.AdditionFiles)
-}
+}*/
 
 func (b *Booster) runWorks(
 	ctx context.Context,

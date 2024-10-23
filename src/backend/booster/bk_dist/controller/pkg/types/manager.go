@@ -280,7 +280,6 @@ type FileInfo struct {
 	FileMode           uint32         `json:"file_mode"`
 	LinkTarget         string         `json:"link_target"`
 	SendStatus         FileSendStatus `json:"send_status"`
-	FailCount          int            `json:"fail_count"`
 }
 
 // Match check if the FileDesc is point to some file as this FileInfo

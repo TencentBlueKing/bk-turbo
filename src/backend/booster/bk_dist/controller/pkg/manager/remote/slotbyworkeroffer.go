@@ -282,7 +282,7 @@ func (wo *workerOffer) EnableWorker(host *dcProtocol.Host) {
 	blog.Infof("remote slot: total slot:%d after enable host:%v", wo.validWorkerNum, *host)
 }
 
-func (wo *workerOffer) CanWorkerRetry(host *dcProtocol.Host) bool {
+/*func (wo *workerOffer) CanWorkerRetry(host *dcProtocol.Host) bool {
 	if host == nil {
 		return false
 	}
@@ -310,7 +310,7 @@ func (wo *workerOffer) CanWorkerRetry(host *dcProtocol.Host) bool {
 	}
 
 	return false
-}
+}*/
 
 func (wo *workerOffer) SetWorkerStatus(host *dcProtocol.Host, s Status) {
 	wo.workerLock.Lock()

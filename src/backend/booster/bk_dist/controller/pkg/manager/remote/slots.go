@@ -28,7 +28,7 @@ type RemoteSlotMgr interface {
 	RecoverDeadWorker(w *worker)
 	DisableWorker(host *dcProtocol.Host)
 	EnableWorker(host *dcProtocol.Host)
-	CanWorkerRetry(host *dcProtocol.Host) bool // check if worker can retry, if can set worker status to retrying
+	//CanWorkerRetry(host *dcProtocol.Host) bool // check if worker can retry, if can set worker status to retrying
 	SetWorkerStatus(host *dcProtocol.Host, status Status)
 	Lock(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host
 	Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host)
@@ -299,7 +299,7 @@ func (wr *resource) EnableWorker(host *dcProtocol.Host) {
 	blog.Infof("remote slot: total slot:%d after enable host:%v", wr.totalSlots, *host)
 }
 
-func (wr *resource) CanWorkerRetry(host *dcProtocol.Host) bool {
+/*func (wr *resource) CanWorkerRetry(host *dcProtocol.Host) bool {
 	if host == nil {
 		return false
 	}
@@ -328,7 +328,7 @@ func (wr *resource) CanWorkerRetry(host *dcProtocol.Host) bool {
 	}
 
 	return false
-}
+}*/
 
 func (wr *resource) SetWorkerStatus(host *dcProtocol.Host, s Status) {
 	wr.workerLock.Lock()
@@ -566,13 +566,18 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 }
 
 // 大文件优先
-func (wr *resource) getWorkerLargeFileFirst(f string) *worker {
+func (wr *resource) getWorkerLargeFileFirst(f string, banWorkerList []*dcProtocol.Host) *worker {
 	var w *worker
 	max := 0
 	inlargequeue := false
 	for _, worker := range wr.worker {
 		if worker.disabled || worker.dead {
 			continue
+		}
+		for _, host := range banWorkerList {
+			if worker.host.Equal(host) {
+				continue
+			}
 		}
 
 		free := worker.totalSlots - worker.occupiedSlots
@@ -618,7 +623,7 @@ func (wr *resource) occupyWorkerSlots(f string, banWorkerList []*dcProtocol.Host
 	if f == "" {
 		w = wr.getWorkerWithMostFreeSlots(banWorkerList)
 	} else {
-		w = wr.getWorkerLargeFileFirst(f)
+		w = wr.getWorkerLargeFileFirst(f, banWorkerList)
 	}
 
 	if w == nil {
