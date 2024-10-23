@@ -22,11 +22,13 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
 
+	shaderToolComm "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
 	commandCli "github.com/urfave/cli"
 )
 
 // mainProcess do the make process:
 func mainProcess(c *commandCli.Context) error {
+	shaderToolComm.FreshEnvFromProjectSetting()
 	initialLogDir(getLogDir(c.String(FlagLogDir)))
 	setLogLevel(c.String(FlagLog))
 
