@@ -473,6 +473,10 @@ var (
 			Name:  "clean_tmp_files_day_ago",
 			Usage: "clean tmp files which modify time before this days, default is 1",
 		},
+		commandCli.BoolFlag{
+			Name:  "ignore_http_status",
+			Usage: "tasks will be executed even local http connection disconnected when this flag set",
+		},
 	}
 )
 
