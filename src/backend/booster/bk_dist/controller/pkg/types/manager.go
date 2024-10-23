@@ -294,7 +294,7 @@ func (c *HttpConnCache) OnConnStatusError(key string) {
 }
 
 func (c *HttpConnCache) Check() {
-	blog.Infof("types: httpconncache: start go routine to check http conn status")
+	// blog.Infof("types: httpconncache: start go routine to check http conn status")
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -308,7 +308,7 @@ func (c *HttpConnCache) Check() {
 					old := v.ErrorStartTime.Add(time.Duration(v.delayCleanSecs) * time.Second)
 					if old.Before(time.Now()) {
 						delete(c.cache, k)
-						blog.Infof("types: httpconncache: deleted %s from cache after wait", k)
+						// blog.Infof("types: httpconncache: deleted %s from cache after wait", k)
 					}
 				}
 			}
