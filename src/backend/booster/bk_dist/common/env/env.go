@@ -75,6 +75,7 @@ const (
 	KeyExecutorUELibLocalCPUWeight     = "UE_LIB_LOCAL_CPU_WEIGHT"
 	KeyExecutorUELinkLocalCPUWeight    = "UE_LINK_LOCAL_CPU_WEIGHT"
 	KeyExecutorUEShaderLocalCPUWeight  = "UE_SHADER_LOCAL_CPU_WEIGHT"
+	KeyExecutorIgnoreHttpStatus        = "IGNORE_HTTP_STATUS"
 
 	KeyUserDefinedLogLevel         = "USER_DEFINED_LOG_LEVEL"
 	KeyUserDefinedExecutorLogLevel = "USER_DEFINED_EXECUTOR_LOG_LEVEL"

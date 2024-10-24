@@ -111,6 +111,7 @@ const (
 	FlagDynamicPort          = "dynamic_port"
 	FlagWorkerOfferSlot      = "worker_offer_slot"
 	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
+	FlagIgnoreHttpStatus     = "ignore_http_status"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -471,6 +472,10 @@ var (
 		commandCli.IntFlag{
 			Name:  "clean_tmp_files_day_ago",
 			Usage: "clean tmp files which modify time before this days, default is 1",
+		},
+		commandCli.BoolFlag{
+			Name:  "ignore_http_status",
+			Usage: "tasks will be executed even local http connection disconnected when this flag set",
 		},
 	}
 )
