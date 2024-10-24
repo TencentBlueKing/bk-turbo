@@ -506,6 +506,16 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 	}
 }
 
+func checkHttpConn(req *types.RemoteTaskExecuteRequest) (*types.RemoteTaskExecuteResult, error) {
+	if !types.IsHttpConnStatusOk(req.HttpConnCache, req.HttpConnKey) {
+		blog.Errorf("remote: httpconncache exit execute pid(%d) for http connection[%s] error",
+			req.Pid, req.HttpConnKey)
+		return nil, types.ErrLocalHttpConnDisconnected
+	}
+
+	return nil, nil
+}
+
 // ExecuteTask run the task in remote worker and ensure the dependent files
 func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTaskExecuteResult, error) {
 	if m.TotalSlots() <= 0 {
@@ -550,8 +560,13 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		m.DecRemoteJobs()
 	}()
 
+	ret, err := checkHttpConn(req)
+	if err != nil {
+		return ret, err
+	}
+
 	// 1. send toolchain if required  2. adjust exe remote path for req
-	err := m.sendToolchain(handler, req)
+	err = m.sendToolchain(handler, req)
 	if err != nil {
 		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
 			"ensure tool chain failed: %v, going to disable host(%s)",
@@ -565,6 +580,12 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 	if m.isFilesAlreadySendFailed(req.Server.Server, req.Req.Commands) {
 		return nil, fmt.Errorf("remote: no need to send files for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
 	}
+
+	ret, err = checkHttpConn(req)
+	if err != nil {
+		return ret, err
+	}
+
 	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
 	if err != nil {
 		req.BanWorkerList = append(req.BanWorkerList, req.Server)
@@ -587,6 +608,11 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	blog.Infof("remote: try to real execute remote task for work(%s) from pid(%d) with timeout(%d) after send files",
 		m.work.ID(), req.Pid, req.IOTimeout)
+
+	ret, err = checkHttpConn(req)
+	if err != nil {
+		return ret, err
+	}
 
 	var result *dcSDK.BKDistResult
 	if m.conf.LongTCP {

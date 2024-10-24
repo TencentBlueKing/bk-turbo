@@ -10,10 +10,17 @@
 package common
 
 import (
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
 
 // define const vars
@@ -176,3 +183,50 @@ func SetLogLevel(level string) {
 		blog.SetStderrLevel(blog.StderrLevelInfo)
 	}
 }
+
+// ++ 增加公共函数，用于从配置文件获取环境变量变设置到当前
+func getProjectSettingFile() (string, error) {
+	exepath := dcUtil.GetExcPath()
+	if exepath != "" {
+		jsonfile := filepath.Join(exepath, "bk_project_setting.json")
+		if dcFile.Stat(jsonfile).Exist() {
+			return jsonfile, nil
+		}
+	}
+
+	return "", fmt.Errorf("not found project setting file")
+}
+
+func resolveApplyJSON(filename string) (*ApplyParameters, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	var t ApplyParameters
+	if err = codec.DecJSON(data, &t); err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func FreshEnvFromProjectSetting() error {
+	projectSettingFile, err := getProjectSettingFile()
+	if err != nil {
+		return err
+	}
+
+	settings, err := resolveApplyJSON(projectSettingFile)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range settings.Env {
+		os.Setenv(k, v)
+	}
+
+	return nil
+}
+
+// --

@@ -103,6 +103,23 @@ func (m *Mgr) GetPumpCache() (*analyser.FileCache, *analyser.RootCache) {
 	return m.pumpFileCache, m.pumpRootCache
 }
 
+func checkHttpConn(req *types.LocalTaskExecuteRequest) (*types.LocalTaskExecuteResult, error) {
+	if !types.IsHttpConnStatusOk(req.HttpConnCache, req.HttpConnKey) {
+		blog.Errorf("local: httpconncache exit execute pid(%d) command:[%s] for http connection[%s] error",
+			req.Pid, strings.Join(req.Commands, " "), req.HttpConnKey)
+		return &types.LocalTaskExecuteResult{
+			Result: &dcSDK.LocalTaskResult{
+				ExitCode: -1,
+				Message:  types.ErrLocalHttpConnDisconnected.Error(),
+				Stdout:   nil,
+				Stderr:   nil,
+			},
+		}, types.ErrLocalHttpConnDisconnected
+	}
+
+	return nil, nil
+}
+
 // ExecuteTask 若是task command本身运行失败, 不作为execute失败, 将结果放在result中返回即可
 // 只有筹备执行的过程中失败, 才作为execute失败
 func (m *Mgr) ExecuteTask(
@@ -122,6 +139,11 @@ func (m *Mgr) ExecuteTask(
 
 	defer e.executeFinalTask()
 	defer e.handleRecord()
+
+	ret, err := checkHttpConn(req)
+	if err != nil {
+		return ret, err
+	}
 
 	// 该work被置为degraded || 该executor被置为degraded, 则直接走本地执行
 	if m.work.Basic().Settings().Degraded || e.degrade() {
@@ -150,6 +172,11 @@ func (m *Mgr) ExecuteTask(
 	// 优化没有远程资源转本地的逻辑； 如果没有远程资源，则先获取本地锁，然后转本地执行
 	// 如果没有本地锁，则先等待，后面有远程资源时，则直接远程，无需全部阻塞在本地执行
 	for {
+		ret, err := checkHttpConn(req)
+		if err != nil {
+			return ret, err
+		}
+
 		// 先检查是否有远程资源
 		if !m.work.Resource().HasAvailableWorkers() {
 			// check whether this task need remote worker,
@@ -183,6 +210,11 @@ func (m *Mgr) ExecuteTask(
 	m.work.Basic().Info().IncPrepared()
 	m.work.Remote().IncRemoteJobs()
 
+	ret, err = checkHttpConn(req)
+	if err != nil {
+		return ret, err
+	}
+
 	c, err := e.executePreTask()
 	if err != nil {
 		m.work.Basic().Info().DecPrepared()
@@ -199,9 +231,16 @@ func (m *Mgr) ExecuteTask(
 		Sandbox:       e.sandbox,
 		IOTimeout:     e.ioTimeout,
 		BanWorkerList: []*protocol.Host{},
+		HttpConnCache: req.HttpConnCache,
+		HttpConnKey:   req.HttpConnKey,
 	}
 
 	for i := 0; i < m.getTryTimes(e); i++ {
+		ret, err = checkHttpConn(req)
+		if err != nil {
+			return ret, err
+		}
+
 		req.Stats.RemoteTryTimes = i + 1
 		r, err = m.work.Remote().ExecuteTask(remoteReq)
 		if err != nil {
@@ -231,6 +270,11 @@ func (m *Mgr) ExecuteTask(
 	m.work.Basic().Info().DecPrepared()
 	m.work.Remote().DecRemoteJobs()
 	if err != nil {
+		ret, err = checkHttpConn(req)
+		if err != nil {
+			return ret, err
+		}
+
 		if err == types.ErrSendFileFailed {
 			blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d)"+
 				" with send file error, retryOnRemoteFail now",
@@ -252,6 +296,11 @@ func (m *Mgr) ExecuteTask(
 	if err != nil {
 		blog.Warnf("local: execute post-task for work(%s) from pid(%d) failed: %v", m.work.ID(), req.Pid, err)
 		req.Stats.RemoteErrorMessage = err.Error()
+
+		ret, err = checkHttpConn(req)
+		if err != nil {
+			return ret, err
+		}
 
 		lr, err := m.retryOnRemoteFail(req, globalWork, e)
 		if err == nil && lr != nil {

@@ -26,6 +26,7 @@ import (
 
 // mainProcess do the make process:
 func mainProcess(c *commandCli.Context) error {
+	common.FreshEnvFromProjectSetting()
 	initialLogDir(getLogDir(c.String(FlagLogDir)))
 	common.SetLogLevel(c.String(FlagLog))
 
