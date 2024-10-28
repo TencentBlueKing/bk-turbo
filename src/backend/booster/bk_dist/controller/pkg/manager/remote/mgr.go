@@ -334,21 +334,19 @@ func (fsm *fileSendMap) getFailFiles() []dcSDK.FileDesc {
 	defer fsm.RUnlock()
 
 	failFiles := make([]dcSDK.FileDesc, 0)
-	for _, v := range fsm.cache {
+	for _, v := range fsm.failedFiles {
 		for _, ci := range *v {
-			if ci.SendStatus == types.FileSendFailed {
-				failFiles = append(failFiles, dcSDK.FileDesc{
-					FilePath:           ci.FullPath,
-					Compresstype:       dcProtocol.CompressLZ4,
-					FileSize:           ci.Size,
-					Lastmodifytime:     ci.LastModifyTime,
-					Md5:                ci.Md5,
-					Targetrelativepath: ci.TargetRelativePath,
-					Filemode:           ci.FileMode,
-					LinkTarget:         ci.LinkTarget,
-					NoDuplicated:       true,
-				})
-			}
+			failFiles = append(failFiles, dcSDK.FileDesc{
+				FilePath:           ci.FullPath,
+				Compresstype:       dcProtocol.CompressLZ4,
+				FileSize:           ci.Size,
+				Lastmodifytime:     ci.LastModifyTime,
+				Md5:                ci.Md5,
+				Targetrelativepath: ci.TargetRelativePath,
+				Filemode:           ci.FileMode,
+				LinkTarget:         ci.LinkTarget,
+				NoDuplicated:       true,
+			})
 		}
 	}
 	return failFiles
