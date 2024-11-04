@@ -485,6 +485,7 @@ type FileCollectionInfo struct {
 	SendStatus FileSendStatus   `json:"send_status"`
 	Files      []dcSDK.FileDesc `json:"files"`
 	Timestamp  int64            `json:"timestamp"`
+	Retry      bool             `json:"retry"`
 }
 
 // FileInfo record file info
