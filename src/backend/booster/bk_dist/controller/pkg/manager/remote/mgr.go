@@ -39,8 +39,6 @@ const (
 	corkMaxSize = 1024 * 1024 * 10
 	// corkMaxSize   = 1024 * 1024 * 1024
 	largeFileSize = 1024 * 1024 * 100 // 100MB
-
-	//fileMaxFailCount = 5
 )
 
 // NewMgr get a new Remote Mgr
@@ -1070,8 +1068,7 @@ func (m *Mgr) ensureFiles(
 						if v.info.SendStatus == types.FileSendSucceed {
 							wg <- nil
 							continue
-						} else if v.info.SendStatus == types.FileSendFailed ||
-							v.info.SendStatus == types.FileSendUnknown {
+						} else if v.info.SendStatus == types.FileSendFailed {
 							wg <- types.ErrSendFileFailed
 							continue
 						}
@@ -1436,7 +1433,7 @@ type matchResult struct {
 
 // checkOrLockCorkFiles 批量检查目标file的sendStatus, 如果已经被发送, 则返回当前状态和true; 如果没有被发送过, 则将其置于sending, 并返回false
 func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc) []matchResult {
-	if len(descs) == 0 || !descs[0].Retry { // 普通的文件
+	if len(descs) == 0 || !descs[0].Retry { // 第一次发送的文件
 		m.fileSendMutex.Lock()
 		target, ok := m.fileSendMap[server]
 		if !ok {
@@ -1446,7 +1443,7 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc) []mat
 		m.fileSendMutex.Unlock()
 
 		return target.matchOrInserts(descs)
-	} else { // 失败的文件
+	} else { // 失败重试的文件
 		m.fileSendMutex.Lock()
 		target, ok := m.failFileSendMap[server]
 		if !ok {
