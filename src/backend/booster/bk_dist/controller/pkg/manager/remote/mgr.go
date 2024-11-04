@@ -1695,9 +1695,6 @@ func (m *Mgr) ensureOneFileCollection(
 	fileDetails := make([]*types.FilesDetails, 0, len(fc.Files))
 	for _, f := range fc.Files {
 		f.NoDuplicated = true
-		/*if fc.Retry {
-			f.Retry = true
-		}*/
 		fileDetails = append(fileDetails, &types.FilesDetails{
 			Servers: Servers,
 			File:    f,
