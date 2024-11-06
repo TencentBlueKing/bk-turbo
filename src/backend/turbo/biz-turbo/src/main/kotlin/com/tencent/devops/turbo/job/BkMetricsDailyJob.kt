@@ -85,13 +85,6 @@ class BkMetricsDailyJob @Autowired constructor(
             turboSaveTime = saveTime
         )
 
-        bkMetricsRabbitTemplate.convertAndSend(EXCHANGE_METRICS_STATISTIC_TURBO_DAILY, "",
-            JsonUtil.toJson(bkMetricsMessage)) { message: Message ->
-            val messageProperties = message.messageProperties
-            messageProperties.setHeader("contentType", "application/json")
-            messageProperties.setHeader("contentEncoding", "UTF-8")
-            messageProperties.deliveryMode = MessageDeliveryMode.PERSISTENT
-            message
-        }
+        bkMetricsRabbitTemplate.convertAndSend(EXCHANGE_METRICS_STATISTIC_TURBO_DAILY, "", bkMetricsMessage)
     }
 }
