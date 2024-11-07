@@ -355,3 +355,20 @@ func (u *UE4) FinalExecute(args []string) {
 		u.innerhandler.FinalExecute(args)
 	}
 }
+
+// SupportResultCache check whether this command support result cache
+func (u *UE4) SupportResultCache(command []string) bool {
+	if u.innerhandler != nil {
+		return u.innerhandler.SupportResultCache(command)
+	}
+
+	return false
+}
+
+func (u *UE4) GetResultCacheKey(command []string) string {
+	if u.innerhandler != nil {
+		return u.innerhandler.GetResultCacheKey(command)
+	}
+
+	return ""
+}

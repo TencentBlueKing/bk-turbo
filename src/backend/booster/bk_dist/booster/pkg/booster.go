@@ -368,6 +368,10 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorIgnoreHttpStatus] = envValueTrue
 	}
 
+	if b.config.Works.ResultCache {
+		requiredEnv[env.KeyExecutorResultCache] = envValueTrue
+	}
+
 	resultEnv := make(map[string]string, 10)
 	for k, v := range requiredEnv {
 		resultEnv[env.GetEnvKey(k)] = v

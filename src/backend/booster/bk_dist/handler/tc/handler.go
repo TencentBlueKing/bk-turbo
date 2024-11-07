@@ -271,3 +271,12 @@ func (tc *TextureCompressor) LocalExecute(command []string) dcType.BKDistCommonE
 // FinalExecute no need
 func (tc *TextureCompressor) FinalExecute([]string) {
 }
+
+// SupportResultCache check whether this command support result cache
+func (tc *TextureCompressor) SupportResultCache(command []string) bool {
+	return false
+}
+
+func (tc *TextureCompressor) GetResultCacheKey(command []string) string {
+	return ""
+}

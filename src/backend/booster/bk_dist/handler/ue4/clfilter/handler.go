@@ -310,3 +310,20 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 
 	return strings.Join(output, ""), nil
 }
+
+// SupportResultCache check whether this command support result cache
+func (cf *TaskCLFilter) SupportResultCache(command []string) bool {
+	if cf.clhandle != nil {
+		return cf.clhandle.SupportResultCache(command)
+	}
+
+	return false
+}
+
+func (cf *TaskCLFilter) GetResultCacheKey(command []string) string {
+	if cf.clhandle != nil {
+		return cf.clhandle.GetResultCacheKey(command)
+	}
+
+	return ""
+}

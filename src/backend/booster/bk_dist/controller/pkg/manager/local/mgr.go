@@ -223,6 +223,14 @@ func (m *Mgr) ExecuteTask(
 		return e.executeLocalTask(), nil
 	}
 
+	// TODO : try to query cache if enabled and with preprocess
+	// 需要handle提供cache的key，从c的ResultFiles获取预期的结果列表
+	// 如果cache查询到了，则按预期的结果列表保存
+	cacheresult := e.executeGetCache(c)
+	if cacheresult != nil {
+		return cacheresult, nil
+	}
+
 	var r *types.RemoteTaskExecuteResult
 	remoteReq := &types.RemoteTaskExecuteRequest{
 		Pid:           req.Pid,
@@ -321,6 +329,13 @@ func (m *Mgr) ExecuteTask(
 				Message:  "executor skip local retry",
 			},
 		}, nil
+	} else {
+		// TODO : try to put to cache if enabled and with preprocess
+		// 由handle提供key和结果，结果可能是多个文件，先考虑用后缀标识
+		// 这儿的结果文件，可以是解压后的完整文件，也可以是内存中的压缩数据
+		// 前期考虑直接用解压后的完整文件，减少压缩和解压的开销，但会增加存储开销
+		err := e.executePutCache(r.Result)
+		blog.Infof("local: put to cache with error:%v", err)
 	}
 
 	req.Stats.Success = true

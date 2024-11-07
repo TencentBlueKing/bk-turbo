@@ -112,6 +112,7 @@ const (
 	FlagWorkerOfferSlot      = "worker_offer_slot"
 	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
 	FlagIgnoreHttpStatus     = "ignore_http_status"
+	FlagResultCache          = "result_cache"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -476,6 +477,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "ignore_http_status",
 			Usage: "tasks will be executed even local http connection disconnected when this flag set",
+		},
+		commandCli.BoolFlag{
+			Name:  "result_cache",
+			Usage: "use result cache",
 		},
 	}
 )

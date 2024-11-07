@@ -85,4 +85,10 @@ type Handler interface {
 
 	// FinalExecute chance to finalize for handler, must be safe to call in goroutines
 	FinalExecute(command []string)
+
+	// SupportResultCache check whether this command support result cache
+	SupportResultCache(command []string) bool
+
+	// GetResultCacheKey return the key of result cache
+	GetResultCacheKey(command []string) string
 }

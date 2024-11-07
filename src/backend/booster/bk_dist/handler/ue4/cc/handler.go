@@ -1559,3 +1559,12 @@ func (cc *TaskCC) needSaveResponseFile(args []string) (bool, string, error) {
 
 	return false, "", nil
 }
+
+// SupportResultCache check whether this command support result cache
+func (cc *TaskCC) SupportResultCache(command []string) bool {
+	return false
+}
+
+func (cc *TaskCC) GetResultCacheKey(command []string) string {
+	return ""
+}

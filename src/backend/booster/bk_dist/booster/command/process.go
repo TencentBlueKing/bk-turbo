@@ -317,6 +317,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			CleanTmpFilesDayAgo:  cleanTmpFilesDayAgo,
 			SearchToolchain:      c.Bool(FlagSearchToolchain),
 			IgnoreHttpStatus:     c.Bool(FlagIgnoreHttpStatus),
+			ResultCache:          c.Bool(FlagResultCache),
 		},
 
 		Transport: dcType.BoosterTransport{

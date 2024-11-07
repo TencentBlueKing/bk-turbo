@@ -12,10 +12,13 @@ package local
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
@@ -532,4 +535,117 @@ func (e *executor) canExecuteWithLocalIdleResource() bool {
 	}
 
 	return false
+}
+
+func (e *executor) executeGetCache(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
+	if !e.handler.SupportResultCache(e.req.Commands) {
+		return nil
+	}
+
+	if len(c.Commands) != 1 {
+		return nil
+	}
+
+	key := e.handler.GetResultCacheKey(e.req.Commands)
+	if key == "" {
+		return nil
+	}
+
+	rs, err := resultcache.GetInstance("", "").GetResult(key, resultcache.CacheLocal)
+	if err != nil {
+		return nil
+	}
+
+	// TODO : 先加到远程统计数据里面，后续可能需要完善，比如单独加个统计
+	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	dcSDK.StatsTimeNow(&e.stats.RemoteWorkEnterTime)
+	defer dcSDK.StatsTimeNow(&e.stats.RemoteWorkLeaveTime)
+	e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	// TODO : 匹配和保存，简单的用后缀来匹配
+	resultmap := make(map[string]int)
+	for _, r := range c.Commands[0].ResultFiles {
+		found := false
+		rsuffix := filepath.Ext(r)
+		for index, rc := range rs {
+			if rsuffix == rc.Suffix {
+				if !filepath.IsAbs(r) {
+					r = filepath.Join(c.Commands[0].WorkDir, r)
+				}
+				resultmap[r] = index
+				found = true
+			}
+		}
+
+		if !found {
+			blog.Warnf("executor: not found cache for file %s", r)
+			return nil
+		}
+	}
+
+	for k, v := range resultmap {
+		f, err := os.Create(k)
+		if err != nil {
+			blog.Errorf("executor: create file %s with error: %v", k, err)
+			return nil
+		}
+
+		_, err = f.Write(rs[v].CompressDataBuf)
+		if err != nil {
+			f.Close()
+			blog.Errorf("executor: save file %s with error: %v", k, err)
+			return nil
+		}
+		f.Close()
+		blog.Infof("executor: got cache result for file %s", k)
+	}
+
+	e.stats.PostWorkSuccess = true
+	e.stats.RemoteWorkSuccess = true
+	e.stats.Success = true
+	e.mgr.work.Basic().UpdateJobStats(e.stats)
+
+	return &types.LocalTaskExecuteResult{
+		Result: &dcSDK.LocalTaskResult{
+			ExitCode: 0,
+			Stdout:   nil,
+			Stderr:   nil,
+		},
+	}
+}
+
+func (e *executor) executePutCache(r *dcSDK.BKDistResult) error {
+	if !e.handler.SupportResultCache(e.req.Commands) {
+		return nil
+	}
+
+	if len(r.Results) != 1 {
+		return nil
+	}
+
+	key := e.handler.GetResultCacheKey(e.req.Commands)
+	if key == "" {
+		return nil
+	}
+
+	// TODO : 保存结果数据到cache
+	resultlen := len(r.Results[0].ResultFiles)
+	rs := make([]*resultcache.Result, 0, resultlen)
+	for _, v := range r.Results[0].ResultFiles {
+		rs = append(rs, &resultcache.Result{
+			Suffix:          filepath.Ext(v.FilePath),
+			CompressDataBuf: v.Buffer,
+			CompressType:    v.Compresstype,
+			RealSize:        uint64(v.FileSize),
+			HashStr:         "",
+		})
+	}
+
+	err := resultcache.GetInstance("", "").PutResult(key, rs, resultcache.CacheLocal)
+	if err != nil {
+		return nil
+	}
+
+	return nil
 }

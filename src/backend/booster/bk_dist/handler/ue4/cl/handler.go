@@ -36,6 +36,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
 	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/cespare/xxhash/v2"
 )
 
 const (
@@ -95,6 +96,7 @@ type TaskCL struct {
 	rewriteCrossArgs []string
 	preProcessArgs   []string
 	serverSideArgs   []string
+	resultCacheArgs  []string
 	pumpArgs         []string
 
 	// file names
@@ -858,20 +860,22 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) && cl.workerSupportAbsPath() {
-		if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
-			req, err, notifyerr := cl.trypump(command)
-			if err != nil {
-				if notifyerr == ErrorNotSupportRemote {
-					blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
-					return nil, dcType.BKDistCommonError{
-						Code:  dcType.UnknowCode,
-						Error: err,
+	if !cl.SupportResultCache(command) {
+		if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) && cl.workerSupportAbsPath() {
+			if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
+				req, err, notifyerr := cl.trypump(command)
+				if err != nil {
+					if notifyerr == ErrorNotSupportRemote {
+						blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
+						return nil, dcType.BKDistCommonError{
+							Code:  dcType.UnknowCode,
+							Error: err,
+						}
 					}
+				} else {
+					cl.pumpremote = true
+					return req, dcType.ErrorNone
 				}
-			} else {
-				cl.pumpremote = true
-				return req, dcType.ErrorNone
 			}
 		}
 	}
@@ -1230,6 +1234,17 @@ func (cl *TaskCL) preBuild(args []string) error {
 
 	cl.serverSideArgs = serverSideArgs
 
+	if cl.SupportResultCache(args) {
+		cl.resultCacheArgs = make([]string, 0, len(cl.serverSideArgs))
+		copy(cl.resultCacheArgs, cl.serverSideArgs)
+		for index := range cl.resultCacheArgs {
+			if cl.resultCacheArgs[index] == cl.preprocessedFile {
+				cl.resultCacheArgs[index] = cl.inputFile
+				break
+			}
+		}
+	}
+
 	blog.Infof("cl: pre-build success for enter args: %v", args)
 	return nil
 }
@@ -1497,4 +1512,54 @@ func (cl *TaskCL) parseOutput(s string) (string, error) {
 	}
 
 	return strings.Join(output, ""), nil
+}
+
+// SupportResultCache check whether this command support result cache
+func (cl *TaskCL) SupportResultCache(command []string) bool {
+	if cl.sandbox != nil {
+		return cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorResultCache) != ""
+	}
+
+	return false
+}
+
+func (cl *TaskCL) GetResultCacheKey(command []string) string {
+	if !dcFile.Stat(cl.preprocessedFile).Exist() {
+		blog.Warnf("cl: cl.preprocessedFile %s not existed when get result cache key", cl.sourcedependfile)
+		return ""
+	}
+
+	// ext from cl.preprocessedFile
+	ext := filepath.Ext(cl.preprocessedFile)
+
+	// cc_mtime cc_name from compile tool
+	cchash, err := dcUtil.HashFile(command[0])
+	if err != nil {
+		blog.Warnf("cl: hash file %s with error: %v", err)
+		return ""
+	}
+
+	// LANG and LC_ALL  from env , ignore in windows now
+	// cwd  from work dir , ignore now
+
+	// arg from cl.resultCacheArgs
+	argstring := strings.Join(cl.resultCacheArgs, " ")
+	arghash := xxhash.Sum64([]byte(argstring))
+
+	// cpp content from cl.preprocessedFile
+	cpphash, err := dcUtil.HashFile(cl.preprocessedFile)
+	if err != nil {
+		blog.Warnf("cl: hash file %s with error: %v", err)
+		return ""
+	}
+
+	// cppstderr from cl.preprocessedErrorBuf
+	cppstderrhash := xxhash.Sum64([]byte(cl.preprocessedErrorBuf))
+
+	fullstring := fmt.Sprintf("%s_%x_%x_%x_%x", ext, cchash, arghash, cpphash, cppstderrhash)
+	fullstringhash := xxhash.Sum64([]byte(fullstring))
+
+	blog.Infof("cl: got hash key %x for cmd:[%s]", fullstringhash, strings.Join(command, " "))
+
+	return fmt.Sprintf("%x", fullstringhash)
 }
