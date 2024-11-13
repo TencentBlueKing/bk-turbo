@@ -1804,8 +1804,9 @@ func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest
 			} else {
 				// TODO : 如果环境变量中指定了需要自动探测工具链，则需要自动探测
 				if dcSyscall.NeedSearchToolchain(req.Sandbox.Env) {
-					blog.Infof("remote: start search toolchain with key:%s now", c.ExeToolChainKey)
-					err := m.work.Basic().SearchToolChain(c.ExeToolChainKey)
+					path := req.Sandbox.Env.GetOriginEnv("PATH")
+					blog.Infof("remote: start search toolchain with key:%s path:%s", c.ExeToolChainKey, path)
+					err := m.work.Basic().SearchToolChain(c.ExeToolChainKey, path)
 					blog.Infof("remote: end search toolchain with key:%s error:%v", c.ExeToolChainKey, err)
 
 					if err == nil {

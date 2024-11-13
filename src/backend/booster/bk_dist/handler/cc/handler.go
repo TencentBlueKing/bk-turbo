@@ -40,6 +40,7 @@ import (
 
 const (
 	appendEnvKey = "INCLUDE="
+	pathEnvKey   = "PATH="
 )
 
 var (
@@ -379,6 +380,8 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	if len(linkdirs) > 0 {
 		uniqlines = append(linkdirs, uniqlines...)
 	}
+
+	uniqlines = dcUtil.UniqArr(uniqlines)
 
 	// save to cc.pumpHeadFile
 	newdata := strings.Join(uniqlines, sep)
@@ -737,14 +740,11 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 			results = append(results, sourcedependfile)
 		}
 
-		// set env which need append to remote
+		// sync env of PATH to remote
 		envs := []string{}
 		for _, v := range cc.sandbox.Env.Source() {
-			if strings.HasPrefix(v, appendEnvKey) {
+			if strings.HasPrefix(v, pathEnvKey) {
 				envs = append(envs, v)
-				// set flag we hope append env, not overwrite
-				flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(env.KeyRemoteEnvAppend))
-				envs = append(envs, flag)
 				break
 			}
 		}
@@ -960,6 +960,16 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 	blog.Infof("cc: [%s] expect result files: %v", cc.tag, cc.outputFile)
 
+	// sync env of PATH to remote
+	envs := []string{}
+	for _, v := range cc.sandbox.Env.Source() {
+		if strings.HasPrefix(v, pathEnvKey) {
+			envs = append(envs, v)
+			break
+		}
+	}
+	blog.Infof("cc: env which ready sent to remote:[%v]", envs)
+
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
@@ -970,6 +980,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				Params:          cc.serverSideArgs[1:],
 				Inputfiles:      cc.sendFiles,
 				ResultFiles:     cc.outputFile,
+				Env:             envs,
 			},
 		},
 		CustomSave: true,
@@ -1234,6 +1245,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.firstIncludeFile = getFirstIncludeFile(scannedData.args)
 	cc.inputFile = scannedData.inputFile
 	cc.outputFile = append([]string{scannedData.outputFile}, scannedData.additionOutputFile...)
+	cc.includePaths = scannedData.includePaths
 
 	// handle the cross-compile issues.
 	targetArgs := cc.scannedArgs
