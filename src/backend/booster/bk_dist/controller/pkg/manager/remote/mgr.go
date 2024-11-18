@@ -908,7 +908,7 @@ func (m *Mgr) SendFiles(req *types.RemoteTaskSendFileRequest) ([]string, error) 
 }
 
 func (m *Mgr) retrySendFiles(h *dcProtocol.Host, failFiles []dcSDK.FileDesc, host chan string) {
-	blog.Debugf("remote: try to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v", m.work.ID(), 1, h.Server, len(failFiles))
+	blog.Infof("remote: try to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v", m.work.ID(), 1, h.Server, len(failFiles))
 	_, err := m.SendFiles(&types.RemoteTaskSendFileRequest{
 		Pid:     1,
 		Req:     failFiles,
@@ -919,7 +919,7 @@ func (m *Mgr) retrySendFiles(h *dcProtocol.Host, failFiles []dcSDK.FileDesc, hos
 	if err != nil {
 		blog.Errorf("remote: try to retry send fail file for work(%s) from pid(%d) to server %s failed: %v", m.work.ID(), 1, h.Server, err)
 	} else {
-		blog.Debugf("remote: success to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v", m.work.ID(), 1, h.Server, len(failFiles))
+		blog.Infof("remote: success to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v", m.work.ID(), 1, h.Server, len(failFiles))
 	}
 	host <- h.Server
 }
@@ -1628,16 +1628,17 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) []*types.FileCollecti
 func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest, fileCollections []*types.FileCollectionInfo, host chan string) {
 	blog.Infof("remote: retry send tool chain for work(%s) from pid(%d) to server(%s)",
 		m.work.ID(), req.Pid, req.Server.Server)
-	if err := m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections); err != nil {
+	err := m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections)
+	if err != nil {
 		blog.Errorf("remote: retry send tool chain for work(%s) from pid(%d) to server(%s), "+
 			"send tool chain files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
-		return
-	}
-	// enable worker
-	m.resource.EnableWorker(req.Server)
-	host <- req.Server.Server
-	blog.Infof("remote: success to retry send tool chain for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
 
+	} else {
+		// enable worker
+		m.resource.EnableWorker(req.Server)
+		blog.Infof("remote: success to retry send tool chain for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
+	}
+	host <- req.Server.Server
 }
 
 func (m *Mgr) sendFileCollectionOnce(
