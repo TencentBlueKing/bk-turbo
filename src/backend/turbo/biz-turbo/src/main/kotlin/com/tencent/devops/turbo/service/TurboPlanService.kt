@@ -6,6 +6,7 @@ import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.api.util.OkhttpUtil
+import com.tencent.devops.common.auth.api.AuthRegisterApi
 import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.service.prometheus.BkTimed
@@ -40,6 +41,7 @@ import java.time.LocalDateTime
 @Suppress("MaxLineLength", "ComplexMethod", "NestedBlockDepth", "SpringJavaInjectionPointsAutowiringInspection")
 @Service
 class TurboPlanService @Autowired constructor(
+    private val authRegisterApi: AuthRegisterApi,
     private val turboPlanDao: TurboPlanDao,
     private val turboPlanRepository: TurboPlanRepository,
     private val turboPlanInstanceService: TurboPlanInstanceService,
@@ -176,6 +178,21 @@ class TurboPlanService @Autowired constructor(
                 createdDate = LocalDateTime.now()
             )
             turboPlanEntity = turboPlanRepository.save(turboPlanEntity!!)
+
+            // 2.1 注册到权限中心
+            try {
+                val registerTurboPlan = authRegisterApi.registerTurboPlan(
+                    user = user,
+                    turboPlanId = turboPlanEntity!!.id!!,
+                    turboPlanName = turboPlanEntity!!.planName,
+                    projectId = turboPlanEntity!!.projectId
+                )
+                if (!registerTurboPlan) {
+                    rollbackTurboPlan(turboPlanEntity!!, "Failed to register plan to permission center", null)
+                }
+            } catch (e: Exception) {
+                rollbackTurboPlan(turboPlanEntity!!, "Failed to register plan to permission center", e)
+            }
             // 3. 调用api,同步信息
             updateConfigParamByApi(
                 turboEngineConfigEntity = turboEngineConfigEntity,
@@ -187,6 +204,12 @@ class TurboPlanService @Autowired constructor(
         }
         logger.info("add turbo plan successfully!")
         return turboPlanEntity?.id
+    }
+
+    fun rollbackTurboPlan(turboPlanEntity: TTurboPlanEntity, errorMsg: String, e: Exception?) {
+        logger.error("$errorMsg user: ${turboPlanEntity.createdBy} turbo name: {}", turboPlanEntity.planName, e)
+        turboPlanRepository.delete(turboPlanEntity)
+        throw TurboException(TURBO_THIRDPARTY_SYSTEM_FAIL, errorMsg)
     }
 
     /**
