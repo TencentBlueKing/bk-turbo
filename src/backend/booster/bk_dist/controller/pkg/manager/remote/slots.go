@@ -506,9 +506,10 @@ func (wr *resource) addWorker(host *dcProtocol.Host) {
 	return
 }
 
-func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host) *worker {
+func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host) (*worker, bool) {
 	var w *worker
 	max := 0
+	hasAvailableWorker := false
 	for _, worker := range wr.worker {
 		if worker.disabled || worker.dead {
 			continue
@@ -523,6 +524,8 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 		if matched {
 			continue
 		}
+
+		hasAvailableWorker = true
 		free := worker.totalSlots - worker.occupiedSlots
 		if free >= max {
 			max = free
@@ -534,14 +537,15 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 	// 	w = wr.worker[0]
 	// }
 
-	return w
+	return w, hasAvailableWorker
 }
 
 // 大文件优先
-func (wr *resource) getWorkerLargeFileFirst(f string, banWorkerList []*dcProtocol.Host) *worker {
+func (wr *resource) getWorkerLargeFileFirst(f string, banWorkerList []*dcProtocol.Host) (*worker, bool) {
 	var w *worker
 	max := 0
 	inlargequeue := false
+	hasAvailableWorker := false
 	for _, worker := range wr.worker {
 		if worker.disabled || worker.dead {
 			continue
@@ -557,6 +561,8 @@ func (wr *resource) getWorkerLargeFileFirst(f string, banWorkerList []*dcProtoco
 		if matched {
 			continue
 		}
+
+		hasAvailableWorker = true
 		free := worker.totalSlots - worker.occupiedSlots
 
 		// 在资源空闲时，大文件优先
@@ -582,33 +588,34 @@ func (wr *resource) getWorkerLargeFileFirst(f string, banWorkerList []*dcProtoco
 
 	if w == nil {
 		// w = wr.worker[0]
-		return w
+		return w, hasAvailableWorker
 	}
 
 	if f != "" && !w.hasFile(f) {
 		w.largefiles = append(w.largefiles, f)
 	}
 
-	return w
+	return w, hasAvailableWorker
 }
 
-func (wr *resource) occupyWorkerSlots(f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host {
+func (wr *resource) occupyWorkerSlots(f string, banWorkerList []*dcProtocol.Host) (*dcProtocol.Host, bool) {
 	wr.workerLock.Lock()
 	defer wr.workerLock.Unlock()
 
 	var w *worker
+	var hasWorkerAvailable bool
 	if f == "" {
-		w = wr.getWorkerWithMostFreeSlots(banWorkerList)
+		w, hasWorkerAvailable = wr.getWorkerWithMostFreeSlots(banWorkerList)
 	} else {
-		w = wr.getWorkerLargeFileFirst(f, banWorkerList)
+		w, hasWorkerAvailable = wr.getWorkerLargeFileFirst(f, banWorkerList)
 	}
 
 	if w == nil {
-		return nil
+		return nil, hasWorkerAvailable
 	}
 
 	_ = w.occupySlot()
-	return w.host
+	return w.host, hasWorkerAvailable
 }
 
 func (wr *resource) freeWorkerSlots(host *dcProtocol.Host) {
@@ -626,6 +633,9 @@ func (wr *resource) freeWorkerSlots(host *dcProtocol.Host) {
 }
 
 func (wr *resource) handleLock(ctx context.Context) {
+	ticker := time.NewTicker(time.Second * 20)
+
+	defer ticker.Stop()
 	wr.ctx = ctx
 
 	for {
@@ -638,6 +648,10 @@ func (wr *resource) handleLock(ctx context.Context) {
 			wr.getSlot(msg)
 		case <-wr.emptyChan:
 			wr.onSlotEmpty()
+		case <-ticker.C:
+			if wr.waitingList.Len() > 0 {
+				go wr.occupyWaitList()
+			}
 		}
 	}
 }
@@ -675,7 +689,7 @@ func (wr *resource) getSlot(msg lockWorkerMessage) {
 	if wr.occupiedSlots < wr.totalSlots || wr.totalSlots <= 0 {
 		set := wr.getUsageSet(usage)
 		if wr.isIdle(set) {
-			if h := wr.occupyWorkerSlots(msg.largeFile, msg.banWorkerList); h != nil {
+			if h, _ := wr.occupyWorkerSlots(msg.largeFile, msg.banWorkerList); h != nil {
 				set.occupied++
 				wr.occupiedSlots++
 				blog.Infof("remote slot: total slots:%d occupied slots:%d, remote slot available",
@@ -710,12 +724,18 @@ func (wr *resource) putSlot(msg lockWorkerMessage) {
 			msg := e.Value.(*lockWorkerMessage)
 			set := wr.getUsageSet(msg.jobUsage)
 			if wr.isIdle(set) {
-				if h := wr.occupyWorkerSlots(msg.largeFile, msg.banWorkerList); h != nil {
+				if h, hasAvailableWorker := wr.occupyWorkerSlots(msg.largeFile, msg.banWorkerList); h != nil {
 					set.occupied++
 					wr.occupiedSlots++
 					msg.result <- h
 					wr.waitingList.Remove(e)
 					break
+				} else if !hasAvailableWorker {
+					msg.result <- nil
+					wr.waitingList.Remove(e)
+					blog.Debugf("remote slot: occupy waiting list, but no slot available for ban worker list %v, just turn it local", msg.banWorkerList)
+				} else {
+					blog.Debugf("remote slot: occupy waiting list, but no slot available %v", msg.banWorkerList)
 				}
 			}
 		}
@@ -730,5 +750,28 @@ func (wr *resource) onSlotEmpty() {
 		msg := e.Value.(*lockWorkerMessage)
 		msg.result <- nil
 		wr.waitingList.Remove(e)
+	}
+}
+
+func (wr *resource) occupyWaitList() {
+	for e := wr.waitingList.Front(); e != nil; e = e.Next() {
+		msg := e.Value.(*lockWorkerMessage)
+		set := wr.getUsageSet(msg.jobUsage)
+		if wr.isIdle(set) {
+			h, hasAvailableWorker := wr.occupyWorkerSlots(msg.largeFile, msg.banWorkerList)
+			if h != nil {
+				set.occupied++
+				wr.occupiedSlots++
+				msg.result <- h
+				wr.waitingList.Remove(e)
+				blog.Debugf("remote slot: occupy waiting list")
+			} else if !hasAvailableWorker { // no slot available for ban worker list, turn it local
+				blog.Infof("remote slot: occupy waiting list, but no slot available for ban worker list %v, just turn it local", msg.banWorkerList)
+				msg.result <- nil
+				wr.waitingList.Remove(e)
+			} else {
+				blog.Debugf("remote slot: occupy waiting list, but no slot available %v", msg.banWorkerList)
+			}
+		}
 	}
 }

@@ -83,8 +83,7 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 }
 
 const (
-	syncHostTimeTimes   = 3
-	toolChainRetryTimes = 10
+	syncHostTimeTimes = 3
 )
 
 // Mgr describe the remote manager
@@ -633,7 +632,7 @@ func (m *Mgr) retrySendToolChains(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			blog.Infof("remote: run worker check for work(%s) canceled by context", m.work.ID())
+			blog.Infof("remote: run toolchain check for work(%s) canceled by context", m.work.ID())
 			return
 		case <-ticker.C:
 			handler := m.remoteWorker.Handler(0, nil, nil, nil)
@@ -679,7 +678,7 @@ func (m *Mgr) retryFailFiles(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			blog.Infof("remote: run worker check for work(%s) canceled by context", m.work.ID())
+			blog.Infof("remote: run failfiles check for work(%s) canceled by context", m.work.ID())
 			return
 		case <-ticker.C:
 			hosts := m.work.Resource().GetHosts()
@@ -748,8 +747,9 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 	defer dcSDK.StatsTimeNow(&req.Stats.RemoteWorkLeaveTime)
 	m.work.Basic().UpdateJobStats(req.Stats)
 
+	hosts := m.work.Resource().GetHosts()
 	for _, c := range req.Req.Commands {
-		for _, s := range m.work.Resource().GetHosts() {
+		for _, s := range hosts {
 			m.failFileSendMutex.Lock()
 			f := m.failFileSendMap[s.Server]
 			m.failFileSendMutex.Unlock()
@@ -770,6 +770,10 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 			}
 		}
 	}
+	if len(req.BanWorkerList) == len(hosts) {
+		return nil, errors.New("no available worker, all worker are banned")
+	}
+
 	blog.Debugf("remote: try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v", m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
 	// 如果有超过100MB的大文件，则在选择host时，作为选择条件
 	fpath, _ := getMaxSizeFile(req, m.largeFileSize)
