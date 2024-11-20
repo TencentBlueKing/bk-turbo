@@ -6,6 +6,7 @@ dependencies {
     api("com.tencent.bk.devops.ci.common:common-api") {
         isTransitive = false
     }
+    api("com.tencent.bk.sdk:iam-java-sdk")
 }
 
 plugins {
