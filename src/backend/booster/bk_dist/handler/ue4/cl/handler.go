@@ -110,6 +110,7 @@ type TaskCL struct {
 	// 在rsp中/I后面的参数，需要将这些目录全部发送到远端
 	// 有特殊场景：编译不需要该路径下的文件，但需要该路径作为跳板，去查找其它相对路径下的头文件（或其它依赖文件）
 	includePaths []string
+	logfilesarif string
 
 	// forcedepend 是我们主动导出依赖文件，showinclude 是编译命令已经指定了导出依赖文件
 	forcedepend          bool
@@ -677,11 +678,12 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	tstart = tend
 
 	// check whether support remote execute
-	_, err = scanArgs(args)
+	scandata, err := scanArgs(args)
 	if err != nil {
 		blog.Debugf("cl: try pump not support, scan args %v: %v", args, err)
 		return nil, err, ErrorNotSupportRemote
 	}
+	cl.logfilesarif = scandata.logfilesarif
 
 	inblack, _ := cl.inPumpBlack(responseFile, args)
 	if inblack {
@@ -774,6 +776,12 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 		// add source depend file as result
 		if sourcedependfile != "" {
 			results = append(results, sourcedependfile)
+		}
+		if cl.logfilesarif != "" {
+			if !filepath.IsAbs(cl.logfilesarif) {
+				cl.logfilesarif, _ = filepath.Abs(filepath.Join(cl.sandbox.Dir, cl.logfilesarif))
+			}
+			results = append(results, cl.logfilesarif)
 		}
 
 		// set env which need append to remote
@@ -1016,6 +1024,11 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	cl.customSave = true
+	results := []string{cl.outputFile}
+	if cl.logfilesarif != "" {
+		results = append(results, cl.logfilesarif)
+	}
+
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
@@ -1025,9 +1038,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
 				Params:          params,
 				Inputfiles:      inputFiles,
-				ResultFiles: []string{
-					cl.outputFile,
-				},
+				ResultFiles:     results,
 			},
 		},
 		CustomSave: true,
@@ -1175,6 +1186,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 	cl.rewriteCrossArgs = cl.scannedArgs
 	cl.includeRspFiles = scannedData.includeRspFiles
 	cl.includePaths = scannedData.includePaths
+	cl.logfilesarif = scannedData.logfilesarif
 
 	// handle the pch options
 	finalArgs := cl.scanPchFile(cl.scannedArgs)

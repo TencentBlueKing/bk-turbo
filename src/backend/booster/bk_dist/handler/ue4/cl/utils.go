@@ -603,7 +603,12 @@ type ccArgs struct {
 	specifiedSourceType bool
 	includeRspFiles     []string
 	includePaths        []string
+	logfilesarif        string // for ue 5.5
 }
+
+const (
+	logsarifflag = "/experimental:log"
+)
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
 func scanArgs(args []string) (*ccArgs, error) {
@@ -666,6 +671,23 @@ func scanArgs(args []string) (*ccArgs, error) {
 					return nil, ErrorMissingOption
 				}
 				r.includePaths = append(r.includePaths, strings.Trim(args[index], "\""))
+				continue
+			}
+
+			if strings.HasPrefix(arg, logsarifflag) {
+				// if just a prefix, save the remain of this line.
+				if len(arg) > len(logsarifflag) {
+					r.logfilesarif = strings.Trim(arg[len(logsarifflag):], "\"")
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cl: scan args: no file found after %s", logsarifflag)
+					return nil, ErrorMissingOption
+				}
+				r.logfilesarif = strings.Trim(args[index], "\"")
 				continue
 			}
 
