@@ -485,6 +485,7 @@ type FileCollectionInfo struct {
 	SendStatus FileSendStatus   `json:"send_status"`
 	Files      []dcSDK.FileDesc `json:"files"`
 	Timestamp  int64            `json:"timestamp"`
+	Retry      bool             `json:"retry"`
 }
 
 // FileInfo record file info
@@ -497,7 +498,6 @@ type FileInfo struct {
 	FileMode           uint32         `json:"file_mode"`
 	LinkTarget         string         `json:"link_target"`
 	SendStatus         FileSendStatus `json:"send_status"`
-	FailCount          int            `json:"fail_count"`
 }
 
 // Match check if the FileDesc is point to some file as this FileInfo

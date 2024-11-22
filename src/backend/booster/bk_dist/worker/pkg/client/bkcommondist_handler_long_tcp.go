@@ -212,9 +212,9 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		// 加本地资源锁
 		locallocked := false
 		if mgr != nil {
-			if mgr.LockSlots(dcSDK.JobUsageLocalExe, 1) {
+			if mgr.LockSlots(dcSDK.JobUsageDefault, 1) {
 				locallocked = true
-				blog.Infof("remotehandle: succeed to get one local lock")
+				blog.Infof("remotehandle: succeed to get one default lock")
 			}
 		}
 
@@ -261,8 +261,8 @@ func (r *CommonRemoteHandler) ExecuteSendFileLongTCP(
 		t1 = t2
 
 		if locallocked {
-			mgr.UnlockSlots(dcSDK.JobUsageLocalExe, 1)
-			blog.Infof("remotehandle: succeed to release one local lock")
+			mgr.UnlockSlots(dcSDK.JobUsageDefault, 1)
+			blog.Infof("remotehandle: succeed to release one default lock")
 		}
 
 		if err != nil {
