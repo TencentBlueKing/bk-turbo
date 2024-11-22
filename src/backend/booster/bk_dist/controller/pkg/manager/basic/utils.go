@@ -216,18 +216,18 @@ func getToolchainID() string {
 
 // ++++++++++++++++++++to search toolchain++++++++++++++++++++
 
-func searchToolChain(cmd string) (*types.ToolChain, error) {
-	blog.Infof("basic: real start search toolchian for cmd:%s", cmd)
-	defer blog.Infof("basic: end search toolchian for cmd:%s", cmd)
+func searchToolChain(cmd, path string) (*types.ToolChain, error) {
+	blog.Infof("basic: real start search toolchian for cmd:%s path:%s", cmd, path)
+	defer blog.Infof("basic: end search toolchian for cmd:%s path:%s", cmd, path)
 
 	cmdbase := filepath.Base(cmd)
 	switch cmdbase {
 	case "clang", "clang++":
-		return searchClang(cmd)
+		return searchClang(cmd, path)
 	case "gcc", "g++":
-		return searchGcc(cmd)
+		return searchGcc(cmd, path)
 	case "cc", "c++":
-		return searchGcc(cmd)
+		return searchGcc(cmd, path)
 	}
 
 	return nil, nil
@@ -266,7 +266,13 @@ func searchCC(exe string) []string {
 	return []string{cc1, cc1plus}
 }
 
-func searchAS(exe string) []string {
+func searchAS(exe, path string) []string {
+	as, err := dcUtil.LookPath("as", path, "")
+	if err == nil {
+		blog.Infof("basic: found as:[%s] with path:%s", as, path)
+		return []string{as}
+	}
+
 	cmd := fmt.Sprintf("%s -print-prog-name=as", exe)
 	blog.Infof("basic: ready run cmd:[%s] for exe:%s", cmd, exe)
 	sandbox := dcSyscall.Sandbox{}
@@ -347,8 +353,8 @@ func getLddFiles(exe string) []string {
 	return files
 }
 
-func searchGcc(cmd string) (*types.ToolChain, error) {
-	blog.Infof("basic: search gcc toolchain with exe:%s", cmd)
+func searchGcc(cmd, path string) (*types.ToolChain, error) {
+	blog.Infof("basic: search gcc toolchain with exe:%s path:%s", cmd, path)
 
 	i := dcFile.Lstat(cmd)
 	if !i.Exist() {
@@ -379,7 +385,7 @@ func searchGcc(cmd string) (*types.ToolChain, error) {
 	}
 
 	// search as
-	fs = searchAS(cmd)
+	fs = searchAS(cmd, path)
 	for _, i := range fs {
 		t.Files = append(t.Files, dcSDK.ToolFile{
 			LocalFullPath:      i,
@@ -483,8 +489,8 @@ func searchCrtbegin(exe string) []string {
 	return nil
 }
 
-func searchClang(cmd string) (*types.ToolChain, error) {
-	blog.Infof("basic: search clang toolchain with exe:%s", cmd)
+func searchClang(cmd, path string) (*types.ToolChain, error) {
+	blog.Infof("basic: search clang toolchain with exe:%s path:%s", cmd, path)
 
 	i := dcFile.Lstat(cmd)
 	if !i.Exist() {

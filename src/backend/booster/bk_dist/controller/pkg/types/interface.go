@@ -270,5 +270,5 @@ type BasicMgr interface {
 	DecRegistered()
 
 	// search toolchain files by cmd, ensure only execute once
-	SearchToolChain(cmd string) error
+	SearchToolChain(cmd, path string) error
 }
