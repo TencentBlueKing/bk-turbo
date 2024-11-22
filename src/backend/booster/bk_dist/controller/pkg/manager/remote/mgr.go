@@ -635,7 +635,7 @@ func (m *Mgr) retrySendToolChains(ctx context.Context) {
 			blog.Infof("remote: run toolchain check for work(%s) canceled by context", m.work.ID())
 			return
 		case <-ticker.C:
-			if m.failFileSendMap == nil {
+			if m.failFileSendMap == nil || len(m.failFileSendMap) == 0 {
 				continue
 			}
 			handler := m.remoteWorker.Handler(0, nil, nil, nil)
@@ -684,7 +684,7 @@ func (m *Mgr) retryFailFiles(ctx context.Context) {
 			blog.Infof("remote: run failfiles check for work(%s) canceled by context", m.work.ID())
 			return
 		case <-ticker.C:
-			if m.failFileSendMap == nil {
+			if m.failFileSendMap == nil || len(m.failFileSendMap) == 0 {
 				continue
 			}
 			hosts := m.work.Resource().GetHosts()
