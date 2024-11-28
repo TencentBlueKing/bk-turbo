@@ -1107,7 +1107,9 @@ func (m *Mgr) ensureFiles(
 			t = dcSDK.FilterRuleHandleDeduplication
 		}
 		if f.CompressedSize == -1 || f.FileSize == -1 {
-			t = dcSDK.FilterRuleHandleDefault
+			//t = dcSDK.FilterRuleHandleDefault
+			r = append(r, "")
+			continue
 		}
 		blog.Debugf("remote: ensure file %s and match rule %d", fd.File.FilePath, t)
 		servers := make([]*dcProtocol.Host, 0, 0)
