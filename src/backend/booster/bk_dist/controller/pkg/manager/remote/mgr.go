@@ -1068,12 +1068,12 @@ func (m *Mgr) ensureFiles(
 	sandbox *dcSyscall.Sandbox,
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
-	settings := m.work.Basic().Settings()
+	//settings := m.work.Basic().Settings()
 	blog.Infof("remote: try to ensure multi %d files for work(%s) from pid(%d) dir(%s) to server",
 		len(fileDetails), m.work.ID(), pid, sandbox.Dir)
 	//blog.Debugf("remote: try to ensure multi %d files for work(%s) from pid(%d) dir(%s) to server: %v",
 	//	len(fileDetails), m.work.ID(), pid, sandbox.Dir, fileDetails)
-	rules := settings.FilterRules
+	//rules := settings.FilterRules
 
 	// pump模式下，一次编译依赖的可能有上千个文件，现在的流程会随机的添加到cork发送队列
 	// 需要保证一次编译的依赖同时插入到cork发送队列，这样可以尽快的启动远程编译，避免远程编译等待太久
@@ -1097,8 +1097,8 @@ func (m *Mgr) ensureFiles(
 		}
 		sender := &dcSDK.BKDistFileSender{Files: []dcSDK.FileDesc{f}}
 
-		_, t, _ := rules.Satisfy(fd.File.FilePath)
-
+		//_, t, _ := rules.Satisfy(fd.File.FilePath)
+		t := dcSDK.FilterRuleHandleDefault
 		//blog.Debugf("remote: ensure file %s and match rule %d", fd.File.FilePath, t)
 		if f.AllDistributed {
 			t = dcSDK.FilterRuleHandleAllDistribution
