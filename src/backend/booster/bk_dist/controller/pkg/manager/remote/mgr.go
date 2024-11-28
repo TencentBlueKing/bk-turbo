@@ -1112,10 +1112,11 @@ func (m *Mgr) ensureFiles(
 		blog.Debugf("remote: ensure file %s and match rule %d", fd.File.FilePath, t)
 		servers := make([]*dcProtocol.Host, 0, 0)
 		switch t {
-		case dcSDK.FilterRuleHandleDefault:
-			r = append(r, "")
-			continue
-
+		//此处会导致文件不被发送，注释掉保证文件都在此处发送，共用内存锁避免OOM
+		/*case dcSDK.FilterRuleHandleDefault:
+		r = append(r, "")
+		continue
+		*/
 		case dcSDK.FilterRuleHandleAllDistribution:
 			// cleaner = append(cleaner, f)
 			if err = m.fileMessageBank.ensure(sender, sandbox); err != nil {
