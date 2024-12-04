@@ -375,56 +375,56 @@
                                         </ul>
                                         <ul class="list-justified text-center" style="padding-top: 10px;">
                                             <li>
-                                                <p class="f15">{{ remote_work_pack_avg_time }}</p>
+                                                <p class="f15">{{ remote_work_pack_common_avg_time }}</p>
                                                 <p class="text-muted">文件压缩<br>平均耗时</p>
                                             </li>
                                             <li>
-                                                <p class="f15">{{ remote_work_pack_longest_time }}</p>
+                                                <p class="f15">{{ remote_work_pack_common_longest_time }}</p>
                                                 <p class="text-muted">文件压缩<br>最长耗时</p>
                                             </li>
                                             <li>
-                                                <p class="f15">{{ remote_work_unpack_avg_time }}</p>
-                                                <p class="text-muted">文件解压<br>平均耗时</p>
-                                            </li>
-                                            <li>
-                                                <p class="f15">{{ remote_work_unpack_longest_time }}</p>
-                                                <p class="text-muted">文件解压<br>最长耗时</p>
-                                            </li>
-                                        </ul>
-                                        <ul class="list-justified text-center" style="padding-top: 10px;">
-                                            <li>
-                                                <p class="f15">{{ remote_work_send_avg_time }}</p>
+                                                <p class="f15">{{ remote_work_send_common_avg_time }}</p>
                                                 <p class="text-muted">文件分发<br>平均耗时</p>
                                             </li>
                                             <li>
-                                                <p class="f15">{{ remote_work_send_longest_time }}</p>
+                                                <p class="f15">{{ remote_work_send_common_longest_time }}</p>
                                                 <p class="text-muted">文件分发<br>最长耗时</p>
-                                            </li>
-                                            <li>
-                                                <p class="f15">{{ remote_work_receive_avg_time }}</p>
-                                                <p class="text-muted">文件接收<br>平均耗时</p>
-                                            </li>
-                                            <li>
-                                                <p class="f15">{{ remote_work_receive_longest_time }}</p>
-                                                <p class="text-muted">文件接收<br>最长耗时</p>
                                             </li>
                                         </ul>
                                         <ul class="list-justified text-center" style="padding-top: 10px;">
                                             <li>
-                                                <p class="f15">{{ remote_work_pack_common_avg_time }}</p>
-                                                <p class="text-muted">公共文件压缩<br>平均耗时</p>
+                                                <p class="f15">{{ remote_work_pack_avg_time }}</p>
+                                                <p class="text-muted">命令压缩<br>平均耗时</p>
                                             </li>
                                             <li>
-                                                <p class="f15">{{ remote_work_pack_common_longest_time }}</p>
-                                                <p class="text-muted">公共文件压缩<br>最长耗时</p>
+                                                <p class="f15">{{ remote_work_pack_longest_time }}</p>
+                                                <p class="text-muted">命令压缩<br>最长耗时</p>
                                             </li>
                                             <li>
-                                                <p class="f15">{{ remote_work_send_common_avg_time }}</p>
-                                                <p class="text-muted">公共文件分发<br>平均耗时</p>
+                                                <p class="f15">{{ remote_work_send_avg_time }}</p>
+                                                <p class="text-muted">命令分发<br>平均耗时</p>
                                             </li>
                                             <li>
-                                                <p class="f15">{{ remote_work_send_common_longest_time }}</p>
-                                                <p class="text-muted">公共文件分发<br>最长耗时</p>
+                                                <p class="f15">{{ remote_work_send_longest_time }}</p>
+                                                <p class="text-muted">命令分发<br>最长耗时</p>
+                                            </li>
+                                        </ul>
+                                        <ul class="list-justified text-center" style="padding-top: 10px;">
+                                            <li>
+                                                <p class="f15">{{ remote_work_receive_avg_time }}</p>
+                                                <p class="text-muted">结果接收<br>平均耗时</p>
+                                            </li>
+                                            <li>
+                                                <p class="f15">{{ remote_work_receive_longest_time }}</p>
+                                                <p class="text-muted">结果接收<br>最长耗时</p>
+                                            </li>
+                                            <li>
+                                                <p class="f15">{{ remote_work_unpack_avg_time }}</p>
+                                                <p class="text-muted">结果解压<br>平均耗时</p>
+                                            </li>
+                                            <li>
+                                                <p class="f15">{{ remote_work_unpack_longest_time }}</p>
+                                                <p class="text-muted">结果解压<br>最长耗时</p>
                                             </li>
                                         </ul>
                                         <ul class="list-justified text-center" style="padding-top: 10px;">
@@ -526,15 +526,28 @@
                 </div>
             </div>
 
-
-            <div class="row">
-                <div class="col-md-12">
-                    <a class="king-btn-demo king-btn king-radius king-primary" onclick="CreateReporter()" title="搜索"
-                       style="float: right">
-                        <i class="fa fa-search btn-icon"></i>下载详细数据
-                    </a>
-                </div>
+            <div class="col-md-12">
+                <button class="left-button king-btn-demo king-btn king-radius king-primary" onclick="CreateReporter()" title="下载详细数据">
+                    <i class="fa fa-search btn-icon"></i>下载详细数据
+                </button>
+                <button class="right-button king-btn-demo king-btn king-radius king-primary" onclick="ShowOrHideRemoteErrors()" title="远程错误">
+                    <i class="fa btn-icon"></i>远程错误
+                </button>
             </div>
+
+            <div id="divider_before_table" class="divider col-md-12 display hidden"></div>
+
+            <table id="remote_error_table" class="col-md-12 display hidden" style="width:100%;border-collapse: separate; border-spacing: 10px;">
+                <thead>
+                    <tr class="panel-heading">
+                        <th class="light-red">远程机器</th>
+                        <th class="light-red">错误信息</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+
         </div>
     </div>
     <textarea id="js-copytextarea" style="visibility: hidden"></textarea>
