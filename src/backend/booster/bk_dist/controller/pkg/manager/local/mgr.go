@@ -258,7 +258,7 @@ func (m *Mgr) ExecuteTask(
 			// 远程任务失败后，将文件大小和压缩大小都置为初始值，方便其他worker重试
 			for i, c := range remoteReq.Req.Commands {
 				for j, f := range c.Inputfiles {
-					if f.Compresstype < 0 && f.InitCompressedSize > 0 {
+					if f.CompressedSize < 0 && f.InitCompressedSize > 0 {
 						remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize = remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize
 					}
 					if f.FileSize < 0 && f.InitFileSize > 0 {
