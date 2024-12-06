@@ -638,6 +638,15 @@ func (b *Booster) unregisterWork() error {
 		return
 	}
 
+	c, _ := os.Getwd()
+	for i, f := range b.config.Works.AdditionFiles {
+		if !filepath.IsAbs(f) {
+			b.config.Works.AdditionFiles[i] = filepath.Join(c, f)
+		}
+	}
+
+	b.parseDir()
+
 	fds := make([]dcSDK.FileDesc, 0, 100)
 	for _, f := range b.config.Works.AdditionFiles {
 		info := dcFile.Stat(f)
@@ -683,6 +692,47 @@ func (b *Booster) unregisterWork() error {
 	}
 	blog.Infof("booster: finish send addition files: %v", b.config.Works.AdditionFiles)
 }*/
+
+func (b *Booster) parseDir() {
+	res := []string{}
+	dir := []string{}
+	for _, f := range b.config.Works.AdditionFiles {
+		isSubdir := false
+		for _, d := range dir {
+			if strings.HasPrefix(f, d) {
+				isSubdir = true
+				blog.Infof("booster: get aditonal file, dir(%s) is subdir of (%s), skip", f, d)
+				break
+			}
+		}
+		if isSubdir {
+			continue
+		}
+
+		info := dcFile.Stat(f)
+		if info.Basic().IsDir() {
+			err := filepath.Walk(f, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					blog.Warnf("parse path %s failed: %v\n", path, err)
+					return err
+				}
+
+				if !info.IsDir() {
+					res = append(res, path)
+					blog.Debugf("booster: get file(%s) from dir(%s)", path, f)
+				}
+
+				return nil
+			})
+			if err != nil {
+				blog.Warnf("booster: parse dir(%s) in addition files failed:%v", f, err)
+				continue
+			}
+			dir = append(dir, f)
+		}
+	}
+	b.config.Works.AdditionFiles = append(b.config.Works.AdditionFiles, res...)
+}
 
 func (b *Booster) runWorks(
 	ctx context.Context,
