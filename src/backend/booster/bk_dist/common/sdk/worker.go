@@ -85,11 +85,13 @@ const (
 type FileDesc struct {
 	FilePath           string                `json:"file_path"`
 	FileSize           int64                 `json:"file_size"`
+	InitFileSize       int64                 `json:"init_file_size"`
 	Lastmodifytime     int64                 `json:"last_modify_time"`
 	Md5                string                `json:"md5"`
 	Compresstype       protocol.CompressType `json:"compress_type"`
 	Buffer             []byte                `json:"buffer"`
 	CompressedSize     int64                 `json:"compressed_size"`
+	InitCompressedSize int64                 `json:"init_compressed_size"`
 	Targetrelativepath string                `json:"target_relative_path"`
 	Filemode           uint32                `json:"file_mode"`
 	LinkTarget         string                `json:"link_target"`
