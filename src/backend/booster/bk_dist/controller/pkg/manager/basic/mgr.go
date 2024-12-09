@@ -523,7 +523,7 @@ func (m *Mgr) GetToolChainTimestamp(key string) (int64, error) {
 }
 
 // SearchToolChain search toolchain files by cmd, ensure only execute once
-func (m *Mgr) SearchToolChain(cmd string) error {
+func (m *Mgr) SearchToolChain(cmd, path string) error {
 	m.searchToolchainLock.Lock()
 	defer m.searchToolchainLock.Unlock()
 
@@ -535,7 +535,7 @@ func (m *Mgr) SearchToolChain(cmd string) error {
 	m.searchToolChainCache[cmd] = true
 
 	// TODO : search toolchain with cmd now
-	toolchain, err := searchToolChain(cmd)
+	toolchain, err := searchToolChain(cmd, path)
 	if err == nil && toolchain != nil {
 		m.SetToolChain(toolchain)
 	}

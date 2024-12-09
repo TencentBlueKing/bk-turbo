@@ -96,6 +96,7 @@ type FileDesc struct {
 	NoDuplicated       bool                  `json:"no_duplicated"`
 	AllDistributed     bool                  `json:"all_distributed"`
 	Priority           FileDescPriority      `json:"priority"`
+	Retry              bool                  `json:"retry"`
 }
 
 // UniqueKey define the file unique key

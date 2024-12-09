@@ -80,11 +80,13 @@ type worker struct {
 
 func (wr *worker) occupySlot() error {
 	wr.occupiedSlots++
+	blog.Debugf("worker: occupy slot for worker %s, %v, %v", wr.host.Server, wr.occupiedSlots, wr.totalSlots)
 	return nil
 }
 
 func (wr *worker) freeSlot() error {
 	wr.occupiedSlots--
+	blog.Debugf("worker: free slot for worker %s, %v, %v", wr.host.Server, wr.occupiedSlots, wr.totalSlots)
 	return nil
 }
 

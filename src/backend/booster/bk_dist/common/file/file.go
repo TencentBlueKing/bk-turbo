@@ -236,6 +236,7 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 	}
 
 	// query
+	hasUnknown := false
 	tempis := make(map[string]*Info, len(notfound))
 	for _, notf := range notfound {
 		tempf := notf
@@ -300,10 +301,11 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 
 			// 根据当前文件属性，给上一次的文件属性赋值
 			if loopagain { // 需要等链接的属性
-				i.FileType = LinkFile // 先假设是指向普通文件的链接
+				i.FileType = Unknown // 先假设是指向普通文件的链接
 				if oldi != nil {
-					oldi.FileType = LinkFile
-					blog.Infof("common util: set %s to LinkFile by assume", oldi.filePath)
+					oldi.FileType = Unknown
+					blog.Infof("common util: set %s to Unknown by assume", oldi.filePath)
+					hasUnknown = true
 				}
 			} else {
 				if i.Basic().IsDir() {
@@ -326,6 +328,24 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 
 			if !loopagain {
 				break
+			}
+		}
+	}
+
+	// 如果有多重链接，需要根据最终文件属性赋值
+	if hasUnknown {
+		// 用后面的链接属性更新到前面
+		finalLinkType := Unknown
+		for index := len(is) - 1; index >= 0; index-- {
+			if is[index].FileType == LinkFile || is[index].FileType == LinkDir {
+				finalLinkType = is[index].FileType
+				continue
+			}
+
+			if is[index].FileType == Unknown {
+				is[index].FileType = finalLinkType
+				blog.Infof("common util: adjust %s FileType to %d", is[index].filePath, finalLinkType)
+				continue
 			}
 		}
 	}

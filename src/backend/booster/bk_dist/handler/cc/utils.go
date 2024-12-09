@@ -428,6 +428,7 @@ var (
 		"-imacros":           true,
 		"-iprefix":           true,
 		"-iwithprefix":       true,
+		"-iquote":            true,
 		"-isystem":           true,
 		"-iwithprefixbefore": true,
 		"-idirafter":         true,
@@ -456,6 +457,7 @@ var (
 		"-MF":             true,
 		"-MT":             true,
 		"-MQ":             true,
+		"-iquote":         true,
 		"-isystem":        true,
 		"@":               true, // such as @"..\XXX\XXX.rsp"
 		"--gcc-toolchain": true,
@@ -774,6 +776,40 @@ func scanArgs(args []string, sandbox *dcSyscall.Sandbox) (*ccArgs, error) {
 				index++
 				if index >= len(args) {
 					blog.Warnf("cc: scan args: no file found after -I")
+					return nil, ErrorMissingOption
+				}
+				r.includePaths = append(r.includePaths, strings.Trim(args[index], "\""))
+				continue
+			}
+
+			if strings.HasPrefix(arg, "-iquote") {
+				// if -I just a prefix, save the remain of this line.
+				if len(arg) > 7 {
+					r.includePaths = append(r.includePaths, strings.Trim(arg[7:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no file found after -iquote")
+					return nil, ErrorMissingOption
+				}
+				r.includePaths = append(r.includePaths, strings.Trim(args[index], "\""))
+				continue
+			}
+
+			if strings.HasPrefix(arg, "-isystem") {
+				// if -I just a prefix, save the remain of this line.
+				if len(arg) > 8 {
+					r.includePaths = append(r.includePaths, strings.Trim(arg[8:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no file found after -isystem")
 					return nil, ErrorMissingOption
 				}
 				r.includePaths = append(r.includePaths, strings.Trim(args[index], "\""))
