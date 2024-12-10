@@ -70,7 +70,8 @@ func updateTaskRequestInputFilesReady(req *types.RemoteTaskExecuteRequest, baseD
 				index++
 				continue
 			}
-
+			req.Req.Commands[i].Inputfiles[j].InitFileSize = req.Req.Commands[i].Inputfiles[j].FileSize
+			req.Req.Commands[i].Inputfiles[j].InitCompressedSize = req.Req.Commands[i].Inputfiles[j].CompressedSize
 			req.Req.Commands[i].Inputfiles[j].FileSize = -1
 			req.Req.Commands[i].Inputfiles[j].CompressedSize = -1
 			req.Req.Commands[i].Inputfiles[j].Targetrelativepath = baseDir
