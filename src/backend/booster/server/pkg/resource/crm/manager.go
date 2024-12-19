@@ -860,6 +860,7 @@ func (rm *resourceManager) launch(
 		blog.Errorf("crm: try launching service failed, resource(%s) user(%s): %v", resourceID, user, err)
 		return err
 	}
+	blog.Infof("crm: try launching service, resource(%s) for user(%s)", resourceID, user)
 
 	// specify city
 	originCity := r.param.City
