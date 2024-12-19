@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	MetricPrefix = "disttask"
+	MetricPrefix = "crm"
 )
 
 // Basic define the basic table columns.
@@ -139,7 +139,7 @@ func (m *mysql) ensureTables(tables ...interface{}) error {
 // ListResource list resource from db, return list and total num.
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListResource(opts commonMySQL.ListOptions) ([]*TableResource, int64, error) {
-	defer timeMetricRecord("ListResource")()
+	defer timeMetricRecord("list_resource")()
 	defer logSlowFunc(time.Now().Unix(), "ListResource", 2)
 	var rl []*TableResource
 	db := opts.AddWhere(m.db.Model(&TableResource{}).Table(m.conf.MySQLTable))
@@ -164,7 +164,7 @@ func (m *mysql) ListResource(opts commonMySQL.ListOptions) ([]*TableResource, in
 
 // GetResource get resource.
 func (m *mysql) GetResource(resourceID string) (*TableResource, error) {
-	defer timeMetricRecord("GetResource")()
+	defer timeMetricRecord("get_resource")()
 	defer logSlowFunc(time.Now().Unix(), "GetResource", 2)
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -185,7 +185,7 @@ func (m *mysql) GetResource(resourceID string) (*TableResource, error) {
 
 // CreateResource create a new resource into database.
 func (m *mysql) CreateResource(tr *TableResource) error {
-	defer timeMetricRecord("CreateResource")()
+	defer timeMetricRecord("create_resource")()
 	defer logSlowFunc(time.Now().Unix(), "CreateResource", 2)
 	blog.Infof("crm: try to create resource(%s)", tr.ResourceID)
 	tr.tableName = m.conf.MySQLTable
@@ -199,7 +199,7 @@ func (m *mysql) CreateResource(tr *TableResource) error {
 
 // PutResource update a existing resource with full fields into database.
 func (m *mysql) PutResource(tr *TableResource) error {
-	defer timeMetricRecord("PutResource")()
+	defer timeMetricRecord("put_resource")()
 	defer logSlowFunc(time.Now().Unix(), "PutResource", 2)
 	blog.Infof("crm: try to put resource(%s)", tr.ResourceID)
 	tr.tableName = m.conf.MySQLTable
@@ -213,7 +213,7 @@ func (m *mysql) PutResource(tr *TableResource) error {
 
 // DeleteResource delete resource from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteResource(resourceID string) error {
-	defer timeMetricRecord("DeleteResource")()
+	defer timeMetricRecord("delete_resource")()
 	defer logSlowFunc(time.Now().Unix(), "DeleteResource", 2)
 	blog.Infof("crm: try to delete resource(%s)", resourceID)
 	if err := m.db.
