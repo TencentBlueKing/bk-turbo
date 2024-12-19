@@ -910,7 +910,7 @@ func (rm *resourceManager) launch(
 	}
 
 	// 在启动协程前，将resource刷新到内存，其它协程依赖该数据
-	r.status = resourceStatusDeploying
+	// r.status = resourceStatusDeploying
 	rm.updateResourcesCache(r)
 
 	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
@@ -955,7 +955,10 @@ func (rm *resourceManager) realLaunch(
 	// TODO : 这个地方可能会导致资源泄漏（远程资源创建了，但是记录db失败，如果这时server重启，则没办法跟踪和释放）；
 	//        概率比较小，先不处理
 	r.status = resourceStatusDeploying
-	if err = rm.saveResources(r); err != nil {
+	rm.lockResource(resourceID)
+	err = rm.saveResources(r)
+	rm.unlockResource(resourceID)
+	if err != nil {
 		blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
 			resourceID, user, err)
 
