@@ -273,8 +273,8 @@ func (tc *TextureCompressor) FinalExecute([]string) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (tc *TextureCompressor) SupportResultCache(command []string) bool {
-	return false
+func (tc *TextureCompressor) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (tc *TextureCompressor) GetResultCacheKey(command []string) string {

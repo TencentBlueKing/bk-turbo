@@ -424,8 +424,8 @@ func (u *UE4Shader) FinalExecute([]string) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (u *UE4Shader) SupportResultCache(command []string) bool {
-	return false
+func (u *UE4Shader) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (u *UE4Shader) GetResultCacheKey(command []string) string {

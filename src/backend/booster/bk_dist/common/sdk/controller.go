@@ -184,6 +184,7 @@ type CommonControllerConfig struct {
 type ControllerRegisterConfig struct {
 	BatchMode        bool
 	ServerHost       string
+	CacheServer      string
 	SpecificHostList []string
 	NeedApply        bool
 	Apply            *v2.ParamApply
@@ -283,6 +284,11 @@ type ControllerJobStats struct {
 	RemoteWorkReceiveEndTime      StatsTime `json:"remote_work_receive_end_time"`
 	RemoteWorkUnpackStartTime     StatsTime `json:"remote_work_unpack_start_time"`
 	RemoteWorkUnpackEndTime       StatsTime `json:"remote_work_unpack_end_time"`
+
+	ReportCachePackCommonStartTime StatsTime `json:"report_cache_pack_common_start_time"`
+	ReportCachePackCommonEndTime   StatsTime `json:"report_cache_pack_common_end_time"`
+	ReportCacheSendCommonStartTime StatsTime `json:"report_cache_send_common_start_time"`
+	ReportCacheSendCommonEndTime   StatsTime `json:"report_cache_send_common_end_time"`
 
 	LocalWorkEnterTime  StatsTime `json:"local_work_enter_time"`
 	LocalWorkLeaveTime  StatsTime `json:"local_work_leave_time"`

@@ -33,6 +33,16 @@ var (
 	ControllerScheme = "http"
 	ControllerIP     = "127.0.0.1"
 	ControllerPort   = 30117
+
+	ProdCacheServerDomain = ""
+	ProdCacheServerPort   = ""
+	ProdCacheServerHost   = fmt.Sprintf("%s:%s",
+		ProdCacheServerDomain, ProdCacheServerPort)
+
+	TestCacheServerDomain = ""
+	TestCacheServerPort   = ""
+	TestCacheServerHost   = fmt.Sprintf("%s:%s",
+		TestCacheServerDomain, TestCacheServerPort)
 )
 
 // const vars

@@ -689,6 +689,7 @@ func (h *ShaderTool) newBooster() (*pkg.Booster, error) {
 
 	// decide which server to connect to.
 	ServerHost := h.settings.ServerHost
+	CacheServerHost := h.settings.CacheServerHost
 	projectID := h.settings.ProjectID
 	buildID := h.settings.BuildID
 
@@ -715,6 +716,7 @@ func (h *ShaderTool) newBooster() (*pkg.Booster, error) {
 
 		Transport: dcType.BoosterTransport{
 			ServerHost:             ServerHost,
+			CacheServer:            CacheServerHost,
 			Timeout:                5 * time.Second,
 			HeartBeatTick:          5 * time.Second,
 			InspectTaskTick:        1 * time.Second,

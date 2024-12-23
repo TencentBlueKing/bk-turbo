@@ -29,6 +29,7 @@ import (
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
@@ -868,7 +869,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if !cl.SupportResultCache(command) {
+	if !cl.hasResultIndex() {
 		if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) && cl.workerSupportAbsPath() {
 			if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
 				req, err, notifyerr := cl.trypump(command)
@@ -1246,7 +1247,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 
 	cl.serverSideArgs = serverSideArgs
 
-	if cl.SupportResultCache(args) {
+	if cl.SupportResultCache(args) != resultcache.CacheTypeNone {
 		cl.resultCacheArgs = make([]string, 0, len(cl.serverSideArgs))
 		copy(cl.resultCacheArgs, cl.serverSideArgs)
 		for index := range cl.resultCacheArgs {
@@ -1527,12 +1528,22 @@ func (cl *TaskCL) parseOutput(s string) (string, error) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (cl *TaskCL) SupportResultCache(command []string) bool {
+func (cl *TaskCL) SupportResultCache(command []string) int {
 	if cl.sandbox != nil {
-		return cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorResultCache) != ""
+		if str := cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorResultCacheType); str != "" {
+			i, err := strconv.Atoi(str)
+			if err == nil {
+				return i
+			}
+		}
 	}
 
-	return false
+	return 0
+}
+
+// hasResultIndex check whether the env of hasresultindex set
+func (cl *TaskCL) hasResultIndex() bool {
+	return cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorHasResultIndex) != ""
 }
 
 func (cl *TaskCL) GetResultCacheKey(command []string) string {
@@ -1571,7 +1582,8 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	fullstring := fmt.Sprintf("%s_%x_%x_%x_%x", ext, cchash, arghash, cpphash, cppstderrhash)
 	fullstringhash := xxhash.Sum64([]byte(fullstring))
 
-	blog.Infof("cl: got hash key %x for cmd:[%s]", fullstringhash, strings.Join(command, " "))
+	blog.Infof("cl: got hash key %x for string[%s] cmd:[%s]",
+		fullstringhash, fullstring, strings.Join(command, " "))
 
 	return fmt.Sprintf("%x", fullstringhash)
 }

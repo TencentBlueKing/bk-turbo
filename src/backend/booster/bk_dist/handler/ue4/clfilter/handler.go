@@ -312,12 +312,12 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (cf *TaskCLFilter) SupportResultCache(command []string) bool {
+func (cf *TaskCLFilter) SupportResultCache(command []string) int {
 	if cf.clhandle != nil {
 		return cf.clhandle.SupportResultCache(command)
 	}
 
-	return false
+	return 0
 }
 
 func (cf *TaskCLFilter) GetResultCacheKey(command []string) string {

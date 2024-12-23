@@ -209,8 +209,8 @@ func (lf *TaskLinkFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommon
 }
 
 // SupportResultCache check whether this command support result cache
-func (lf *TaskLinkFilter) SupportResultCache(command []string) bool {
-	return false
+func (lf *TaskLinkFilter) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (lf *TaskLinkFilter) GetResultCacheKey(command []string) string {

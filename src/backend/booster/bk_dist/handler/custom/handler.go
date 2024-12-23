@@ -204,8 +204,8 @@ func (c *Custom) FinalExecute(command []string) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (c *Custom) SupportResultCache(command []string) bool {
-	return false
+func (c *Custom) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (c *Custom) GetResultCacheKey(command []string) string {

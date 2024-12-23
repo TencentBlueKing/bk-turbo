@@ -71,6 +71,9 @@ type WorkerConfig struct {
 
 	// slot由worker提供，而不是客户端指定
 	OfferSlot bool `json:"offer_slot" value:"true" usage:"whether support offer slot"`
+
+	// result cache dir
+	ResultCacheDir string `json:"result_cache_dir" value:"" usage:"result cache dir"`
 }
 
 // NewConfig : return config of server
@@ -95,3 +98,7 @@ func (dsc *ServerConfig) Parse() {
 		dsc.ServerCert.IsSSL = true
 	}
 }
+
+var (
+	GlobalResultCacheDir = ""
+)

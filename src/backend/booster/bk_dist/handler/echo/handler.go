@@ -258,8 +258,8 @@ func (c *Echo) FinalExecute([]string) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (c *Echo) SupportResultCache(command []string) bool {
-	return false
+func (c *Echo) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (c *Echo) GetResultCacheKey(command []string) string {

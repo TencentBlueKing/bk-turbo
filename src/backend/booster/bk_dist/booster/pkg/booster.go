@@ -367,9 +367,7 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorIgnoreHttpStatus] = envValueTrue
 	}
 
-	if b.config.Works.ResultCache {
-		requiredEnv[env.KeyExecutorResultCache] = envValueTrue
-	}
+	requiredEnv[env.KeyExecutorResultCacheType] = strconv.Itoa(b.config.Works.ResultCacheType)
 
 	resultEnv := make(map[string]string, 10)
 	for k, v := range requiredEnv {
@@ -586,6 +584,7 @@ func (b *Booster) registerWork() error {
 	b.work, err = b.controller.Register(dcSDK.ControllerRegisterConfig{
 		BatchMode:        b.config.BatchMode,
 		ServerHost:       b.config.Transport.ServerHost,
+		CacheServer:      b.config.Transport.CacheServer,
 		SpecificHostList: b.config.Works.WorkerList,
 		NeedApply:        !(b.config.Works.Local || b.config.Works.Degraded),
 		Apply:            b.GetApplyParam(),

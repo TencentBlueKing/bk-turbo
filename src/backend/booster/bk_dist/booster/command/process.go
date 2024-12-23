@@ -247,6 +247,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		cleanTmpFilesDayAgo = c.Int(FlagCleanTmpFilesDayAgo)
 	}
 
+	cache_server, _ := getCacheServerHost(c)
+
 	// generate a new booster.
 	cmdConfig := dcType.BoosterConfig{
 		Type:      dcType.GetBoosterType(bt),
@@ -317,12 +319,13 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			CleanTmpFilesDayAgo:  cleanTmpFilesDayAgo,
 			SearchToolchain:      c.Bool(FlagSearchToolchain),
 			IgnoreHttpStatus:     c.Bool(FlagIgnoreHttpStatus),
-			ResultCache:          c.Bool(FlagResultCache),
+			ResultCacheType:      c.Int(FlagResultCacheType),
 		},
 
 		Transport: dcType.BoosterTransport{
 			ServerDomain:           ServerDomain,
 			ServerHost:             ServerHost,
+			CacheServer:            cache_server,
 			Timeout:                5 * time.Second,
 			HeartBeatTick:          5 * time.Second,
 			InspectTaskTick:        1000 * time.Millisecond,
@@ -561,6 +564,20 @@ func getServerFromConfig(c *commandCli.Context) (string, error) {
 
 	blog.Warnf("booster-command: no server specified, none of --server, user home config, or global config")
 	return "", fmt.Errorf("no server specified")
+}
+
+func getCacheServerHost(c *commandCli.Context) (string, error) {
+	if c.IsSet(FlagCacheServer) {
+		s := c.String(FlagServer)
+		blog.Infof("booster-command: use cache server from command line --cache_server specified: %s", s)
+		return s, nil
+	}
+
+	if c.Bool(FlagTest) {
+		return TestCacheServerHost, nil
+	}
+
+	return ProdCacheServerHost, nil
 }
 
 func getConfig(path string) (*Config, error) {

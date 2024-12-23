@@ -14,6 +14,7 @@ import (
 	"net"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -23,24 +24,43 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
+var (
+	globalRemoteWorkerWithSlot dcSDK.RemoteWorker
+	onceWithSlot               sync.Once
+
+	globalRemoteWorker dcSDK.RemoteWorker
+	once               sync.Once
+)
+
 // NewCommonRemoteWorkerWithSlot get a new remote worker SDK with specifiled size of slot
 func NewCommonRemoteWorkerWithSlot(
 	ctx context.Context,
 	size int64,
 	sendwithcache bool) dcSDK.RemoteWorker {
-	var cache *fileDataCache
-	if sendwithcache {
-		cache = newFileDataCache(ctx)
-	}
-	return &RemoteWorker{
-		slot:      newSlot(ctx, size),
-		fileCache: cache,
-	}
+	onceWithSlot.Do(func() {
+		var cache *fileDataCache
+		if sendwithcache {
+			cache = newFileDataCache(ctx)
+		}
+
+		slot := newSlot(ctx, size)
+
+		globalRemoteWorkerWithSlot = &RemoteWorker{
+			slot:      slot,
+			fileCache: cache,
+		}
+	})
+
+	return globalRemoteWorkerWithSlot
 }
 
 // NewCommonRemoteWorker get a new remote worker SDK
 func NewCommonRemoteWorker() dcSDK.RemoteWorker {
-	return &RemoteWorker{}
+	once.Do(func() {
+		globalRemoteWorker = &RemoteWorker{}
+	})
+
+	return globalRemoteWorker
 }
 
 // RemoteWorker 作为链接管理单元, 通过实例化不同的handler来提供参数隔离的服务,
@@ -720,4 +740,405 @@ func (r *CommonRemoteHandler) ExecuteQuerySlot(
 	}()
 
 	return client.conn, nil
+}
+
+func (r *CommonRemoteHandler) ExecuteReportResultCache(
+	server *dcProtocol.Host,
+	attributes map[string]string,
+	results []*dcSDK.FileDesc,
+	mgr dcSDK.LockMgr) (*dcSDK.BKReportResultCacheResult, error) {
+
+	// record the exit status.
+	defer func() {
+		r.updateJobStatsFunc()
+	}()
+	blog.Infof("remotehandle rrc: start report %d result files to server %s", len(results), server)
+
+	// 加内存锁
+	var totalsize int64
+	var locksize int64
+	memorylocked := false
+	t1 := time.Now()
+	t2 := t1
+	tinit := time.Now()
+
+	var err error
+	var dlocallock, dencodereq, dmemorylock time.Duration
+
+	// 加本地资源锁
+	locallocked := false
+	if mgr != nil && len(results) > 0 {
+		if mgr.LockSlots(dcSDK.JobUsageDefault, 1) {
+			locallocked = true
+			blog.Debugf("remotehandle rrc: succeed to get one local lock")
+		}
+	}
+
+	t2 = time.Now()
+	dlocallock = t2.Sub(t1)
+	t1 = t2
+
+	if r.slot != nil && len(results) > 0 {
+		for _, v := range results {
+			totalsize += v.FileSize
+		}
+		// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
+		locksize = totalsize * 3
+		if locksize > 0 {
+			if r.slot.Lock(locksize) {
+				memorylocked = true
+				blog.Debugf("remotehandle rrc: succeed to get one memory lock")
+			}
+		}
+	}
+
+	t2 = time.Now()
+	dmemorylock = t2.Sub(t1)
+	t1 = t2
+
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonStartTime)
+	messages, err := encodeReportCacheReq(attributes, results)
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonEndTime)
+
+	t2 = time.Now()
+	dencodereq = t2.Sub(t1)
+	t1 = t2
+
+	if locallocked {
+		mgr.UnlockSlots(dcSDK.JobUsageDefault, 1)
+		blog.Debugf("remotehandle rrc: succeed to release one local lock")
+	}
+
+	if err != nil {
+		blog.Warnf("remotehandle rrc: error: %v", err)
+
+		if memorylocked {
+			r.slot.Unlock(locksize)
+			blog.Debugf("remotehandle rrc: succeed to release one memory lock")
+		}
+
+		return nil, err
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	// blog.Debugf("remotehandle rrc: success pack-up to server %s", server)
+
+	blog.Debugf("remotehandle rrc: finished encode report result cache request with %d files size:%d to server %s",
+		len(results), totalsize, server.Server)
+
+	// send request
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonStartTime)
+	// record the send starting status, sending should be waiting for a while.
+	r.updateJobStatsFunc()
+
+	// ready to send now
+	t := time.Now().Local()
+	client := NewTCPClient(r.ioTimeout)
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
+		blog.Warnf("remotehandle rrc: error: %v", err)
+
+		if memorylocked {
+			r.slot.Unlock(locksize)
+			blog.Debugf("remotehandle rrc: succeed to release one memory lock")
+		}
+
+		return nil, err
+	}
+	d := time.Now().Sub(t)
+	if d > 200*time.Millisecond {
+		blog.Debugf("remotehandle rrc: TCP Connect to long to server(%s): %s", server.Server, d.String())
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	t2 = time.Now()
+	dconnect := t2.Sub(t1)
+	t1 = t2
+
+	blog.Debugf("remotehandle rrc: success connect to server %s", server)
+
+	err = SendMessages(client, messages)
+	if memorylocked {
+		r.slot.Unlock(locksize)
+		blog.Debugf("remotehandle rrc: succeed to release one memory lock")
+	}
+
+	if err != nil {
+		blog.Warnf("remotehandle rrc: error: %v", err)
+		return nil, err
+	}
+
+	t2 = time.Now()
+	dsend := t2.Sub(t1)
+	t1 = t2
+
+	blog.Debugf("remotehandle rrc: report result cache, total %d files with size:%d to server %s",
+		len(results), totalsize, server.Server)
+
+	debug.FreeOSMemory() // free memory anyway
+
+	blog.Debugf("remotehandle rrc: success sent to server %s", server)
+	// receive result
+	data, err := receiveReportCacheRsp(client)
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonEndTime)
+
+	t2 = time.Now()
+	drecv := t2.Sub(t1)
+	t1 = t2
+
+	if err != nil {
+		blog.Warnf("remotehandle rrc: error: %v", err)
+		return nil, err
+	}
+
+	result, err := decodeReportCacheRsp(data)
+	if err != nil {
+		blog.Warnf("remotehandle rrc: error: %v", err)
+		return nil, err
+	}
+
+	t2 = time.Now()
+	ddecode := t2.Sub(t1)
+	t1 = t2
+
+	dtotal := t2.Sub(tinit)
+
+	blog.Infof("remotehandle rrc: report result cache stat, total %d files size:%d server:%s "+
+		"memory lock : %f , local lock : %f , "+
+		"encode req : %f , connect : %f , "+
+		"send : %f , receive : %f , "+
+		"decode response : %f , total : %f",
+		len(results), totalsize, server.Server,
+		dmemorylock.Seconds(), dlocallock.Seconds(),
+		dencodereq.Seconds(), dconnect.Seconds(),
+		dsend.Seconds(), drecv.Seconds(),
+		ddecode.Seconds(), dtotal.Seconds())
+
+	blog.Debugf("remotehandle rrc: report result cache done *")
+
+	return result, nil
+}
+
+func (r *CommonRemoteHandler) ExecuteQueryResultCacheIndex(
+	server *dcProtocol.Host,
+	attributes map[string]string) (*dcSDK.BKQueryResultCacheIndexResult, error) {
+	// record the exit status.
+	defer func() {
+		r.updateJobStatsFunc()
+	}()
+	blog.Infof("remotehandle qrc: start query result cache index from server %s", server)
+
+	t1 := time.Now()
+	t2 := t1
+	tinit := time.Now()
+
+	var err error
+	var dencodereq time.Duration
+
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonStartTime)
+	messages, err := encodeQueryCacheIndexReq(attributes)
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonEndTime)
+
+	t2 = time.Now()
+	dencodereq = t2.Sub(t1)
+	t1 = t2
+
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+
+		return nil, err
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	blog.Debugf("remotehandle qrc: success pack-up to server %s", server)
+
+	// send request
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonStartTime)
+	// record the send starting status, sending should be waiting for a while.
+	r.updateJobStatsFunc()
+
+	// ready to send now
+	t := time.Now().Local()
+	client := NewTCPClient(r.ioTimeout)
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+
+		return nil, err
+	}
+	d := time.Now().Sub(t)
+	if d > 200*time.Millisecond {
+		blog.Debugf("remotehandle qrc: TCP Connect to long to server(%s): %s", server.Server, d.String())
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	t2 = time.Now()
+	dconnect := t2.Sub(t1)
+	t1 = t2
+
+	blog.Debugf("remotehandle qrc: success connect to server %s", server)
+
+	err = SendMessages(client, messages)
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+		return nil, err
+	}
+
+	t2 = time.Now()
+	dsend := t2.Sub(t1)
+	t1 = t2
+
+	blog.Debugf("remotehandle qrc: success sent to server %s", server)
+	// receive result
+	data, err := receiveQueryCacheIndexRsp(client)
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonEndTime)
+
+	t2 = time.Now()
+	drecv := t2.Sub(t1)
+	t1 = t2
+
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+		return nil, err
+	}
+
+	result, err := decodeQueryCacheIndexRsp(data)
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+		return nil, err
+	}
+
+	t2 = time.Now()
+	ddecode := t2.Sub(t1)
+	t1 = t2
+
+	dtotal := t2.Sub(tinit)
+
+	blog.Infof("remotehandle qrc: query result cache from server:%s "+
+		"encode req : %f , connect : %f , "+
+		"send : %f , receive : %f , "+
+		"decode response : %f , total : %f",
+		server.Server,
+		dencodereq.Seconds(), dconnect.Seconds(),
+		dsend.Seconds(), drecv.Seconds(),
+		ddecode.Seconds(), dtotal.Seconds())
+
+	blog.Debugf("remotehandle qrc: query result cache done *")
+
+	return result, nil
+}
+
+func (r *CommonRemoteHandler) ExecuteQueryResultCacheFile(
+	server *dcProtocol.Host,
+	attributes map[string]string) (*dcSDK.BKQueryResultCacheFileResult, error) {
+	// record the exit status.
+	defer func() {
+		r.updateJobStatsFunc()
+	}()
+	blog.Infof("remotehandle qrc: start query result cache file from server %s", server)
+
+	t1 := time.Now()
+	t2 := t1
+	tinit := time.Now()
+
+	var err error
+	var dencodereq time.Duration
+
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonStartTime)
+	messages, err := encodeQueryCacheFileReq(attributes)
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonEndTime)
+
+	t2 = time.Now()
+	dencodereq = t2.Sub(t1)
+	t1 = t2
+
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+
+		return nil, err
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	blog.Debugf("remotehandle qrc: success pack-up to server %s", server)
+
+	// send request
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonStartTime)
+	// record the send starting status, sending should be waiting for a while.
+	r.updateJobStatsFunc()
+
+	// ready to send now
+	t := time.Now().Local()
+	client := NewTCPClient(r.ioTimeout)
+	if err := client.Connect(getRealServer(server.Server)); err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+
+		return nil, err
+	}
+	d := time.Now().Sub(t)
+	if d > 200*time.Millisecond {
+		blog.Debugf("remotehandle qrc: TCP Connect to long to server(%s): %s", server.Server, d.String())
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	t2 = time.Now()
+	dconnect := t2.Sub(t1)
+	t1 = t2
+
+	blog.Debugf("remotehandle qrc: success connect to server %s", server)
+
+	err = SendMessages(client, messages)
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+		return nil, err
+	}
+
+	t2 = time.Now()
+	dsend := t2.Sub(t1)
+	t1 = t2
+
+	blog.Debugf("remotehandle qrc: success sent to server %s", server)
+	// receive result
+	data, err := receiveQueryCacheFileRsp(client)
+	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonEndTime)
+
+	t2 = time.Now()
+	drecv := t2.Sub(t1)
+	t1 = t2
+
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+		return nil, err
+	}
+
+	result, err := decodeQueryCacheFileRsp(data)
+	if err != nil {
+		blog.Warnf("remotehandle qrc: error: %v", err)
+		return nil, err
+	}
+
+	t2 = time.Now()
+	ddecode := t2.Sub(t1)
+	t1 = t2
+
+	dtotal := t2.Sub(tinit)
+
+	blog.Infof("remotehandle qrc: query result cache from server:%s "+
+		"encode req : %f , connect : %f , "+
+		"send : %f , receive : %f , "+
+		"decode response : %f , total : %f",
+		server.Server,
+		dencodereq.Seconds(), dconnect.Seconds(),
+		dsend.Seconds(), drecv.Seconds(),
+		ddecode.Seconds(), dtotal.Seconds())
+
+	blog.Debugf("remotehandle qrc: query result cache done *")
+
+	return result, nil
 }

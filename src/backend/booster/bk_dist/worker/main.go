@@ -27,6 +27,7 @@ func main() {
 	}
 
 	c.Parse()
+	config.GlobalResultCacheDir = c.ResultCacheDir
 
 	if !filepath.IsAbs(c.LogConfig.LogDir) {
 		newabs, err := filepath.Abs(c.LogConfig.LogDir)

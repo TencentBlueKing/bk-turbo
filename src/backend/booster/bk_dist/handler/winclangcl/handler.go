@@ -234,8 +234,8 @@ func (cc *WinClangCl) preprocess(command cmd.Commandline) error {
 }
 
 // SupportResultCache check whether this command support result cache
-func (cc *WinClangCl) SupportResultCache(command []string) bool {
-	return false
+func (cc *WinClangCl) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (cc *WinClangCl) GetResultCacheKey(command []string) string {

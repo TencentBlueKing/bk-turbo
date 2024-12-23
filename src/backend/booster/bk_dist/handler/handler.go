@@ -87,7 +87,11 @@ type Handler interface {
 	FinalExecute(command []string)
 
 	// SupportResultCache check whether this command support result cache
-	SupportResultCache(command []string) bool
+	// 0 : do not support
+	// 1 : support local cache
+	// 2 : support remote cache
+	// 3 : support both local and remote cache
+	SupportResultCache(command []string) int
 
 	// GetResultCacheKey return the key of result cache
 	GetResultCacheKey(command []string) string

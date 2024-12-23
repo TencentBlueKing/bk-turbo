@@ -10,6 +10,7 @@
 package resultcache
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -17,7 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
@@ -25,8 +28,24 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
+type ResultCacheMgr interface {
+	GetResult(key string, needUnzip bool) ([]*Result, error)
+	PutResult(key string, rs []*Result) error
+
+	GetRecordGroup(key string) ([]byte, error)
+	PutRecord(record Record) error
+	DeleteRecord(record Record) error
+}
+
+const (
+	CacheTypeNone = iota
+	CacheTypeLocal
+	CacheTypeRemote
+	CacheTypeBothLocalAndRemote = CacheTypeLocal & CacheTypeRemote
+)
+
 type Result struct {
-	Suffix          string
+	FileName        string
 	CompressDataBuf []byte
 	CompressType    protocol.CompressType
 	RealSize        uint64
@@ -38,7 +57,7 @@ func (r *Result) generateFileName() string {
 		hashbyte := xxhash.Sum64(r.CompressDataBuf)
 		r.HashStr = fmt.Sprintf("%x", hashbyte)
 	}
-	return fmt.Sprintf("%s_%d_%s%s", r.HashStr, r.RealSize, r.CompressType.String(), r.Suffix)
+	return fmt.Sprintf("%s_%d_%s_%s", r.HashStr, r.RealSize, r.CompressType.String(), r.FileName)
 }
 
 func getFileNameWithoutExtension(fullPath string) string {
@@ -47,11 +66,11 @@ func getFileNameWithoutExtension(fullPath string) string {
 	return fileName
 }
 
-func ToResult(f string) *Result {
+func ToResult(f string, needUnzip bool) *Result {
 	blog.Infof("resultcache: ready load file %s to result", f)
 
 	r := &Result{}
-	r.Suffix = filepath.Ext(f)
+	r.FileName = filepath.Base(f)
 
 	fname := getFileNameWithoutExtension(f)
 	fields := strings.Split(fname, "_")
@@ -93,7 +112,7 @@ func ToResult(f string) *Result {
 			}
 
 			// 返回前先解压
-			if compressType == protocol.CompressLZ4 {
+			if needUnzip && compressType == protocol.CompressLZ4 {
 				dst := make([]byte, realsize)
 				outdata, err := dcUtil.Lz4Uncompress(data, dst)
 				if err != nil {
@@ -140,57 +159,69 @@ func (r *Result) save(dir string) error {
 	return nil
 }
 
-type CacheWay int
-
-const (
-	CacheLocal CacheWay = iota
-	CacheRemote
-	CacheBoth
-)
-
 var (
 	instance *ResultCache
 	once     sync.Once
 )
 
 type ResultCache struct {
-	LocalSaveDir string
-	RemoteServer string
+	FileDir string
+
+	table *Table
 }
 
-func GetInstance(localdir string, server string) *ResultCache {
+func GetInstance(localdir string) ResultCacheMgr {
 	once.Do(func() {
 		if localdir == "" {
 			localdir = dcUtil.GetResultCacheDir()
 		}
-		instance = &ResultCache{
-			LocalSaveDir: localdir,
-			RemoteServer: server,
+
+		if !file.Stat(localdir).Exist() {
+			os.MkdirAll(localdir, os.ModePerm)
 		}
+
+		filedir := filepath.Join(localdir, "file")
+		if !file.Stat(filedir).Exist() {
+			os.MkdirAll(filedir, os.ModePerm)
+		}
+
+		indexdir := filepath.Join(localdir, "index")
+		if !file.Stat(indexdir).Exist() {
+			os.MkdirAll(indexdir, os.ModePerm)
+		}
+
+		instance = &ResultCache{
+			FileDir: filedir,
+			table:   NewTable(indexdir),
+		}
+
+		instance.Init()
 	})
 	return instance
 }
 
-func (rc *ResultCache) GetResult(key string, cw CacheWay) ([]*Result, error) {
-	if cw == CacheLocal {
-		return rc.getLocal(key)
-	}
-
-	err := fmt.Errorf("not supported cacheway:%d", cw)
-	return nil, err
+func (rc *ResultCache) GetResult(key string, needUnzip bool) ([]*Result, error) {
+	return rc.getLocal(key, needUnzip)
 }
 
-func (rc *ResultCache) PutResult(key string, rs []*Result, cw CacheWay) error {
+func (rc *ResultCache) PutResult(key string, rs []*Result) error {
 	if len(rs) == 0 {
 		return nil
 	}
 
-	if cw == CacheLocal {
-		return rc.putLocal(key, rs)
-	}
+	return rc.putLocal(key, rs)
+}
 
-	err := fmt.Errorf("not supported cacheway:%d", cw)
-	return err
+func (rc *ResultCache) GetRecordGroup(key string) ([]byte, error) {
+	return rc.table.GetRecordGroup(key)
+}
+
+func (rc *ResultCache) PutRecord(record Record) error {
+	return rc.table.PutRecord(record)
+}
+
+func (rc *ResultCache) DeleteRecord(record Record) error {
+	return rc.table.DeleteRecord(record)
 }
 
 func (rc *ResultCache) getDir(key string) (string, error) {
@@ -200,11 +231,11 @@ func (rc *ResultCache) getDir(key string) (string, error) {
 		return "", err
 	}
 
-	dir := filepath.Join(rc.LocalSaveDir, string(key[0]), string(key[1]), key)
+	dir := filepath.Join(rc.FileDir, string(key[0]), string(key[1]), key)
 	return dir, nil
 }
 
-func (rc *ResultCache) getLocal(key string) ([]*Result, error) {
+func (rc *ResultCache) getLocal(key string, needUnzip bool) ([]*Result, error) {
 	dir, err := rc.getDir(key)
 	if err != nil {
 		blog.Warnf("resultcache: get dir by key %s with error:%v", key, err)
@@ -222,7 +253,7 @@ func (rc *ResultCache) getLocal(key string) ([]*Result, error) {
 	rs := make([]*Result, 0, len(fis))
 	for _, fi := range fis {
 		f := filepath.Join(dir, fi.Name())
-		r := ToResult(f)
+		r := ToResult(f, needUnzip)
 		if r != nil {
 			rs = append(rs, r)
 		}
@@ -254,4 +285,406 @@ func (rc *ResultCache) putLocal(key string, rs []*Result) error {
 	}
 
 	return nil
+}
+
+func (rc *ResultCache) Init() {
+	rc.table.Init()
+}
+
+// ---------------cache index-----------------------------
+const (
+	GroupKey             = "group_key"
+	CommandKey           = "command_key"
+	ResultKey            = "result_key"
+	RemoteExecuteTimeKey = "remote_execute_time_key"
+)
+
+const (
+	StatusSaved = iota
+	StatusModified
+)
+
+var (
+	ErrorNotFound      = fmt.Errorf("not found")
+	ErrorRecordInvalid = fmt.Errorf("record invalid")
+)
+
+const (
+	syncTick = 5 * time.Second
+)
+
+// 存储result cache的index
+type Record map[string]string
+
+func (r Record) Valid() bool {
+	_, ok := r[GroupKey]
+	if !ok {
+		return false
+	}
+
+	_, ok = r[CommandKey]
+	if !ok {
+		return false
+	}
+
+	return true
+}
+
+func (r Record) GetResultHashString() string {
+	v, ok := r[ResultKey]
+	if !ok {
+		return v
+	}
+
+	return ""
+}
+
+func (r Record) CommandKeyEqual(another Record) bool {
+	if another == nil {
+		return false
+	}
+
+	myvalue := ""
+	if v, ok := r[CommandKey]; ok {
+		myvalue = v
+	} else {
+		return false
+	}
+
+	anothervalue := ""
+	if v, ok := another[CommandKey]; ok {
+		anothervalue = v
+	} else {
+		return false
+	}
+
+	return myvalue == anothervalue
+}
+
+func (r Record) ResultKeyEqual(another Record) bool {
+	if another == nil {
+		return false
+	}
+
+	myvalue := ""
+	if v, ok := r[ResultKey]; ok {
+		myvalue = v
+	} else {
+		return false
+	}
+
+	anothervalue := ""
+	if v, ok := another[ResultKey]; ok {
+		anothervalue = v
+	} else {
+		return false
+	}
+
+	return myvalue == anothervalue
+}
+
+func (r *Record) ToString() string {
+	jsonStr, err := json.Marshal(*r)
+	if err == nil {
+		return string(jsonStr)
+	}
+
+	return ""
+}
+
+type RecordGroup struct {
+	lock       sync.RWMutex
+	Key        string
+	Group      []*Record
+	LastStatus int32
+}
+
+func (rg *RecordGroup) PutRecord(record Record) {
+	rg.lock.Lock()
+	defer rg.lock.Unlock()
+
+	// 要不要考虑去重?
+	existed := false
+	for i, v := range rg.Group {
+		if v.CommandKeyEqual(record) {
+			existed = true
+			rg.Group[i] = &record
+		}
+	}
+	if !existed {
+		rg.Group = append(rg.Group, &record)
+	}
+
+	rg.LastStatus = StatusModified
+}
+
+func (rg *RecordGroup) DeleteRecord(record Record) {
+	rg.lock.Lock()
+	defer rg.lock.Unlock()
+
+	deleted := false
+	// 先只考虑删除匹配上的第一个，后面看看要不要全部删除
+	for index, v := range rg.Group {
+		if record.CommandKeyEqual(*v) {
+			rg.Group = append(rg.Group[:index], rg.Group[index+1:]...)
+			deleted = true
+			break
+		}
+	}
+
+	if deleted {
+		rg.LastStatus = StatusModified
+	}
+}
+
+func (rg *RecordGroup) ToBytes() ([]byte, error) {
+	rg.lock.RLock()
+	defer rg.lock.RUnlock()
+
+	// Convert []*Record to JSON string
+	jsonData, err := json.MarshalIndent(rg.Group, "", "  ")
+	if err != nil {
+		blog.Warnf("resultcache: convert to json with error:%v", err)
+		return nil, err
+	}
+
+	return jsonData, nil
+}
+
+func (rg *RecordGroup) HasIndex(record Record) (bool, error) {
+	rg.lock.RLock()
+	defer rg.lock.RUnlock()
+
+	for _, v := range rg.Group {
+		if record.CommandKeyEqual(*v) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (rg *RecordGroup) HasResult(record Record) (bool, error) {
+	rg.lock.RLock()
+	defer rg.lock.RUnlock()
+
+	for _, v := range rg.Group {
+		if record.ResultKeyEqual(*v) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (rg *RecordGroup) ToString() string {
+	str := ""
+	for _, v := range rg.Group {
+		str += v.ToString() + "\n"
+	}
+	return str
+}
+
+func ToRecordGroup(data []byte) (*RecordGroup, error) {
+	var records []*Record
+	err := json.Unmarshal(data, &records)
+	if err != nil {
+		blog.Warnf("resultcache: convert to record group with error:%v", err)
+		return nil, err
+	}
+
+	if len(records) > 0 {
+		if records[0].Valid() {
+			key, _ := (*records[0])[GroupKey]
+			return &RecordGroup{
+				Key:        key,
+				Group:      records,
+				LastStatus: StatusSaved,
+			}, nil
+		}
+
+		return nil, ErrorRecordInvalid
+	}
+
+	return nil, nil
+}
+
+// Table
+type Table struct {
+	lock     sync.RWMutex
+	Data     map[string]*RecordGroup
+	IndexDir string
+}
+
+func NewTable(dir string) *Table {
+	return &Table{IndexDir: dir}
+}
+
+// PutRecord adds a new record to the table.
+func (t *Table) PutRecord(record Record) error {
+	if !record.Valid() {
+		return ErrorRecordInvalid
+	}
+
+	v, _ := record[GroupKey]
+
+	t.lock.RLock()
+	rg, ok := t.Data[v]
+	t.lock.RUnlock()
+
+	if !ok {
+		t.lock.Lock()
+		newg := RecordGroup{
+			Key:        v,
+			Group:      []*Record{&record},
+			LastStatus: StatusModified,
+		}
+		t.Data[v] = &newg
+		t.lock.Unlock()
+	} else {
+		rg.PutRecord(record)
+	}
+
+	return nil
+}
+
+// DeleteRecord delete one record from the table.
+func (t *Table) DeleteRecord(record Record) error {
+	if !record.Valid() {
+		return ErrorRecordInvalid
+	}
+
+	v, _ := record[GroupKey]
+
+	t.lock.RLock()
+	rg, ok := t.Data[v]
+	t.lock.RUnlock()
+
+	if !ok {
+		blog.Warnf("resultcache: not found when delete with key:%s record:%v", v, record)
+		return ErrorNotFound
+	}
+
+	rg.DeleteRecord(record)
+	return nil
+}
+
+func (t *Table) GetRecordGroup(key string) ([]byte, error) {
+	t.lock.RLock()
+	rg, ok := t.Data[key]
+	t.lock.RUnlock()
+
+	if !ok {
+		blog.Warnf("resultcache: not found when query with key:%s", key)
+		return nil, ErrorNotFound
+	}
+
+	return rg.ToBytes()
+}
+
+func (t *Table) Save(rg *RecordGroup) error {
+	filename := fmt.Sprintf("%s.txt", rg.Key)
+	fullpath := filepath.Join(t.IndexDir, filename)
+
+	data, err := rg.ToBytes()
+	if err != nil || len(data) <= 0 {
+		blog.Infof("resultcache: save to file %s with error:%v", fullpath, err)
+		return err
+	}
+
+	tmpfullpath := fullpath + ".tmp"
+	err = os.WriteFile(tmpfullpath, data, 0644)
+	if err != nil {
+		blog.Infof("resultcache: save to file %s with error:%v", fullpath, err)
+		return err
+	}
+
+	bakfullpath := fullpath + ".bak"
+	if file.Stat(fullpath).Exist() {
+		err = os.Rename(fullpath, bakfullpath)
+		if err != nil {
+			blog.Infof("resultcache: save to file %s with error:%v", fullpath, err)
+			return err
+		}
+	}
+
+	err = os.Rename(tmpfullpath, fullpath)
+	if err != nil {
+		blog.Infof("resultcache: save to file %s with error:%v", fullpath, err)
+		return err
+	}
+
+	blog.Infof("resultcache: save to file %s with error:%v", fullpath, err)
+	return err
+}
+
+func (t *Table) Init() {
+	t.Load()
+
+	// start ticker to manage
+	go t.Ticker()
+}
+
+func (t *Table) Load() error {
+	t.Data = make(map[string]*RecordGroup)
+
+	f, err := os.Open(t.IndexDir)
+	if err != nil {
+		blog.Warnf("resultcache: open dir %s with error:%v", t.IndexDir, err)
+		return err
+	}
+	fis, _ := f.Readdir(-1)
+	f.Close()
+
+	for _, fi := range fis {
+		fullpath := filepath.Join(t.IndexDir, fi.Name())
+		file, err := os.Open(fullpath)
+		if err != nil {
+			blog.Warnf("resultcache: open file %s with error:%v", fullpath, err)
+			continue
+		}
+
+		data, err := io.ReadAll(file)
+		file.Close()
+
+		if err != nil {
+			blog.Warnf("resultcache: read file %s with error:%v", fullpath, err)
+			continue
+		}
+
+		rg, err := ToRecordGroup(data)
+		if err != nil {
+			blog.Warnf("resultcache: convert [%s] to group with error:%v", data, err)
+			continue
+		}
+
+		t.Data[rg.Key] = rg
+		blog.Infof("resultcache: succeed load record group with key:%s from file:%s", rg.Key, fullpath)
+	}
+
+	return nil
+}
+
+func (t *Table) Ticker() {
+	blog.Infof("resultcache: start ticker now")
+
+	ticker := time.NewTicker(syncTick)
+	defer ticker.Stop()
+
+	// TODO : delete long unused
+	for {
+		select {
+		case <-ticker.C:
+			t.lock.RLock()
+			for _, rg := range t.Data {
+				if rg.LastStatus == StatusModified {
+					err := t.Save(rg)
+					if err == nil {
+						rg.LastStatus = StatusSaved
+					}
+				}
+			}
+			t.lock.RUnlock()
+		}
+	}
 }

@@ -90,6 +90,7 @@ const (
 	FlagControllerNoWait     = "controller_no_wait"
 	FlagControllerRemainTime = "controller_remain_time"
 	FlagServer               = "server"
+	FlagCacheServer          = "cache_server"
 	FlagWorkerSideCache      = "worker_side_cache"
 	FlagLocalRecord          = "local_record"
 	FlagWriteMemroMemroy     = "write_memory"
@@ -112,7 +113,7 @@ const (
 	FlagWorkerOfferSlot      = "worker_offer_slot"
 	FlagCleanTmpFilesDayAgo  = "clean_tmp_files_day_ago"
 	FlagIgnoreHttpStatus     = "ignore_http_status"
-	FlagResultCache          = "result_cache"
+	FlagResultCacheType      = "result_cache_type"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -390,6 +391,10 @@ var (
 			Name:  "server",
 			Usage: "specify the server address for booster",
 		},
+		commandCli.StringFlag{
+			Name:  "cache_server",
+			Usage: "specify the cache server address for booster",
+		},
 		commandCli.BoolFlag{
 			Name:  "worker_side_cache, wsc",
 			Usage: "check file cache in worker side before sending",
@@ -478,9 +483,9 @@ var (
 			Name:  "ignore_http_status",
 			Usage: "tasks will be executed even local http connection disconnected when this flag set",
 		},
-		commandCli.BoolFlag{
-			Name:  "result_cache",
-			Usage: "use result cache",
+		commandCli.IntFlag{
+			Name:  "result_cache_type",
+			Usage: "use which result cache type,0:no cache,1:local cache,2:remote cache,3:both",
 		},
 	}
 )

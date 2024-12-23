@@ -449,8 +449,8 @@ func (l *TaskLink) scan(args []string) error {
 }
 
 // SupportResultCache check whether this command support result cache
-func (l *TaskLink) SupportResultCache(command []string) bool {
-	return false
+func (l *TaskLink) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (l *TaskLink) GetResultCacheKey(command []string) string {

@@ -1707,8 +1707,8 @@ func (cc *TaskCC) analyzeCCacheNew(data string) (*types.Ccache, error) {
 }
 
 // SupportResultCache check whether this command support result cache
-func (cc *TaskCC) SupportResultCache(command []string) bool {
-	return false
+func (cc *TaskCC) SupportResultCache(command []string) int {
+	return 0
 }
 
 func (cc *TaskCC) GetResultCacheKey(command []string) string {

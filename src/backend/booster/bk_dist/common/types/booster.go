@@ -136,13 +136,14 @@ type BoosterWorks struct {
 	SearchToolchain  bool
 	IgnoreHttpStatus bool
 
-	ResultCache bool
+	ResultCacheType int
 }
 
 // BoosterTransport describe the transport data to controller
 type BoosterTransport struct {
 	ServerDomain           string
 	ServerHost             string
+	CacheServer            string
 	Timeout                time.Duration
 	HeartBeatTick          time.Duration
 	InspectTaskTick        time.Duration
