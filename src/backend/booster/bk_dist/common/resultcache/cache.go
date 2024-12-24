@@ -332,7 +332,7 @@ func (r Record) Valid() bool {
 
 func (r Record) GetResultHashString() string {
 	v, ok := r[ResultKey]
-	if !ok {
+	if ok {
 		return v
 	}
 
@@ -400,6 +400,7 @@ type RecordGroup struct {
 }
 
 func (rg *RecordGroup) PutRecord(record Record) {
+	blog.Infof("resultcache: ready put record:%v", record)
 	rg.lock.Lock()
 	defer rg.lock.Unlock()
 
@@ -416,6 +417,7 @@ func (rg *RecordGroup) PutRecord(record Record) {
 	}
 
 	rg.LastStatus = StatusModified
+	blog.Infof("resultcache: finish put record:%v", record)
 }
 
 func (rg *RecordGroup) DeleteRecord(record Record) {
@@ -523,6 +525,7 @@ func NewTable(dir string) *Table {
 // PutRecord adds a new record to the table.
 func (t *Table) PutRecord(record Record) error {
 	if !record.Valid() {
+		blog.Infof("resultcache: record:%v is invalid", record)
 		return ErrorRecordInvalid
 	}
 
@@ -551,6 +554,7 @@ func (t *Table) PutRecord(record Record) error {
 // DeleteRecord delete one record from the table.
 func (t *Table) DeleteRecord(record Record) error {
 	if !record.Valid() {
+		blog.Infof("resultcache: record:%v is invalid", record)
 		return ErrorRecordInvalid
 	}
 
@@ -675,6 +679,7 @@ func (t *Table) Ticker() {
 	for {
 		select {
 		case <-ticker.C:
+			blog.Infof("resultcache: on ticker now...")
 			t.lock.RLock()
 			for _, rg := range t.Data {
 				if rg.LastStatus == StatusModified {

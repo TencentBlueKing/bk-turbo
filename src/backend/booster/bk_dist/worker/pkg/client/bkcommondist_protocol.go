@@ -1350,6 +1350,7 @@ func EncodeSlotRspAck(consumeslotnum int32) ([]protocol.Message, error) {
 	return messages, nil
 }
 
+// 拿到的结果是压缩后，无需再压缩
 func encodeReportCacheReq(
 	attributes map[string]string,
 	results []*dcSDK.FileDesc) ([]protocol.Message, error) {
@@ -1359,11 +1360,6 @@ func encodeReportCacheReq(
 	filemessages := make([]protocol.Message, 0)
 	var filebuflen int64
 
-	checkMd5 := false
-	if env.GetEnv(env.KeyCommonCheckMd5) == "true" {
-		checkMd5 = true
-	}
-
 	// encode body and file to message
 	pbbody := protocol.PBBodyReportResultCacheReq{
 		Attributes:  make([]*protocol.PBAttributesEntry, 0),
@@ -1371,9 +1367,11 @@ func encodeReportCacheReq(
 	}
 
 	for k, v := range attributes {
+		key := k
+		value := v
 		pbbody.Attributes = append(pbbody.Attributes, &protocol.PBAttributesEntry{
-			Key:   &k,
-			Value: &v,
+			Key:   &key,
+			Value: &value,
 		})
 	}
 
@@ -1393,71 +1391,29 @@ func encodeReportCacheReq(
 		linkTarget := f.LinkTarget
 		modifytime := f.Lastmodifytime
 
-		// TODO : fresh file info here, avoid file info changed
-		if size > 0 {
-			var newlyInfo *dcFile.Info
-			localdir := filepath.Dir(fullpath)
-			// 如果本地路径和远端不一样，则不能用Lstat
-			if localdir != targetrelativepath {
-				newlyInfo = dcFile.Stat(fullpath)
-			} else {
-				newlyInfo = dcFile.Lstat(fullpath)
-			}
-			if !newlyInfo.Exist() {
-				blog.Warnf("file %f not existed when encode report cache request", fullpath)
-				continue
-			}
-
-			size = newlyInfo.Size()
-			md5 = ""
-			if f.Md5 != "" {
-				md5, _ = newlyInfo.Md5()
-			}
-			filemode = newlyInfo.Mode32()
-			modifytime = newlyInfo.ModifyTime64()
+		m := protocol.Message{
+			Messagetype:  protocol.MessageString,
+			Data:         f.Buffer,
+			Compresstype: protocol.CompressNone,
 		}
 
-		if size <= 0 {
-			pbbody.Resultfiles = append(pbbody.Resultfiles, &protocol.PBFileDesc{
-				Fullpath:           &fullpath,
-				Size:               &size,
-				Md5:                &md5,
-				Compresstype:       &comprsstype,
-				Compressedsize:     &size,
-				Targetrelativepath: &targetrelativepath,
-				Filemode:           &filemode,
-				Linktarget:         []byte(linkTarget),
-				Modifytime:         &modifytime,
-			})
-			continue
-		}
+		buflen := int64(len(f.Buffer))
 
-		m, compressedsize, err := fillOneFile(fullpath, f.Buffer, f.Compresstype, filemode, nil)
-		if err != nil {
-			blog.Warnf("failed to encode message for file with error:%v", f.FilePath, err)
-			continue
-		}
-
-		if md5 == "" && checkMd5 {
-			md5, _ = dcFile.Stat(fullpath).Md5()
-		}
-
+		filebase := filepath.Base(fullpath)
 		pbbody.Resultfiles = append(pbbody.Resultfiles, &protocol.PBFileDesc{
-			Fullpath:           &fullpath,
+			Fullpath:           &filebase,
 			Size:               &size,
 			Md5:                &md5,
 			Compresstype:       &comprsstype,
-			Compressedsize:     &compressedsize,
+			Compressedsize:     &buflen,
 			Targetrelativepath: &targetrelativepath,
 			Filemode:           &filemode,
 			Linktarget:         []byte(linkTarget),
 			Modifytime:         &modifytime,
 		})
 
-		// blog.Infof("encode send files add file(%s) modify time(%d)", fullpath, modifytime)
-
 		filemessages = append(filemessages, m)
-		filebuflen += compressedsize
+		filebuflen += buflen
 	}
 
 	bodydata, err := proto.Marshal(&pbbody)
@@ -1474,7 +1430,7 @@ func encodeReportCacheReq(
 	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
 
 	// encode head
-	cmdtype := protocol.PBCmdType_SENDFILEREQ
+	cmdtype := protocol.PBCmdType_REPORTRESULTCACHEREQ
 	pbhead := protocol.PBHead{
 		Version: &bkdistcmdversion,
 		Magic:   &bkdistcmdmagic,

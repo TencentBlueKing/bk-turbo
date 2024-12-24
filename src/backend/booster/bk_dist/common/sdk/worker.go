@@ -63,8 +63,7 @@ type RemoteWorkerHandler interface {
 	ExecuteReportResultCache(
 		server *dcProtocol.Host,
 		attributes map[string]string,
-		results []*FileDesc,
-		mgr LockMgr) (*BKReportResultCacheResult, error)
+		results []*FileDesc) (*BKReportResultCacheResult, error)
 
 	ExecuteQueryResultCacheIndex(
 		server *dcProtocol.Host,

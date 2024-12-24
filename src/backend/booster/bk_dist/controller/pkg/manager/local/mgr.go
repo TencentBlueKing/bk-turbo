@@ -627,9 +627,7 @@ func (m *Mgr) reportRemoteResultCache(
 		result, err := handler.ExecuteReportResultCache(
 			m.resultdata.cacheServer,
 			record,
-			results,
-			m.work.LockMgr(),
-		)
+			results)
 
 		if result != nil {
 			blog.Infof("local: report result files to remote with retcode:%d,out message:%s,error message:%s",

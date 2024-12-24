@@ -16,8 +16,10 @@ import (
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -53,11 +55,11 @@ func (e *executor) initResultCacheInfo() {
 }
 
 func (e *executor) localCacheEnabled() bool {
-	return e.cacheType&resultcache.CacheTypeLocal == 1
+	return e.cacheType&resultcache.CacheTypeLocal != 0
 }
 
 func (e *executor) remoteCacheEnabled() bool {
-	return e.cacheType&resultcache.CacheTypeRemote == 1
+	return e.cacheType&resultcache.CacheTypeRemote != 0
 }
 
 func (e *executor) cacheEnabled() bool {
@@ -175,6 +177,7 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 }
 
 func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
+	blog.Debugf("executor: ready get remote result files now")
 	rs, err := e.mgr.getRemoteResultCacheFile(e.preprocessResultKey)
 	if err != nil {
 		return nil
@@ -224,13 +227,32 @@ func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTask
 	}
 
 	for k, v := range resultmap {
+		// uncompress
+		data := rs.Resultfiles[v].Buffer
+		if rs.Resultfiles[v].Compresstype == protocol.CompressLZ4 {
+			dst := make([]byte, rs.Resultfiles[v].FileSize)
+			outdata, err := util.Lz4Uncompress(data, dst)
+			if err != nil {
+				blog.Errorf("executor: decompress with error: [%v], data len:[%d], "+
+					"buffer len:[%d], filesize:[%d]",
+					err, len(data), len(dst),
+					rs.Resultfiles[v].FileSize)
+				return nil
+			}
+			blog.Infof("executor: uncompressed %s from %d to %d, "+
+				"expected from %d to %d",
+				k, len(data), len(outdata),
+				rs.Resultfiles[v].CompressedSize, rs.Resultfiles[v].FileSize)
+			data = outdata
+		}
+
 		f, err := os.Create(k)
 		if err != nil {
 			blog.Errorf("executor: create file %s with error: %v", k, err)
 			return nil
 		}
 
-		_, err = f.Write(rs.Resultfiles[v].Buffer)
+		_, err = f.Write(data)
 		if err != nil {
 			f.Close()
 			blog.Errorf("executor: save file %s with error: %v", k, err)
@@ -342,6 +364,8 @@ func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult) error {
 }
 
 func (e *executor) putRemoteResult(r *dcSDK.BKDistResult, record resultcache.Record) error {
+	blog.Debugf("executor: ready put record:%v to remote now", record)
+
 	if len(r.Results) != 1 {
 		return nil
 	}
@@ -352,7 +376,8 @@ func (e *executor) putRemoteResult(r *dcSDK.BKDistResult, record resultcache.Rec
 		resultlen := len(r.Results[0].ResultFiles)
 		rs := make([]*dcSDK.FileDesc, 0, resultlen)
 		for _, v := range r.Results[0].ResultFiles {
-			rs = append(rs, &v)
+			f := v
+			rs = append(rs, &f)
 		}
 
 		_, err = e.mgr.reportRemoteResultCache(record, rs)

@@ -470,6 +470,7 @@ func (s *sdk) register(config dcSDK.ControllerRegisterConfig) (dcSDK.ControllerW
 		Apply:            config.Apply,
 	}, &data)
 
+	blog.Infof("sdk: ready register with data:[%s]", string(data))
 	tmp, _, err := s.request("POST", registerURI, data, config.BatchMode)
 	if err != nil {
 		retry := 0

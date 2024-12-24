@@ -568,7 +568,7 @@ func getServerFromConfig(c *commandCli.Context) (string, error) {
 
 func getCacheServerHost(c *commandCli.Context) (string, error) {
 	if c.IsSet(FlagCacheServer) {
-		s := c.String(FlagServer)
+		s := c.String(FlagCacheServer)
 		blog.Infof("booster-command: use cache server from command line --cache_server specified: %s", s)
 		return s, nil
 	}

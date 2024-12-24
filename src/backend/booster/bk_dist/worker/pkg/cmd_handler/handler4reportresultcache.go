@@ -75,6 +75,7 @@ func (h *Handle4ReportResultCache) Handle(
 	}
 
 	// save report info and *protocol.PBResult
+	blog.Infof("got %d Attributes %d files", len(req.Attributes), len(req.Resultfiles))
 	if len(req.Attributes) > 0 {
 		record := resultcache.Record{}
 		for _, v := range req.Attributes {
@@ -94,7 +95,7 @@ func (h *Handle4ReportResultCache) Handle(
 						HashStr:         "",
 					})
 				}
-				resultcache.GetInstance("").PutResult(hashstr, rs)
+				resultcache.GetInstance(config.GlobalResultCacheDir).PutResult(hashstr, rs)
 			}
 		}
 	}

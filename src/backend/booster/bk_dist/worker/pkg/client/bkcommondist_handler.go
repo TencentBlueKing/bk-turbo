@@ -742,90 +742,24 @@ func (r *CommonRemoteHandler) ExecuteQuerySlot(
 	return client.conn, nil
 }
 
+// 这儿是将内存中的数据发送到cache server，无需加锁
 func (r *CommonRemoteHandler) ExecuteReportResultCache(
 	server *dcProtocol.Host,
 	attributes map[string]string,
-	results []*dcSDK.FileDesc,
-	mgr dcSDK.LockMgr) (*dcSDK.BKReportResultCacheResult, error) {
+	results []*dcSDK.FileDesc) (*dcSDK.BKReportResultCacheResult, error) {
 
 	// record the exit status.
 	defer func() {
 		r.updateJobStatsFunc()
 	}()
-	blog.Infof("remotehandle rrc: start report %d result files to server %s", len(results), server)
-
-	// 加内存锁
-	var totalsize int64
-	var locksize int64
-	memorylocked := false
-	t1 := time.Now()
-	t2 := t1
-	tinit := time.Now()
+	blog.Infof("remotehandle rrc: start report record:%v and %d result files to server %s",
+		attributes, len(results), server)
 
 	var err error
-	var dlocallock, dencodereq, dmemorylock time.Duration
-
-	// 加本地资源锁
-	locallocked := false
-	if mgr != nil && len(results) > 0 {
-		if mgr.LockSlots(dcSDK.JobUsageDefault, 1) {
-			locallocked = true
-			blog.Debugf("remotehandle rrc: succeed to get one local lock")
-		}
-	}
-
-	t2 = time.Now()
-	dlocallock = t2.Sub(t1)
-	t1 = t2
-
-	if r.slot != nil && len(results) > 0 {
-		for _, v := range results {
-			totalsize += v.FileSize
-		}
-		// 考虑到文件需要读到内存，然后压缩，以及后续的pb协议打包，需要的内存大小至少是两倍
-		locksize = totalsize * 3
-		if locksize > 0 {
-			if r.slot.Lock(locksize) {
-				memorylocked = true
-				blog.Debugf("remotehandle rrc: succeed to get one memory lock")
-			}
-		}
-	}
-
-	t2 = time.Now()
-	dmemorylock = t2.Sub(t1)
-	t1 = t2
 
 	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonStartTime)
 	messages, err := encodeReportCacheReq(attributes, results)
 	dcSDK.StatsTimeNow(&r.recordStats.ReportCachePackCommonEndTime)
-
-	t2 = time.Now()
-	dencodereq = t2.Sub(t1)
-	t1 = t2
-
-	if locallocked {
-		mgr.UnlockSlots(dcSDK.JobUsageDefault, 1)
-		blog.Debugf("remotehandle rrc: succeed to release one local lock")
-	}
-
-	if err != nil {
-		blog.Warnf("remotehandle rrc: error: %v", err)
-
-		if memorylocked {
-			r.slot.Unlock(locksize)
-			blog.Debugf("remotehandle rrc: succeed to release one memory lock")
-		}
-
-		return nil, err
-	}
-
-	debug.FreeOSMemory() // free memory anyway
-
-	// blog.Debugf("remotehandle rrc: success pack-up to server %s", server)
-
-	blog.Debugf("remotehandle rrc: finished encode report result cache request with %d files size:%d to server %s",
-		len(results), totalsize, server.Server)
 
 	// send request
 	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonStartTime)
@@ -838,11 +772,6 @@ func (r *CommonRemoteHandler) ExecuteReportResultCache(
 	if err := client.Connect(getRealServer(server.Server)); err != nil {
 		blog.Warnf("remotehandle rrc: error: %v", err)
 
-		if memorylocked {
-			r.slot.Unlock(locksize)
-			blog.Debugf("remotehandle rrc: succeed to release one memory lock")
-		}
-
 		return nil, err
 	}
 	d := time.Now().Sub(t)
@@ -853,40 +782,18 @@ func (r *CommonRemoteHandler) ExecuteReportResultCache(
 		_ = client.Close()
 	}()
 
-	t2 = time.Now()
-	dconnect := t2.Sub(t1)
-	t1 = t2
-
 	blog.Debugf("remotehandle rrc: success connect to server %s", server)
 
 	err = SendMessages(client, messages)
-	if memorylocked {
-		r.slot.Unlock(locksize)
-		blog.Debugf("remotehandle rrc: succeed to release one memory lock")
-	}
-
 	if err != nil {
 		blog.Warnf("remotehandle rrc: error: %v", err)
 		return nil, err
 	}
 
-	t2 = time.Now()
-	dsend := t2.Sub(t1)
-	t1 = t2
-
-	blog.Debugf("remotehandle rrc: report result cache, total %d files with size:%d to server %s",
-		len(results), totalsize, server.Server)
-
-	debug.FreeOSMemory() // free memory anyway
-
 	blog.Debugf("remotehandle rrc: success sent to server %s", server)
 	// receive result
 	data, err := receiveReportCacheRsp(client)
 	dcSDK.StatsTimeNow(&r.recordStats.ReportCacheSendCommonEndTime)
-
-	t2 = time.Now()
-	drecv := t2.Sub(t1)
-	t1 = t2
 
 	if err != nil {
 		blog.Warnf("remotehandle rrc: error: %v", err)
@@ -898,23 +805,6 @@ func (r *CommonRemoteHandler) ExecuteReportResultCache(
 		blog.Warnf("remotehandle rrc: error: %v", err)
 		return nil, err
 	}
-
-	t2 = time.Now()
-	ddecode := t2.Sub(t1)
-	t1 = t2
-
-	dtotal := t2.Sub(tinit)
-
-	blog.Infof("remotehandle rrc: report result cache stat, total %d files size:%d server:%s "+
-		"memory lock : %f , local lock : %f , "+
-		"encode req : %f , connect : %f , "+
-		"send : %f , receive : %f , "+
-		"decode response : %f , total : %f",
-		len(results), totalsize, server.Server,
-		dmemorylock.Seconds(), dlocallock.Seconds(),
-		dencodereq.Seconds(), dconnect.Seconds(),
-		dsend.Seconds(), drecv.Seconds(),
-		ddecode.Seconds(), dtotal.Seconds())
 
 	blog.Debugf("remotehandle rrc: report result cache done *")
 
