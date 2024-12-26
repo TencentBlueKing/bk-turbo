@@ -586,8 +586,12 @@ func (t *Table) GetRecordGroup(key string) ([]byte, error) {
 	return rg.ToBytes()
 }
 
+const (
+	indexSuffix = ".txt"
+)
+
 func (t *Table) Save(rg *RecordGroup) error {
-	filename := fmt.Sprintf("%s.txt", rg.Key)
+	filename := fmt.Sprintf("%s%s", rg.Key, indexSuffix)
 	fullpath := filepath.Join(t.IndexDir, filename)
 
 	data, err := rg.ToBytes()
@@ -641,6 +645,12 @@ func (t *Table) Load() error {
 	f.Close()
 
 	for _, fi := range fis {
+		suffix := filepath.Ext(fi.Name())
+		if suffix != indexSuffix {
+			blog.Infof("resultcache: ignore file:%s", fi.Name())
+			continue
+		}
+
 		fullpath := filepath.Join(t.IndexDir, fi.Name())
 		file, err := os.Open(fullpath)
 		if err != nil {

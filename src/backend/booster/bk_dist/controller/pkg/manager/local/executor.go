@@ -116,6 +116,7 @@ type executor struct {
 
 	// for result cache
 	cacheType           int
+	remoteTriggleSecs   int
 	cacheGroupKey       string
 	commandKey          string
 	preprocessResultKey string

@@ -1377,9 +1377,10 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 		return "", nil, err
 	}
 	blog.Infof("cl: success to execute pre-process and get %s: %s", outputFile, strings.Join(newArgs, " "))
-	if cl.showinclude || cl.forcedepend {
-		cl.preprocessedErrorBuf = errBuf.String()
-	}
+
+	// if cl.showinclude || cl.forcedepend {
+	cl.preprocessedErrorBuf = errBuf.String()
+	// }
 
 	if !savetomemroy {
 		return outputFile, nil, nil
@@ -1548,7 +1549,7 @@ func (cl *TaskCL) hasResultIndex() bool {
 
 func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	if !dcFile.Stat(cl.preprocessedFile).Exist() {
-		blog.Warnf("cl: cl.preprocessedFile %s not existed when get result cache key", cl.sourcedependfile)
+		blog.Warnf("cl: cl.preprocessedFile %s not existed when get result cache key", cl.preprocessedFile)
 		return ""
 	}
 

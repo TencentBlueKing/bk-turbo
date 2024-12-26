@@ -272,6 +272,10 @@ func (m *Mgr) ExecuteTask(
 	// 如果cache查询到了，则按预期的结果列表保存
 	cacheresult := e.getCacheResult(c)
 	if cacheresult != nil {
+		blog.Infof("local: success to execute task by query cache for work(%s)"+
+			" from pid(%d) in env(%v) dir(%s)",
+			m.work.ID(),
+			req.Pid, req.Environments, req.Dir)
 		return cacheresult, nil
 	}
 

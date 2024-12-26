@@ -368,6 +368,7 @@ func (b *Booster) getWorkersEnv() map[string]string {
 	}
 
 	requiredEnv[env.KeyExecutorResultCacheType] = strconv.Itoa(b.config.Works.ResultCacheType)
+	requiredEnv[env.KeyExecutorResultCacheTriggleSecs] = strconv.Itoa(b.config.Works.ResultCacheTriggleSecs)
 
 	resultEnv := make(map[string]string, 10)
 	for k, v := range requiredEnv {

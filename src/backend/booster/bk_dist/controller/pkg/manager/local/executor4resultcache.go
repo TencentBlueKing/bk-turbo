@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	LongExecutionSeconds = 300
+	DefaultTriggleSeconds = 300
 )
 
 func (e *executor) initResultCacheInfo() {
@@ -34,6 +34,14 @@ func (e *executor) initResultCacheInfo() {
 	e.cacheGroupKey = ""
 	if str := e.sandbox.Env.GetEnv(env.ProjectID); str != "" {
 		e.cacheGroupKey = str
+	}
+
+	e.remoteTriggleSecs = DefaultTriggleSeconds
+	if str := e.sandbox.Env.GetEnv(env.KeyExecutorResultCacheTriggleSecs); str != "" {
+		intv, err := strconv.Atoi(str)
+		if err == nil && intv >= 0 {
+			e.remoteTriggleSecs = intv
+		}
 	}
 
 	e.commandKey = strings.Join(e.req.Commands, " ")
@@ -49,9 +57,11 @@ func (e *executor) initResultCacheInfo() {
 	}
 
 	blog.Infof("executor: got cache type:%d,cache group key:%s,command:[%s],"+
-		"haslocalindex:%v,hasremoteindex:%v",
+		"haslocalindex:%v,hasremoteindex:%v"+
+		"remoteTriggleSecs:%d",
 		e.cacheType, e.cacheGroupKey, e.commandKey,
-		e.hasLocalIndex, e.hasRemoteIndex)
+		e.hasLocalIndex, e.hasRemoteIndex,
+		e.remoteTriggleSecs)
 }
 
 func (e *executor) localCacheEnabled() bool {
@@ -292,7 +302,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			blog.Infof("executor: remote executed %d seconds for this command", e.remoteExecuteSecs)
 		}
 		if e.remoteExecuteSecs > 0 {
-			remoteTooLong = e.remoteExecuteSecs >= LongExecutionSeconds
+			remoteTooLong = e.remoteExecuteSecs >= e.remoteTriggleSecs
 		}
 
 		record := resultcache.Record{}
