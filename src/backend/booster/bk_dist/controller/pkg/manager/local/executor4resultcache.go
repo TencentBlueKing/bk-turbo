@@ -156,20 +156,24 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 	}
 
 	for k, v := range resultmap {
-		f, err := os.Create(k)
+		fp := k
+		if !filepath.IsAbs(fp) {
+			fp = filepath.Join(e.req.Dir, fp)
+		}
+		f, err := os.Create(fp)
 		if err != nil {
-			blog.Errorf("executor: create file %s with error: %v", k, err)
+			blog.Errorf("executor: create file %s with error: %v", fp, err)
 			return nil
 		}
 
 		_, err = f.Write(rs[v].CompressDataBuf)
 		if err != nil {
 			f.Close()
-			blog.Errorf("executor: save file %s with error: %v", k, err)
+			blog.Errorf("executor: save file %s with error: %v", fp, err)
 			return nil
 		}
 		f.Close()
-		blog.Infof("executor: got cache result file %s with key:%s", k, e.preprocessResultKey)
+		blog.Infof("executor: got cache result file %s with key:%s", fp, e.preprocessResultKey)
 	}
 
 	e.stats.PostWorkSuccess = true
@@ -256,20 +260,24 @@ func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTask
 			data = outdata
 		}
 
-		f, err := os.Create(k)
+		fp := k
+		if !filepath.IsAbs(fp) {
+			fp = filepath.Join(e.req.Dir, fp)
+		}
+		f, err := os.Create(fp)
 		if err != nil {
-			blog.Errorf("executor: create file %s with error: %v", k, err)
+			blog.Errorf("executor: create file %s with error: %v", fp, err)
 			return nil
 		}
 
 		_, err = f.Write(data)
 		if err != nil {
 			f.Close()
-			blog.Errorf("executor: save file %s with error: %v", k, err)
+			blog.Errorf("executor: save file %s with error: %v", fp, err)
 			return nil
 		}
 		f.Close()
-		blog.Infof("executor: got cache result file %s with key:%s", k, e.preprocessResultKey)
+		blog.Infof("executor: got cache result file %s with key:%s", fp, e.preprocessResultKey)
 	}
 
 	e.stats.PostWorkSuccess = true
