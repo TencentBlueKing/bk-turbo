@@ -1248,7 +1248,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 	cl.serverSideArgs = serverSideArgs
 
 	if cl.SupportResultCache(args) != resultcache.CacheTypeNone {
-		cl.resultCacheArgs = make([]string, 0, len(cl.serverSideArgs))
+		cl.resultCacheArgs = make([]string, len(cl.serverSideArgs))
 		copy(cl.resultCacheArgs, cl.serverSideArgs)
 		for index := range cl.resultCacheArgs {
 			if cl.resultCacheArgs[index] == cl.preprocessedFile {

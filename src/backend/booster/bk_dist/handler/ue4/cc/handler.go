@@ -1418,7 +1418,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.serverSideArgs = serverSideArgs
 
 	if cc.SupportResultCache(args) != resultcache.CacheTypeNone {
-		cc.resultCacheArgs = make([]string, 0, len(cc.serverSideArgs))
+		cc.resultCacheArgs = make([]string, len(cc.serverSideArgs))
 		copy(cc.resultCacheArgs, cc.serverSideArgs)
 		for index := range cc.resultCacheArgs {
 			if cc.resultCacheArgs[index] == cc.preprocessedFile {
