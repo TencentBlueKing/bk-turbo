@@ -466,7 +466,7 @@ func (rg *RecordGroup) HitIndex(record Record) (bool, error) {
 
 	for _, v := range rg.Group {
 		if record.EqualByKey(*v, CommandKey) {
-			if record.GreaterIntByKey(*v, RemoteExecuteTimeKey) {
+			if v.GreaterIntByKey(record, RemoteExecuteTimeKey) {
 				return true, nil
 			}
 			break
