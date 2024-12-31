@@ -47,20 +47,21 @@ func (e *executor) initResultCacheInfo() {
 	e.commandKey = strings.Join(e.req.Commands, " ")
 
 	record := resultcache.Record{
-		resultcache.CommandKey: e.commandKey,
+		resultcache.CommandKey:           e.commandKey,
+		resultcache.RemoteExecuteTimeKey: strconv.Itoa(e.remoteTriggleSecs),
 	}
 	if e.localCacheEnabled() {
-		e.hasLocalIndex, _ = e.mgr.hasLocalIndex(record)
+		e.hitLocalIndex, _ = e.mgr.hitLocalIndex(record)
 	}
 	if e.remoteCacheEnabled() {
-		e.hasRemoteIndex, _ = e.mgr.hasRemoteIndex(record)
+		e.hitRemoteIndex, _ = e.mgr.hitRemoteIndex(record)
 	}
 
 	blog.Infof("executor: got cache type:%d,cache group key:%s,command:[%s],"+
-		"haslocalindex:%v,hasremoteindex:%v"+
+		"hitLocalIndex:%v,hitRemoteIndex:%v,"+
 		"remoteTriggleSecs:%d",
 		e.cacheType, e.cacheGroupKey, e.commandKey,
-		e.hasLocalIndex, e.hasRemoteIndex,
+		e.hitLocalIndex, e.hitRemoteIndex,
 		e.remoteTriggleSecs)
 }
 
@@ -316,7 +317,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 		record := resultcache.Record{}
 
 		// local cache
-		if e.localCacheEnabled() && (e.hasLocalIndex || remoteTooLong) {
+		if e.localCacheEnabled() && (e.hitLocalIndex || remoteTooLong) {
 			// report result files
 			if e.preprocessResultKey != "" {
 				err := e.putLocalResultFiles(r)
@@ -339,7 +340,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 		}
 
 		// remote cache
-		if e.remoteCacheEnabled() && (e.hasRemoteIndex || remoteTooLong) {
+		if e.remoteCacheEnabled() && (e.hitRemoteIndex || remoteTooLong) {
 			if len(record) == 0 {
 				record[resultcache.GroupKey] = e.cacheGroupKey
 				record[resultcache.CommandKey] = e.commandKey

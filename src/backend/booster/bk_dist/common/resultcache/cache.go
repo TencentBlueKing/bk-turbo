@@ -339,42 +339,20 @@ func (r Record) GetResultHashString() string {
 	return ""
 }
 
-func (r Record) CommandKeyEqual(another Record) bool {
+func (r Record) EqualByKey(another Record, key string) bool {
 	if another == nil {
 		return false
 	}
 
 	myvalue := ""
-	if v, ok := r[CommandKey]; ok {
+	if v, ok := r[key]; ok {
 		myvalue = v
 	} else {
 		return false
 	}
 
 	anothervalue := ""
-	if v, ok := another[CommandKey]; ok {
-		anothervalue = v
-	} else {
-		return false
-	}
-
-	return myvalue == anothervalue
-}
-
-func (r Record) ResultKeyEqual(another Record) bool {
-	if another == nil {
-		return false
-	}
-
-	myvalue := ""
-	if v, ok := r[ResultKey]; ok {
-		myvalue = v
-	} else {
-		return false
-	}
-
-	anothervalue := ""
-	if v, ok := another[ResultKey]; ok {
+	if v, ok := another[key]; ok {
 		anothervalue = v
 	} else {
 		return false
@@ -407,7 +385,7 @@ func (rg *RecordGroup) PutRecord(record Record) {
 	// 要不要考虑去重?
 	existed := false
 	for i, v := range rg.Group {
-		if v.CommandKeyEqual(record) {
+		if v.EqualByKey(record, CommandKey) {
 			existed = true
 			rg.Group[i] = &record
 		}
@@ -427,7 +405,7 @@ func (rg *RecordGroup) DeleteRecord(record Record) {
 	deleted := false
 	// 先只考虑删除匹配上的第一个，后面看看要不要全部删除
 	for index, v := range rg.Group {
-		if record.CommandKeyEqual(*v) {
+		if record.EqualByKey(*v, CommandKey) {
 			rg.Group = append(rg.Group[:index], rg.Group[index+1:]...)
 			deleted = true
 			break
@@ -453,25 +431,28 @@ func (rg *RecordGroup) ToBytes() ([]byte, error) {
 	return jsonData, nil
 }
 
-func (rg *RecordGroup) HasIndex(record Record) (bool, error) {
+func (rg *RecordGroup) HitIndex(record Record) (bool, error) {
 	rg.lock.RLock()
 	defer rg.lock.RUnlock()
 
 	for _, v := range rg.Group {
-		if record.CommandKeyEqual(*v) {
-			return true, nil
+		if record.EqualByKey(*v, CommandKey) {
+			if record.EqualByKey(*v, RemoteExecuteTimeKey) {
+				return true, nil
+			}
+			break
 		}
 	}
 
 	return false, nil
 }
 
-func (rg *RecordGroup) HasResult(record Record) (bool, error) {
+func (rg *RecordGroup) HitResult(record Record) (bool, error) {
 	rg.lock.RLock()
 	defer rg.lock.RUnlock()
 
 	for _, v := range rg.Group {
-		if record.ResultKeyEqual(*v) {
+		if record.EqualByKey(*v, ResultKey) {
 			return true, nil
 		}
 	}

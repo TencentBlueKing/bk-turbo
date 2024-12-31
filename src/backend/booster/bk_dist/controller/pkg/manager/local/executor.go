@@ -92,7 +92,7 @@ func newExecutor(mgr *Mgr,
 	// TODO : 通过修改e.sandbox来影响e.handler，因为e.sandbox是个指针
 	//        这个方法目前是可用的，因为handler直接保存了该指针
 	e.initResultCacheInfo()
-	if e.hasLocalIndex || e.hasRemoteIndex {
+	if e.hitLocalIndex || e.hitRemoteIndex {
 		e.sandbox.Env.AppendEnv(env.KeyExecutorHasResultIndex, "true")
 	}
 
@@ -121,10 +121,10 @@ type executor struct {
 	commandKey          string
 	preprocessResultKey string
 	remoteExecuteSecs   int
-	hasLocalIndex       bool
-	hasLocalResult      bool
-	hasRemoteIndex      bool
-	hasRemoteResult     bool
+	hitLocalIndex       bool
+	// hasLocalResult      bool
+	hitRemoteIndex bool
+	// hasRemoteResult     bool
 }
 
 // Stdout return the execution stdout

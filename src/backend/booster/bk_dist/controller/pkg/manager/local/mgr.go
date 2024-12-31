@@ -558,7 +558,7 @@ func (m *Mgr) getRemoteResultCacheIndex() {
 	}
 }
 
-func (m *Mgr) hasLocalIndex(record resultcache.Record) (bool, error) {
+func (m *Mgr) hitLocalIndex(record resultcache.Record) (bool, error) {
 	m.resultdata.lock.RLock()
 	defer m.resultdata.lock.RUnlock()
 
@@ -566,10 +566,10 @@ func (m *Mgr) hasLocalIndex(record resultcache.Record) (bool, error) {
 		return false, nil
 	}
 
-	return m.resultdata.localGroupRecord.HasIndex(record)
+	return m.resultdata.localGroupRecord.HitIndex(record)
 }
 
-func (m *Mgr) hasRemoteIndex(record resultcache.Record) (bool, error) {
+func (m *Mgr) hitRemoteIndex(record resultcache.Record) (bool, error) {
 	m.resultdata.lock.RLock()
 	defer m.resultdata.lock.RUnlock()
 
@@ -577,10 +577,10 @@ func (m *Mgr) hasRemoteIndex(record resultcache.Record) (bool, error) {
 		return false, nil
 	}
 
-	return m.resultdata.remoteGroupRecord.HasIndex(record)
+	return m.resultdata.remoteGroupRecord.HitIndex(record)
 }
 
-func (m *Mgr) hasLocalResult(record resultcache.Record) (bool, error) {
+func (m *Mgr) hitLocalResult(record resultcache.Record) (bool, error) {
 	m.resultdata.lock.RLock()
 	defer m.resultdata.lock.RUnlock()
 
@@ -588,10 +588,10 @@ func (m *Mgr) hasLocalResult(record resultcache.Record) (bool, error) {
 		return false, nil
 	}
 
-	return m.resultdata.localGroupRecord.HasResult(record)
+	return m.resultdata.localGroupRecord.HitResult(record)
 }
 
-func (m *Mgr) hasRemoteResult(record resultcache.Record) (bool, error) {
+func (m *Mgr) hitRemoteResult(record resultcache.Record) (bool, error) {
 	m.resultdata.lock.RLock()
 	defer m.resultdata.lock.RUnlock()
 
@@ -599,7 +599,7 @@ func (m *Mgr) hasRemoteResult(record resultcache.Record) (bool, error) {
 		return false, nil
 	}
 
-	return m.resultdata.remoteGroupRecord.HasResult(record)
+	return m.resultdata.remoteGroupRecord.HitResult(record)
 }
 
 func (m *Mgr) getRemoteResultCacheFile(resultkey string) (*dcSDK.BKQueryResultCacheFileResult, error) {
