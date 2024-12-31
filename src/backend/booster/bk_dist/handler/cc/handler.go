@@ -26,6 +26,7 @@ import (
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
@@ -36,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
+	"github.com/cespare/xxhash"
 )
 
 const (
@@ -66,6 +68,7 @@ type TaskCC struct {
 	rewriteCrossArgs []string
 	preProcessArgs   []string
 	serverSideArgs   []string
+	resultCacheArgs  []string
 	pumpArgs         []string
 
 	// file names
@@ -104,7 +107,8 @@ type TaskCC struct {
 	pchFileDesc *dcSDK.FileDesc
 
 	// for /showIncludes
-	showinclude bool
+	showinclude          bool
+	preprocessedErrorBuf string
 
 	ForceLocalResponseFileKeys []string
 	ForceLocalCppFileKeys      []string
@@ -121,6 +125,11 @@ func NewTaskCC() (handler.Handler, error) {
 		tmpFileList:           make([]string, 0, 10),
 		ForceLocalCppFileKeys: key,
 	}, nil
+}
+
+// GetPreprocessedBuf return preprocessedErrorBuf
+func (cc *TaskCC) GetPreprocessedBuf() string {
+	return cc.preprocessedErrorBuf
 }
 
 // InitSandbox set sandbox to task-cc
@@ -814,23 +823,25 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	cc.originArgs = command
 
-	if !cc.pumpremotefailed &&
-		dcPump.IsPumpCache(cc.sandbox.Env) &&
-		cc.workerSupportAbsPath() {
-		req, err, notifyerr := cc.trypumpwithcache(command)
-		if err != nil {
-			if notifyerr == ErrorNotSupportRemote {
-				blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
-				return nil, dcType.BKDistCommonError{
-					Code:  dcType.UnknowCode,
-					Error: err,
+	if !cc.hasResultIndex() {
+		if !cc.pumpremotefailed &&
+			dcPump.IsPumpCache(cc.sandbox.Env) &&
+			cc.workerSupportAbsPath() {
+			req, err, notifyerr := cc.trypumpwithcache(command)
+			if err != nil {
+				if notifyerr == ErrorNotSupportRemote {
+					blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
+					return nil, dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
+			} else {
+				// for debug
+				blog.Debugf("cc: after try pump, req: %+v", *req)
+				cc.pumpremote = true
+				return req, dcType.ErrorNone
 			}
-		} else {
-			// for debug
-			blog.Debugf("cc: after try pump, req: %+v", *req)
-			cc.pumpremote = true
-			return req, dcType.ErrorNone
 		}
 	}
 
@@ -1315,6 +1326,17 @@ func (cc *TaskCC) preBuild(args []string) error {
 
 		cc.serverSideArgs = serverSideArgs
 
+		if cc.SupportResultCache(args) != resultcache.CacheTypeNone {
+			cc.resultCacheArgs = make([]string, len(cc.serverSideArgs))
+			copy(cc.resultCacheArgs, cc.serverSideArgs)
+			for index := range cc.resultCacheArgs {
+				if cc.resultCacheArgs[index] == cc.preprocessedFile {
+					cc.resultCacheArgs[index] = cc.inputFile
+					break
+				}
+			}
+		}
+
 		if cc.isPumpCheck() && pumpErr == nil {
 			found := false
 
@@ -1531,6 +1553,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	}
 	blog.Infof("cc: [%s] success to execute pre-process and get %s: %s",
 		cc.tag, outputFile, strings.Join(newArgs2, " "))
+	cc.preprocessedErrorBuf = errBuf.String()
 
 	return outputFile, parseInspectHeader(errBuf.String()), nil
 }
@@ -1708,9 +1731,61 @@ func (cc *TaskCC) analyzeCCacheNew(data string) (*types.Ccache, error) {
 
 // SupportResultCache check whether this command support result cache
 func (cc *TaskCC) SupportResultCache(command []string) int {
+	if cc.sandbox != nil {
+		if str := cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorResultCacheType); str != "" {
+			i, err := strconv.Atoi(str)
+			if err == nil {
+				return i
+			}
+		}
+	}
+
 	return 0
 }
 
+// hasResultIndex check whether the env of hasresultindex set
+func (cc *TaskCC) hasResultIndex() bool {
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorHasResultIndex) != ""
+}
+
 func (cc *TaskCC) GetResultCacheKey(command []string) string {
-	return ""
+	if !dcFile.Stat(cc.preprocessedFile).Exist() {
+		blog.Warnf("cc: cc.preprocessedFile %s not existed when get result cache key", cc.preprocessedFile)
+		return ""
+	}
+
+	// ext from cc.preprocessedFile
+	ext := filepath.Ext(cc.preprocessedFile)
+
+	// cc_mtime cc_name from compile tool
+	cchash, err := dcUtil.HashFile(command[0])
+	if err != nil {
+		blog.Warnf("cc: hash file %s with error: %v", err)
+		return ""
+	}
+
+	// LANG and LC_ALL  from env , ignore in windows now
+	// cwd  from work dir , ignore now
+
+	// arg from cc.resultCacheArgs
+	argstring := strings.Join(cc.resultCacheArgs, " ")
+	arghash := xxhash.Sum64([]byte(argstring))
+
+	// cpp content from cl.preprocessedFile
+	cpphash, err := dcUtil.HashFile(cc.preprocessedFile)
+	if err != nil {
+		blog.Warnf("cc: hash file %s with error: %v", err)
+		return ""
+	}
+
+	// cppstderr from cc.preprocessedErrorBuf
+	cppstderrhash := xxhash.Sum64([]byte(cc.preprocessedErrorBuf))
+
+	fullstring := fmt.Sprintf("%s_%x_%x_%x_%x", ext, cchash, arghash, cpphash, cppstderrhash)
+	fullstringhash := xxhash.Sum64([]byte(fullstring))
+
+	blog.Infof("cc: got hash key %x for string[%s] cmd:[%s]",
+		fullstringhash, fullstring, strings.Join(command, " "))
+
+	return fmt.Sprintf("%x", fullstringhash)
 }
