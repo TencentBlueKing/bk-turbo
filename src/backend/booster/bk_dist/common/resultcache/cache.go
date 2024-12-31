@@ -361,6 +361,35 @@ func (r Record) EqualByKey(another Record, key string) bool {
 	return myvalue == anothervalue
 }
 
+func (r Record) GreaterIntByKey(another Record, key string) bool {
+	if another == nil {
+		return false
+	}
+
+	var err error
+	myvalue := 0
+	if v, ok := r[key]; ok {
+		myvalue, err = strconv.Atoi(v)
+		if err != nil {
+			return false
+		}
+	} else {
+		return false
+	}
+
+	anothervalue := 0
+	if v, ok := another[key]; ok {
+		anothervalue, err = strconv.Atoi(v)
+		if err != nil {
+			return false
+		}
+	} else {
+		return false
+	}
+
+	return myvalue > anothervalue
+}
+
 func (r *Record) ToString() string {
 	jsonStr, err := json.Marshal(*r)
 	if err == nil {
@@ -437,7 +466,7 @@ func (rg *RecordGroup) HitIndex(record Record) (bool, error) {
 
 	for _, v := range rg.Group {
 		if record.EqualByKey(*v, CommandKey) {
-			if record.EqualByKey(*v, RemoteExecuteTimeKey) {
+			if record.GreaterIntByKey(*v, RemoteExecuteTimeKey) {
 				return true, nil
 			}
 			break
