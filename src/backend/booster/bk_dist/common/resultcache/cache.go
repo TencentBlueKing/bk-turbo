@@ -228,7 +228,7 @@ func (rc *ResultCache) getDir(groupkey, resultkey string) (string, error) {
 	if len(resultkey) < 3 || groupkey == "" {
 		err := fmt.Errorf("result key %s too short or group key[%s] invalid",
 			resultkey, groupkey)
-		blog.Warnf("resultcache: save local with error:%v", err)
+		blog.Warnf("resultcache: get dir with error:%v", err)
 		return "", err
 	}
 
