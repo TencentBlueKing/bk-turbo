@@ -29,8 +29,8 @@ import (
 )
 
 type ResultCacheMgr interface {
-	GetResult(key string, needUnzip bool) ([]*Result, error)
-	PutResult(key string, rs []*Result) error
+	GetResult(groupkey, resultkey string, needUnzip bool) ([]*Result, error)
+	PutResult(groupkey, resultkey string, rs []*Result) error
 
 	GetRecordGroup(key string) ([]byte, error)
 	PutRecord(record Record) error
@@ -200,16 +200,16 @@ func GetInstance(localdir string) ResultCacheMgr {
 	return instance
 }
 
-func (rc *ResultCache) GetResult(key string, needUnzip bool) ([]*Result, error) {
-	return rc.getLocal(key, needUnzip)
+func (rc *ResultCache) GetResult(groupkey, resultkey string, needUnzip bool) ([]*Result, error) {
+	return rc.getLocal(groupkey, resultkey, needUnzip)
 }
 
-func (rc *ResultCache) PutResult(key string, rs []*Result) error {
+func (rc *ResultCache) PutResult(groupkey, resultkey string, rs []*Result) error {
 	if len(rs) == 0 {
 		return nil
 	}
 
-	return rc.putLocal(key, rs)
+	return rc.putLocal(groupkey, resultkey, rs)
 }
 
 func (rc *ResultCache) GetRecordGroup(key string) ([]byte, error) {
@@ -224,21 +224,23 @@ func (rc *ResultCache) DeleteRecord(record Record) error {
 	return rc.table.DeleteRecord(record)
 }
 
-func (rc *ResultCache) getDir(key string) (string, error) {
-	if len(key) < 3 {
-		err := fmt.Errorf("key %s it too short", key)
+func (rc *ResultCache) getDir(groupkey, resultkey string) (string, error) {
+	if len(resultkey) < 3 || groupkey == "" {
+		err := fmt.Errorf("result key %s too short or group key[%s] invalid",
+			resultkey, groupkey)
 		blog.Warnf("resultcache: save local with error:%v", err)
 		return "", err
 	}
 
-	dir := filepath.Join(rc.FileDir, string(key[0]), string(key[1]), key)
+	dir := filepath.Join(rc.FileDir, groupkey, string(resultkey[0]), string(resultkey[1]), resultkey)
 	return dir, nil
 }
 
-func (rc *ResultCache) getLocal(key string, needUnzip bool) ([]*Result, error) {
-	dir, err := rc.getDir(key)
+func (rc *ResultCache) getLocal(groupkey, resultkey string, needUnzip bool) ([]*Result, error) {
+	dir, err := rc.getDir(groupkey, resultkey)
 	if err != nil {
-		blog.Warnf("resultcache: get dir by key %s with error:%v", key, err)
+		blog.Warnf("resultcache: get dir by groupkey %s resultkey %s with error:%v",
+			groupkey, resultkey, err)
 		return nil, err
 	}
 
@@ -262,10 +264,11 @@ func (rc *ResultCache) getLocal(key string, needUnzip bool) ([]*Result, error) {
 	return rs, nil
 }
 
-func (rc *ResultCache) putLocal(key string, rs []*Result) error {
-	dir, err := rc.getDir(key)
+func (rc *ResultCache) putLocal(groupkey, resultkey string, rs []*Result) error {
+	dir, err := rc.getDir(groupkey, resultkey)
 	if err != nil {
-		blog.Warnf("resultcache: get dir by key %s with error:%v", key, err)
+		blog.Warnf("resultcache: get dir by group key %s result key: %s with error:%v",
+			groupkey, resultkey, err)
 		return err
 	}
 
@@ -330,8 +333,8 @@ func (r Record) Valid() bool {
 	return true
 }
 
-func (r Record) GetResultHashString() string {
-	v, ok := r[ResultKey]
+func (r Record) GetStringByKey(key string) string {
+	v, ok := r[key]
 	if ok {
 		return v
 	}

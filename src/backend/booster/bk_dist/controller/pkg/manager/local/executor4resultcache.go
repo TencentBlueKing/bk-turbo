@@ -108,7 +108,7 @@ func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecut
 }
 
 func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
-	rs, err := resultcache.GetInstance("").GetResult(e.preprocessResultKey, true)
+	rs, err := resultcache.GetInstance("").GetResult(e.cacheGroupKey, e.preprocessResultKey, true)
 	if err != nil {
 		return nil
 	}
@@ -193,7 +193,7 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 
 func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
 	blog.Debugf("executor: ready get remote result files now")
-	rs, err := e.mgr.getRemoteResultCacheFile(e.preprocessResultKey)
+	rs, err := e.mgr.getRemoteResultCacheFile(e.cacheGroupKey, e.preprocessResultKey)
 	if err != nil {
 		return nil
 	}
@@ -378,7 +378,7 @@ func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult) error {
 		})
 	}
 
-	err := resultcache.GetInstance("").PutResult(e.preprocessResultKey, rs)
+	err := resultcache.GetInstance("").PutResult(e.cacheGroupKey, e.preprocessResultKey, rs)
 	return err
 }
 

@@ -83,7 +83,7 @@ func (h *Handle4ReportResultCache) Handle(
 		}
 		resultcache.GetInstance(config.GlobalResultCacheDir).PutRecord(record)
 		if len(req.Resultfiles) > 0 {
-			if hashstr := record.GetResultHashString(); hashstr != "" {
+			if hashstr := record.GetStringByKey(resultcache.ResultKey); hashstr != "" {
 				resultlen := len(req.Resultfiles)
 				rs := make([]*resultcache.Result, 0, resultlen)
 				for _, v := range req.Resultfiles {
@@ -95,7 +95,8 @@ func (h *Handle4ReportResultCache) Handle(
 						HashStr:         "",
 					})
 				}
-				resultcache.GetInstance(config.GlobalResultCacheDir).PutResult(hashstr, rs)
+				groupid := record.GetStringByKey(resultcache.GroupKey)
+				resultcache.GetInstance(config.GlobalResultCacheDir).PutResult(groupid, hashstr, rs)
 			}
 		}
 	}

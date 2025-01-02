@@ -73,15 +73,20 @@ func (h *Handle4QueryResultCacheFile) Handle(
 		return err
 	}
 
+	group_id := ""
 	result_id := ""
 	for _, v := range req.Attributes {
 		if *v.Key == resultcache.ResultKey {
 			result_id = *v.Value
-			break
+			continue
+		}
+		if *v.Key == resultcache.GroupKey {
+			group_id = *v.Value
+			continue
 		}
 	}
 
-	results, err := resultcache.GetInstance(config.GlobalResultCacheDir).GetResult(result_id, false)
+	results, err := resultcache.GetInstance(config.GlobalResultCacheDir).GetResult(group_id, result_id, false)
 	if err != nil {
 		blog.Warnf("query result cache file data with error:%v", err)
 	}

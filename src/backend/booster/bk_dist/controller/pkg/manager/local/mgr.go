@@ -602,10 +602,11 @@ func (m *Mgr) hitRemoteResult(record resultcache.Record) (bool, error) {
 	return m.resultdata.remoteGroupRecord.HitResult(record)
 }
 
-func (m *Mgr) getRemoteResultCacheFile(resultkey string) (*dcSDK.BKQueryResultCacheFileResult, error) {
+func (m *Mgr) getRemoteResultCacheFile(groupkey, resultkey string) (*dcSDK.BKQueryResultCacheFileResult, error) {
 	if m.resultdata.remoteWorker != nil && m.resultdata.cacheServer != nil {
 		handler := m.resultdata.remoteWorker.Handler(0, nil, nil, nil)
 		record := resultcache.Record{
+			resultcache.GroupKey:  groupkey,
 			resultcache.ResultKey: resultkey,
 		}
 		result, err := handler.ExecuteQueryResultCacheFile(
