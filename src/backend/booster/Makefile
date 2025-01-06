@@ -33,12 +33,6 @@ BuildBooster_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/b
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerPort=${distcc_server_test_port} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ServerNecessary=${booster_server_necessary}
 
-Cache_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdCacheServerDomain=${cache_server_prod_domain} \
- -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdCacheServerPort=${cache_server_prod_port} \
- -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestCacheServerDomain=${cache_server_test_domain} \
- -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestCacheServerPort=${cache_server_test_port}
-
-
 BIN_PATH=./build
 DISTCC_BIN_PATH=${BIN_PATH}/distcc
 
@@ -126,7 +120,7 @@ dist_executor:dist_prepare
 
 dist_booster:dist_prepare
 	# bk-booster
-	go build -ldflags "${LDFLAG} ${BuildBooster_LDFLAG} ${Cache_LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-booster${SUFFIX} ./bk_dist/booster/main.go
+	go build -ldflags "${LDFLAG} ${BuildBooster_LDFLAG}" -o ${DISTEXECUTOR_BIN_PATH}/bk-booster${SUFFIX} ./bk_dist/booster/main.go
 
 dist_controller:dist_prepare
 	# bk-dist-controller

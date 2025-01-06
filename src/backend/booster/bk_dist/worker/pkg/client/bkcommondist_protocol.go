@@ -1674,9 +1674,11 @@ func encodeQueryCacheFileReq(attributes map[string]string) ([]protocol.Message, 
 	}
 
 	for k, v := range attributes {
+		tempk := k
+		tempv := v
 		pbbody.Attributes = append(pbbody.Attributes, &protocol.PBAttributesEntry{
-			Key:   &k,
-			Value: &v,
+			Key:   &tempk,
+			Value: &tempv,
 		})
 	}
 

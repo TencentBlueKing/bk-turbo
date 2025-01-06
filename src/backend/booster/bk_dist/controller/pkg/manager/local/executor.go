@@ -122,9 +122,7 @@ type executor struct {
 	preprocessResultKey string
 	remoteExecuteSecs   int
 	hitLocalIndex       bool
-	// hasLocalResult      bool
-	hitRemoteIndex bool
-	// hasRemoteResult     bool
+	hitRemoteIndex      bool
 }
 
 // Stdout return the execution stdout

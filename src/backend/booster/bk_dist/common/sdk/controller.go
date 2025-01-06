@@ -184,7 +184,7 @@ type CommonControllerConfig struct {
 type ControllerRegisterConfig struct {
 	BatchMode        bool
 	ServerHost       string
-	CacheServer      string
+	ResultCacheList  []string
 	SpecificHostList []string
 	NeedApply        bool
 	Apply            *v2.ParamApply

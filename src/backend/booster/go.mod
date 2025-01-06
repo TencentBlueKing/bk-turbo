@@ -11,6 +11,7 @@ replace (
 
 require (
 	github.com/bitly/go-simplejson v0.5.0
+	github.com/cespare/xxhash v1.1.0
 	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/coreos/etcd v3.3.25+incompatible
 	github.com/denisbrodbeck/machineid v1.0.1

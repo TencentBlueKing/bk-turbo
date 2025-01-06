@@ -79,7 +79,7 @@ type Mgr struct {
 
 	searchToolChainCache map[string]bool
 
-	cacheserver string
+	resultcachelist []string
 }
 
 // Alive return the current alive task number
@@ -185,13 +185,13 @@ func (m *Mgr) Register(config *types.WorkRegisterConfig) error {
 		}
 	}
 
-	m.cacheserver = config.CacheServer
+	m.resultcachelist = config.ResultCacheList
 
 	return nil
 }
 
-func (m *Mgr) GetCacheServer() string {
-	return m.cacheserver
+func (m *Mgr) GetCacheServer() []string {
+	return m.resultcachelist
 }
 
 func (m *Mgr) ApplyResource(config *types.WorkRegisterConfig) error {

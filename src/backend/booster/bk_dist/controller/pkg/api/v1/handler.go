@@ -598,7 +598,7 @@ func getWorkRegisterConfig(req *restful.Request) (*types.WorkRegisterConfig, err
 	config := &types.WorkRegisterConfig{
 		BatchMode:        param.BatchMode,
 		ServerHost:       param.ServerHost,
-		CacheServer:      param.CacheServer,
+		ResultCacheList:  param.ResultCacheList,
 		SpecificHostList: param.SpecificHostList,
 		NeedApply:        param.NeedApply,
 		Apply:            param.Apply,

@@ -464,7 +464,7 @@ func (s *sdk) register(config dcSDK.ControllerRegisterConfig) (dcSDK.ControllerW
 	_ = codec.EncJSON(&WorkRegisterParam{
 		BatchMode:        config.BatchMode,
 		ServerHost:       config.ServerHost,
-		CacheServer:      config.CacheServer,
+		ResultCacheList:  config.ResultCacheList,
 		SpecificHostList: config.SpecificHostList,
 		NeedApply:        config.NeedApply,
 		Apply:            config.Apply,

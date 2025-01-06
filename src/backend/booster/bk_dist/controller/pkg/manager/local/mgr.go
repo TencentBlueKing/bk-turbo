@@ -33,11 +33,74 @@ type data4resultcache struct {
 	lock sync.RWMutex
 
 	remoteWorker      dcSDK.RemoteWorker
-	cacheServer       *protocol.Host
+	resultCacheList   map[string]*protocol.Host
 	groupKey          string
 	localGroupRecord  *resultcache.RecordGroup
-	remoteGroupRecord *resultcache.RecordGroup
-	// once              sync.Once
+	remoteGroupRecord map[string]*resultcache.RecordGroup
+
+	hashlock sync.RWMutex
+	hasher   hash
+}
+
+func (d *data4resultcache) getHostStringByKey(key string) string {
+	if d.hasher == nil {
+		return ""
+	}
+
+	d.hashlock.RLock()
+	defer d.hashlock.RUnlock()
+
+	return d.hasher.GetNode(key)
+}
+
+func (d *data4resultcache) getHost(key string) *protocol.Host {
+	hoststr := d.getHostStringByKey(key)
+	if hoststr == "" {
+		return nil
+	}
+	blog.Infof("local: got host string:%s with key:%s", hoststr, key)
+
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	h, ok := d.resultCacheList[hoststr]
+	if ok {
+		return h
+	}
+
+	return nil
+}
+
+func (d *data4resultcache) getRecordGroup(key string) *resultcache.RecordGroup {
+	hoststr := d.getHostStringByKey(key)
+	if hoststr == "" {
+		return nil
+	}
+	blog.Infof("local: got host string:%s with key:%s", hoststr, key)
+
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	h, ok := d.remoteGroupRecord[hoststr]
+	if ok {
+		return h
+	}
+
+	return nil
+}
+
+func (d *data4resultcache) initHash(nodes []string) {
+	if len(nodes) == 0 {
+		return
+	}
+
+	d.hashlock.Lock()
+	defer d.hashlock.Unlock()
+
+	d.hasher = NewHashRing(100)
+	for _, n := range nodes {
+		d.hasher.AddNode(n)
+	}
 }
 
 // NewMgr get a new LocalMgr
@@ -97,25 +160,37 @@ func (m *Mgr) Start() {
 	ctx, _ := context.WithCancel(m.ctx)
 	// m.initCancel = cancel
 
-	// TODO : get result cache index now
+	// get result cache index now
 	if settings.ProjectID != "" {
-		cacheserver := m.work.Basic().GetCacheServer()
 		m.resultdata = &data4resultcache{
 			groupKey: settings.ProjectID,
-			cacheServer: &protocol.Host{
-				Server:       cacheserver,
-				TokenString:  cacheserver,
-				Hosttype:     protocol.HostRemote,
-				Jobs:         1,
-				Compresstype: protocol.CompressLZ4,
-				Protocol:     "tcp",
-			},
 			remoteWorker: client.NewCommonRemoteWorkerWithSlot(
 				ctx,
 				m.work.Config().SendFileMemoryLimit,
 				m.work.Config().SendMemoryCache,
 			),
+			resultCacheList:   make(map[string]*protocol.Host),
+			remoteGroupRecord: make(map[string]*resultcache.RecordGroup),
 		}
+
+		rcl := m.work.Basic().GetCacheServer()
+		if len(rcl) > 0 {
+			tmplist := make(map[string]*protocol.Host)
+			for _, v := range rcl {
+				tmplist[v] = &protocol.Host{
+					Server:       v,
+					TokenString:  v,
+					Hosttype:     protocol.HostRemote,
+					Jobs:         1,
+					Compresstype: protocol.CompressLZ4,
+					Protocol:     "tcp",
+				}
+			}
+
+			m.resultdata.resultCacheList = tmplist
+			m.resultdata.initHash(rcl)
+		}
+
 		go m.initResultCacheIndex()
 	}
 
@@ -524,7 +599,18 @@ func (m *Mgr) initResultCacheIndex() {
 	m.getLocalResultCacheIndex()
 
 	// get remote then
-	m.getRemoteResultCacheIndex()
+	// TODO : 先从tbs server获取cache列表，然后依次拉取结果索引
+	// 如果没有指定cache 列表，则从tbs server拉取
+	if len(m.resultdata.resultCacheList) == 0 {
+		blog.Infof("local: start get cache list now")
+	}
+
+	if len(m.resultdata.resultCacheList) > 0 {
+		for k, v := range m.resultdata.resultCacheList {
+			host := v
+			go m.getRemoteResultCacheIndex(k, host)
+		}
+	}
 }
 
 func (m *Mgr) getLocalResultCacheIndex() {
@@ -532,28 +618,33 @@ func (m *Mgr) getLocalResultCacheIndex() {
 	if err == nil && len(data) > 0 {
 		m.resultdata.lock.Lock()
 		m.resultdata.localGroupRecord, _ = resultcache.ToRecordGroup(data)
+		m.resultdata.lock.Unlock()
+
 		blog.Infof("local: got local group record:[%s] with key:%s",
 			m.resultdata.localGroupRecord.ToString(), m.resultdata.groupKey)
-		m.resultdata.lock.Unlock()
 	}
 }
 
-func (m *Mgr) getRemoteResultCacheIndex() {
-	if m.resultdata.remoteWorker != nil && m.resultdata.cacheServer != nil {
+func (m *Mgr) getRemoteResultCacheIndex(key string, host *protocol.Host) {
+	blog.Infof("local: get remote result cache index from host:%s now", key)
+	if m.resultdata.remoteWorker != nil && host != nil {
 		handler := m.resultdata.remoteWorker.Handler(0, nil, nil, nil)
 		record := resultcache.Record{
 			resultcache.GroupKey: m.resultdata.groupKey,
 		}
 		result, err := handler.ExecuteQueryResultCacheIndex(
-			m.resultdata.cacheServer,
+			host,
 			record,
 		)
 		if err == nil && result != nil {
-			m.resultdata.lock.Lock()
-			m.resultdata.remoteGroupRecord, _ = resultcache.ToRecordGroup(result.ResultIndex)
-			blog.Infof("local: got remote group record:[%s] with key:%s",
-				m.resultdata.remoteGroupRecord.ToString(), m.resultdata.groupKey)
-			m.resultdata.lock.Unlock()
+			oneGroupRecord, _ := resultcache.ToRecordGroup(result.ResultIndex)
+			if oneGroupRecord != nil {
+				m.resultdata.lock.Lock()
+				m.resultdata.remoteGroupRecord[key] = oneGroupRecord
+				m.resultdata.lock.Unlock()
+			}
+			blog.Infof("local: got one remote group record:[%s] with key:%s from host:%s",
+				oneGroupRecord.ToString(), m.resultdata.groupKey, key)
 		}
 	}
 }
@@ -569,48 +660,58 @@ func (m *Mgr) hitLocalIndex(record resultcache.Record) (bool, error) {
 	return m.resultdata.localGroupRecord.HitIndex(record)
 }
 
-func (m *Mgr) hitRemoteIndex(record resultcache.Record) (bool, error) {
-	m.resultdata.lock.RLock()
-	defer m.resultdata.lock.RUnlock()
-
-	if m.resultdata.remoteGroupRecord == nil {
+func (m *Mgr) hitRemoteIndex(command string, record resultcache.Record) (bool, error) {
+	groupRecord := m.resultdata.getRecordGroup(command)
+	if groupRecord == nil {
 		return false, nil
 	}
 
-	return m.resultdata.remoteGroupRecord.HitIndex(record)
-}
-
-func (m *Mgr) hitLocalResult(record resultcache.Record) (bool, error) {
 	m.resultdata.lock.RLock()
 	defer m.resultdata.lock.RUnlock()
 
-	if m.resultdata.localGroupRecord == nil {
-		return false, nil
-	}
-
-	return m.resultdata.localGroupRecord.HitResult(record)
+	return groupRecord.HitIndex(record)
 }
 
-func (m *Mgr) hitRemoteResult(record resultcache.Record) (bool, error) {
-	m.resultdata.lock.RLock()
-	defer m.resultdata.lock.RUnlock()
+// func (m *Mgr) hitLocalResult(record resultcache.Record) (bool, error) {
+// 	m.resultdata.lock.RLock()
+// 	defer m.resultdata.lock.RUnlock()
 
-	if m.resultdata.remoteGroupRecord == nil {
-		return false, nil
+// 	if m.resultdata.localGroupRecord == nil {
+// 		return false, nil
+// 	}
+
+// 	return m.resultdata.localGroupRecord.HitResult(record)
+// }
+
+// func (m *Mgr) hitRemoteResult(record resultcache.Record) (bool, error) {
+// 	m.resultdata.lock.RLock()
+// 	defer m.resultdata.lock.RUnlock()
+
+// 	if m.resultdata.remoteGroupRecord == nil {
+// 		return false, nil
+// 	}
+
+// 	return m.resultdata.remoteGroupRecord.HitResult(record)
+// }
+
+func (m *Mgr) getRemoteResultCacheFile(
+	command string,
+	groupkey,
+	resultkey string) (*dcSDK.BKQueryResultCacheFileResult, error) {
+
+	host := m.resultdata.getHost(command)
+	if host == nil {
+		return nil, nil
 	}
 
-	return m.resultdata.remoteGroupRecord.HitResult(record)
-}
-
-func (m *Mgr) getRemoteResultCacheFile(groupkey, resultkey string) (*dcSDK.BKQueryResultCacheFileResult, error) {
-	if m.resultdata.remoteWorker != nil && m.resultdata.cacheServer != nil {
+	if m.resultdata.remoteWorker != nil {
 		handler := m.resultdata.remoteWorker.Handler(0, nil, nil, nil)
 		record := resultcache.Record{
 			resultcache.GroupKey:  groupkey,
 			resultcache.ResultKey: resultkey,
 		}
 		result, err := handler.ExecuteQueryResultCacheFile(
-			m.resultdata.cacheServer,
+			host,
 			record,
 		)
 		if err == nil && result != nil {
@@ -625,12 +726,19 @@ func (m *Mgr) getRemoteResultCacheFile(groupkey, resultkey string) (*dcSDK.BKQue
 }
 
 func (m *Mgr) reportRemoteResultCache(
+	command string,
 	record resultcache.Record,
 	results []*dcSDK.FileDesc) (*dcSDK.BKReportResultCacheResult, error) {
-	if m.resultdata.remoteWorker != nil && m.resultdata.cacheServer != nil {
+
+	host := m.resultdata.getHost(command)
+	if host == nil {
+		return nil, nil
+	}
+
+	if m.resultdata.remoteWorker != nil {
 		handler := m.resultdata.remoteWorker.Handler(0, nil, nil, nil)
 		result, err := handler.ExecuteReportResultCache(
-			m.resultdata.cacheServer,
+			host,
 			record,
 			results)
 

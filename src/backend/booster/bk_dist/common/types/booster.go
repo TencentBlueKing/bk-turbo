@@ -136,6 +136,7 @@ type BoosterWorks struct {
 	SearchToolchain  bool
 	IgnoreHttpStatus bool
 
+	ResultCacheList        []string
 	ResultCacheType        int
 	ResultCacheTriggleSecs int
 }
@@ -144,7 +145,6 @@ type BoosterWorks struct {
 type BoosterTransport struct {
 	ServerDomain           string
 	ServerHost             string
-	CacheServer            string
 	Timeout                time.Duration
 	HeartBeatTick          time.Duration
 	InspectTaskTick        time.Duration

@@ -272,5 +272,5 @@ type BasicMgr interface {
 	// search toolchain files by cmd, ensure only execute once
 	SearchToolChain(cmd, path string) error
 
-	GetCacheServer() string
+	GetCacheServer() []string
 }

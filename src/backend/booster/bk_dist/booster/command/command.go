@@ -90,7 +90,7 @@ const (
 	FlagControllerNoWait       = "controller_no_wait"
 	FlagControllerRemainTime   = "controller_remain_time"
 	FlagServer                 = "server"
-	FlagCacheServer            = "cache_server"
+	FlagResultCacheList        = "result_cache_list"
 	FlagWorkerSideCache        = "worker_side_cache"
 	FlagLocalRecord            = "local_record"
 	FlagWriteMemroMemroy       = "write_memory"
@@ -392,9 +392,9 @@ var (
 			Name:  "server",
 			Usage: "specify the server address for booster",
 		},
-		commandCli.StringFlag{
-			Name:  "cache_server",
-			Usage: "specify the cache server address for booster",
+		commandCli.StringSliceFlag{
+			Name:  "result_cache_list, rcl",
+			Usage: "specify the result cache list for booster",
 		},
 		commandCli.BoolFlag{
 			Name:  "worker_side_cache, wsc",

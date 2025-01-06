@@ -68,6 +68,7 @@ const (
 	inspectDistributeTaskURI      = "v2/build/task?task_id=%s"
 	heartbeatURI                  = "v2/build/heartbeat"
 	messageURI                    = "v2/build/message"
+	applyCacheListURI             = "v2/build/applycachelist?project_id=%s"
 )
 
 // Mgr describe the resource manager

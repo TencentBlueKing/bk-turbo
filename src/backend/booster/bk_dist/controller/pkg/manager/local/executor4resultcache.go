@@ -54,7 +54,7 @@ func (e *executor) initResultCacheInfo() {
 		e.hitLocalIndex, _ = e.mgr.hitLocalIndex(record)
 	}
 	if e.remoteCacheEnabled() {
-		e.hitRemoteIndex, _ = e.mgr.hitRemoteIndex(record)
+		e.hitRemoteIndex, _ = e.mgr.hitRemoteIndex(e.commandKey, record)
 	}
 
 	blog.Infof("executor: got cache type:%d,cache group key:%s,command:[%s],"+
@@ -193,7 +193,7 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 
 func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
 	blog.Debugf("executor: ready get remote result files now")
-	rs, err := e.mgr.getRemoteResultCacheFile(e.cacheGroupKey, e.preprocessResultKey)
+	rs, err := e.mgr.getRemoteResultCacheFile(e.commandKey, e.cacheGroupKey, e.preprocessResultKey)
 	if err != nil {
 		return nil
 	}
@@ -399,9 +399,9 @@ func (e *executor) putRemoteResult(r *dcSDK.BKDistResult, record resultcache.Rec
 			rs = append(rs, &f)
 		}
 
-		_, err = e.mgr.reportRemoteResultCache(record, rs)
+		_, err = e.mgr.reportRemoteResultCache(e.commandKey, record, rs)
 	} else {
-		_, err = e.mgr.reportRemoteResultCache(record, nil)
+		_, err = e.mgr.reportRemoteResultCache(e.commandKey, record, nil)
 	}
 
 	return err

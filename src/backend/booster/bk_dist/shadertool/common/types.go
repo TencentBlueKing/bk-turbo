@@ -69,7 +69,7 @@ type ApplyParameters struct {
 	ProjectID                     string            `json:"project_id"`
 	Scene                         string            `json:"scene"`
 	ServerHost                    string            `json:"server_host"`
-	CacheServerHost               string            `json:"cache_server_host"`
+	ResultCacheList               []string          `json:"result_cache_list"`
 	BatchMode                     bool              `json:"batch_mode"`
 	WorkerList                    []string          `json:"specific_host_list"`
 	NeedApply                     bool              `json:"need_apply"`

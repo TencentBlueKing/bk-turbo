@@ -585,7 +585,7 @@ func (b *Booster) registerWork() error {
 	b.work, err = b.controller.Register(dcSDK.ControllerRegisterConfig{
 		BatchMode:        b.config.BatchMode,
 		ServerHost:       b.config.Transport.ServerHost,
-		CacheServer:      b.config.Transport.CacheServer,
+		ResultCacheList:  b.config.Works.ResultCacheList,
 		SpecificHostList: b.config.Works.WorkerList,
 		NeedApply:        !(b.config.Works.Local || b.config.Works.Degraded),
 		Apply:            b.GetApplyParam(),
