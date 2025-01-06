@@ -27,7 +27,6 @@ echo %VERSION%
 
 set "LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.EncryptionKey=%encryption_key% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ServerCertPwd=%server_cert_pwd% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ClientCertPwd=%client_cert_pwd% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Version=%VERSION% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.BuildTime=%BUILDTIME% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.GitHash=%GITHASH% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Tag=%GITTAG%"
 set "BuildBooster_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerDomain=%distcc_server_prod_domain% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerPort=%distcc_server_prod_port% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerDomain=%distcc_server_test_domain% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerPort=%distcc_server_test_port%"
-set "Cache_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdCacheServerDomain=%cache_server_prod_domain% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdCacheServerPort=%cache_server_prod_port% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestCacheServerDomain=%cache_server_test_domain% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestCacheServerPort=%cache_server_test_port%"
 
 cd %curpath%
 set bindir=%curpath%\bin
@@ -37,21 +36,21 @@ if not exist %bindir% (
 
 go build -ldflags "%LDFLAG%" -o %bindir%\bk-bb-agent.exe %curpath%\server\pkg\resource\direct\agent\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-booster.exe %curpath%\bk_dist\booster\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-booster.exe %curpath%\bk_dist\booster\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-idle-loop.exe %curpath%\bk_dist\idleloop\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-idle-loop.exe %curpath%\bk_dist\idleloop\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-dist-monitor.exe %curpath%\bk_dist\monitor\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-dist-monitor.exe %curpath%\bk_dist\monitor\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-help-tool.exe %curpath%\bk_dist\helptool\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-help-tool.exe %curpath%\bk_dist\helptool\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-ubt-tool.exe %curpath%\bk_dist\ubttool\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-ubt-tool.exe %curpath%\bk_dist\ubttool\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-shader-tool.exe %curpath%\bk_dist\shadertool\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-shader-tool.exe %curpath%\bk_dist\shadertool\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-dist-controller.exe %curpath%\bk_dist\controller\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-dist-controller.exe %curpath%\bk_dist\controller\main.go
 
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG%" -o %bindir%\bk-dist-executor.exe %curpath%\bk_dist\executor\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG%" -o %bindir%\bk-dist-executor.exe %curpath%\bk_dist\executor\main.go
 
 set "Hide_LDFLAG=-H=windowsgui"
-go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Cache_LDFLAG% %Hide_LDFLAG%" -o %bindir%/bk-dist-worker.exe %curpath%\bk_dist\worker\main.go
+go build -ldflags "%LDFLAG% %BuildBooster_LDFLAG% %Hide_LDFLAG%" -o %bindir%/bk-dist-worker.exe %curpath%\bk_dist\worker\main.go
