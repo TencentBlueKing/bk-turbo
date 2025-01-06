@@ -40,6 +40,15 @@ const (
 	corkMaxSize = 1024 * 1024 * 10
 	// corkMaxSize   = 1024 * 1024 * 1024
 	largeFileSize = 1024 * 1024 * 100 // 100MB
+
+	osWindows = "windows"
+	osLinux   = "linux"
+	osDarwin  = "darwin"
+)
+
+var (
+	windowsTokenParam = []string{"(Get-Process bk-dist-worker).Id"}
+	linuxTokenParam   = []string{"-c", "cat /proc/self/cgroup | grep 'cpuset'| sed 's|.*/||'"}
 )
 
 // NewMgr get a new Remote Mgr
@@ -389,6 +398,41 @@ func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendS
 	*c = append(*c, info)
 }
 
+func (fsm *fileSendMap) insertFailFiles(descs []dcSDK.FileDesc) {
+	fsm.Lock()
+	defer fsm.Unlock()
+
+	if fsm.cache == nil {
+		fsm.cache = make(map[string]*[]*types.FileInfo)
+	}
+	for _, desc := range descs {
+		info := &types.FileInfo{
+			FullPath:           desc.FilePath,
+			Size:               desc.FileSize,
+			LastModifyTime:     desc.Lastmodifytime,
+			Md5:                desc.Md5,
+			TargetRelativePath: desc.Targetrelativepath,
+			FileMode:           desc.Filemode,
+			LinkTarget:         desc.LinkTarget,
+			SendStatus:         types.FileSendFailed,
+		}
+		c, ok := fsm.cache[desc.FilePath]
+		if !ok || c == nil || len(*c) == 0 {
+			infoList := []*types.FileInfo{info}
+			fsm.cache[desc.FilePath] = &infoList
+			continue
+		}
+
+		for _, ci := range *c {
+			if ci.Match(desc) {
+				ci.SendStatus = types.FileSendFailed
+				break
+			}
+		}
+		*c = append(*c, info)
+	}
+}
+
 func (fsm *fileSendMap) isFilesSendFailed(descs []dcSDK.FileDesc) bool {
 	fsm.RLock()
 	defer fsm.RUnlock()
@@ -497,6 +541,7 @@ func (m *Mgr) callback4ResChanged() error {
 	if hl != nil && len(hl) > 0 {
 		m.setLastApplied(uint64(time.Now().Local().Unix()))
 		m.syncHostTimeNoWait(hl)
+		m.syncHostToken(hl) //get token to check if host not restarted
 	}
 
 	// if all workers released, we shoud clean the cache now
@@ -614,12 +659,79 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 	}
 }
 
+// confirmOneHost confirm one host is valid
+func (m *Mgr) confirmOneHost(h *dcProtocol.Host) {
+	handler := m.remoteWorker.Handler(10000, nil, nil, nil)
+	var c dcSDK.BKDistCommand
+	if runtime.GOOS == osLinux {
+		c = dcSDK.BKDistCommand{
+			Commands: []dcSDK.BKCommand{
+				{
+					ExeName: "sh",
+					Params:  []string{"-c", "printenv POD_NAME"},
+				},
+				{
+					ExeName: "sh",
+					Params:  linuxTokenParam,
+				},
+			},
+		}
+	} else if runtime.GOOS == osWindows {
+		c = dcSDK.BKDistCommand{
+			Commands: []dcSDK.BKCommand{
+				{
+					ExeName: "powershell",
+					Params:  []string{"$Env:POD_NAME"},
+				}, {
+					ExeName: "powershell",
+					Params:  windowsTokenParam,
+				},
+			},
+		}
+	} else {
+		blog.Warnf("remote: unsupported os: %s", runtime.GOOS)
+		return
+	}
+	result, err := handler.ExecuteTask(h, &c)
+	if err != nil {
+		blog.Errorf("remote: execute task failed for host %s : %v", h.Server, err)
+		return
+	}
+	for i, r := range result.Results {
+		msg := strings.TrimRight(string(r.OutputMessage), " \n\r\t")
+		blog.Debugf("remote: execute task result: %s now", msg)
+		if msg == "" {
+			continue
+		}
+
+		switch i {
+		case 0: //POD_NAME check, if not match , disable it right now
+			if h.Name != "" && h.Name != msg {
+				blog.Errorf("remote: host(%s) pod name %s not match before %s", h.Server, msg, h.Name)
+				m.resource.DisableWorker(h)
+			}
+		case 1: //TOKEN check, if not match , set tool chain failed to retry
+			blog.Debugf("remote: last host token %s", h.Token)
+			if h.Token != "" && h.Token != msg {
+				blog.Errorf("remote: last host token %s not match before %s", msg, h.Token)
+				m.setToolChainsFailed(h.Server)
+				h.Token = msg
+			}
+			if h.Token == "" {
+				h.Token = msg
+			}
+		}
+	}
+}
+
 // workerCheck check disconnected worker and recover it when it's available
 func (m *Mgr) workerCheck(ctx context.Context) {
 	blog.Infof("remote: run worker check tick for work: %s", m.work.ID())
 	ticker := time.NewTicker(m.workerCheckTick)
+	confirmTicker := time.NewTicker(time.Second * 8)
 
 	defer ticker.Stop()
+	defer confirmTicker.Stop()
 
 	for {
 		select {
@@ -640,6 +752,15 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 					m.resource.RecoverDeadWorker(w)
 				}(w)
 
+			}
+		case <-confirmTicker.C:
+			//only support on windows and linux
+			if runtime.GOOS != osWindows && runtime.GOOS != osLinux {
+				continue
+			}
+			blog.Debugf("remote: run verify worker for work(%d)", len(m.resource.GetWorkers()))
+			for _, h := range m.resource.GetWorkers() {
+				go m.confirmOneHost(h.host)
 			}
 		}
 	}
@@ -962,7 +1083,7 @@ func (m *Mgr) ensureFilesWithPriority(
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
 	// 刷新优先级，windows的先不实现
-	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != osWindows && runtime.GOOS != osDarwin {
 		freshPriority(fileDetails)
 		for _, v := range fileDetails {
 			blog.Debugf("remote: after fresh Priority, file:%+v", *v)
@@ -2051,6 +2172,33 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 	return types.FileSendUnknown, nil
 }
 
+func (m *Mgr) setToolChainsFailed(server string) error {
+	m.fileCollectionSendMutex.Lock()
+	defer m.fileCollectionSendMutex.Unlock()
+
+	target, ok := m.fileCollectionSendMap[server]
+	if !ok {
+		return fmt.Errorf("toolchain not existed in cache for server %s", server)
+	}
+
+	for _, fc := range *target {
+		fc.SendStatus = types.FileSendFailed
+	}
+	files := m.work.Basic().GetAllToolChainFiles()
+	if len(files) > 0 {
+		blog.Debugf("remote: set toolchains failed for server %s", server)
+		m.failFileSendMutex.Lock()
+		target, ok := m.failFileSendMap[server]
+		if !ok {
+			target = &fileSendMap{}
+			m.failFileSendMap[server] = target
+		}
+		m.failFileSendMutex.Unlock()
+		target.insertFailFiles(files)
+	}
+	return nil
+}
+
 func (m *Mgr) lockSlots(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host {
 	return m.resource.Lock(usage, f, banWorkerList)
 }
@@ -2066,6 +2214,44 @@ func (m *Mgr) TotalSlots() int {
 
 func (m *Mgr) getRemoteFileBaseDir() string {
 	return fmt.Sprintf("common_%s", m.work.ID())
+}
+
+func (m *Mgr) syncHostToken(hostList []*dcProtocol.Host) {
+	for _, h := range hostList {
+		go func(h *dcProtocol.Host) {
+			handler := m.remoteWorker.Handler(10000, nil, nil, nil)
+			var c dcSDK.BKDistCommand
+			if runtime.GOOS == osLinux {
+				c = dcSDK.BKDistCommand{
+					Commands: []dcSDK.BKCommand{
+						{
+							ExeName: "sh",
+							Params:  linuxTokenParam,
+						},
+					},
+				}
+			} else if runtime.GOOS == osWindows {
+				c = dcSDK.BKDistCommand{
+					Commands: []dcSDK.BKCommand{
+						{
+							ExeName: "powershell",
+							Params:  windowsTokenParam,
+						},
+					},
+				}
+			}
+			result, err := handler.ExecuteTask(h, &c)
+			if err != nil {
+				blog.Errorf("remote: execute task failed: %v", err)
+				return
+			}
+			msg := strings.TrimRight(string(result.Results[0].OutputMessage), " \n\r\t")
+			if msg != "" {
+				h.Token = msg
+				blog.Infof("remote: success to sync token for host(%s), get token: %s", h.Server, msg)
+			}
+		}(h)
+	}
 }
 
 func (m *Mgr) syncHostTimeNoWait(hostList []*dcProtocol.Host) []*dcProtocol.Host {

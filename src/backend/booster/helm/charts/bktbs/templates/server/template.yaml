@@ -48,6 +48,10 @@ data:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             volumeMounts: __crm_volume_mounts__
             resources:
               requests:

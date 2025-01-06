@@ -248,6 +248,9 @@ type BasicMgr interface {
 	//is tool exsited
 	IsToolChainExsited(key string) bool
 
+	// get all toolchain files
+	GetAllToolChainFiles() []dcSDK.FileDesc
+
 	// get toolchain files by key
 	GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error)
 
