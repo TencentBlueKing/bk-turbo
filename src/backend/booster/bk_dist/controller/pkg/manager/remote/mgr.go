@@ -398,41 +398,6 @@ func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendS
 	*c = append(*c, info)
 }
 
-func (fsm *fileSendMap) insertFailFiles(descs []dcSDK.FileDesc) {
-	fsm.Lock()
-	defer fsm.Unlock()
-
-	if fsm.cache == nil {
-		fsm.cache = make(map[string]*[]*types.FileInfo)
-	}
-	for _, desc := range descs {
-		info := &types.FileInfo{
-			FullPath:           desc.FilePath,
-			Size:               desc.FileSize,
-			LastModifyTime:     desc.Lastmodifytime,
-			Md5:                desc.Md5,
-			TargetRelativePath: desc.Targetrelativepath,
-			FileMode:           desc.Filemode,
-			LinkTarget:         desc.LinkTarget,
-			SendStatus:         types.FileSendFailed,
-		}
-		c, ok := fsm.cache[desc.FilePath]
-		if !ok || c == nil || len(*c) == 0 {
-			infoList := []*types.FileInfo{info}
-			fsm.cache[desc.FilePath] = &infoList
-			continue
-		}
-
-		for _, ci := range *c {
-			if ci.Match(desc) {
-				ci.SendStatus = types.FileSendFailed
-				break
-			}
-		}
-		*c = append(*c, info)
-	}
-}
-
 func (fsm *fileSendMap) isFilesSendFailed(descs []dcSDK.FileDesc) bool {
 	fsm.RLock()
 	defer fsm.RUnlock()
@@ -488,6 +453,31 @@ func (fsm *fileSendMap) getFailFiles() []dcSDK.FileDesc {
 		}
 	}
 	return failFiles
+}
+
+func (fsm *fileSendMap) cleanTerminalStatus() {
+	fsm.Lock()
+	defer fsm.Unlock()
+
+	if fsm.cache == nil {
+		return
+	}
+	blog.Debugf("remote: before clean terminal status: %v", fsm.cache)
+	for _, v := range fsm.cache {
+		if v == nil {
+			continue
+		}
+		resultfiles := make([]*types.FileInfo, 0)
+		for _, ci := range *v {
+			if !ci.IsTerminated() {
+				resultfiles = append(resultfiles, ci)
+			} else {
+				ci = nil
+			}
+		}
+		*v = resultfiles
+	}
+	blog.Debugf("remote: after clean terminal status: %v", fsm.cache)
 }
 
 // Init do the initialization for remote manager
@@ -559,6 +549,10 @@ func (m *Mgr) cleanFileCache() {
 	m.fileSendMutex.Lock()
 	m.fileSendMap = make(map[string]*fileSendMap)
 	m.fileSendMutex.Unlock()
+
+	m.failFileSendMutex.Lock()
+	m.failFileSendMap = make(map[string]*fileSendMap)
+	m.failFileSendMutex.Unlock()
 
 	m.fileCollectionSendMutex.Lock()
 	m.fileCollectionSendMap = make(map[string]*[]*types.FileCollectionInfo)
@@ -659,8 +653,8 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 	}
 }
 
-// confirmOneHost confirm one host is valid
-func (m *Mgr) confirmOneHost(h *dcProtocol.Host) {
+// confirmWorker confirm one host is valid
+func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
 	handler := m.remoteWorker.Handler(10000, nil, nil, nil)
 	var c dcSDK.BKDistCommand
 	if runtime.GOOS == osLinux {
@@ -714,7 +708,7 @@ func (m *Mgr) confirmOneHost(h *dcProtocol.Host) {
 			blog.Debugf("remote: last host token %s", h.Token)
 			if h.Token != "" && h.Token != msg {
 				blog.Errorf("remote: last host token %s not match before %s", msg, h.Token)
-				m.setToolChainsFailed(h.Server)
+				m.cleanWorker(h)
 				h.Token = msg
 			}
 			if h.Token == "" {
@@ -760,7 +754,7 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 			}
 			blog.Debugf("remote: run verify worker for work(%d)", len(m.resource.GetWorkers()))
 			for _, h := range m.resource.GetWorkers() {
-				go m.confirmOneHost(h.host)
+				go m.confirmWorker(h.host)
 			}
 		}
 	}
@@ -1652,7 +1646,9 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 			// blog.Debugf("check cache process wait too long server(%s): %s", server, d2.String())
 		}
 	}()
-
+	if m.fileSendMap == nil {
+		m.fileSendMap = make(map[string]*fileSendMap)
+	}
 	target, ok := m.fileSendMap[server]
 	if !ok {
 		target = &fileSendMap{}
@@ -1666,6 +1662,9 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 
 func (m *Mgr) checkOrLockSendFailFile(server string, desc dcSDK.FileDesc, query bool) (types.FileSendStatus, bool, error) {
 	m.failFileSendMutex.Lock()
+	if m.failFileSendMap == nil {
+		m.failFileSendMap = make(map[string]*fileSendMap)
+	}
 	target, ok := m.failFileSendMap[server]
 	if !ok {
 		target = &fileSendMap{}
@@ -1696,6 +1695,9 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry
 	if !retry {
 		//blog.Debugf("remote: execute remote task to server(%s) for descs(%d)", server, len(newDescs))
 		m.fileSendMutex.Lock()
+		if m.fileSendMap == nil {
+			m.fileSendMap = make(map[string]*fileSendMap)
+		}
 		target, ok := m.fileSendMap[server]
 		if !ok {
 			target = &fileSendMap{}
@@ -1706,6 +1708,9 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry
 	} else { //批量检查重试文件
 		//blog.Debugf("remote: execute remote task to server(%s) for retry descs(%d)", server, len(retryDescs))
 		m.failFileSendMutex.Lock()
+		if m.failFileSendMap == nil {
+			m.failFileSendMap = make(map[string]*fileSendMap)
+		}
 		target, ok := m.failFileSendMap[server]
 		if !ok {
 			target = &fileSendMap{}
@@ -1732,6 +1737,9 @@ func (m *Mgr) needToUpdateFail(desc dcSDK.FileDesc, status types.FileSendStatus)
 func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.FileSendStatus) {
 	if status == types.FileSendSucceed || !desc.Retry {
 		m.fileSendMutex.Lock()
+		if m.fileSendMap == nil {
+			m.fileSendMap = make(map[string]*fileSendMap)
+		}
 		target, ok := m.fileSendMap[server]
 		if !ok {
 			target = &fileSendMap{}
@@ -1743,6 +1751,9 @@ func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.Fi
 
 	if m.needToUpdateFail(desc, status) {
 		m.failFileSendMutex.Lock()
+		if m.failFileSendMap == nil {
+			m.failFileSendMap = make(map[string]*fileSendMap)
+		}
 		failTarget, ok := m.failFileSendMap[server]
 		if !ok {
 			failTarget = &fileSendMap{}
@@ -2172,30 +2183,23 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 	return types.FileSendUnknown, nil
 }
 
-func (m *Mgr) setToolChainsFailed(server string) error {
-	m.fileCollectionSendMutex.Lock()
-	defer m.fileCollectionSendMutex.Unlock()
-
-	target, ok := m.fileCollectionSendMap[server]
-	if !ok {
-		return fmt.Errorf("toolchain not existed in cache for server %s", server)
-	}
-
-	for _, fc := range *target {
-		fc.SendStatus = types.FileSendFailed
-	}
-	files := m.work.Basic().GetAllToolChainFiles()
-	if len(files) > 0 {
-		blog.Debugf("remote: set toolchains failed for server %s", server)
-		m.failFileSendMutex.Lock()
-		target, ok := m.failFileSendMap[server]
-		if !ok {
-			target = &fileSendMap{}
-			m.failFileSendMap[server] = target
+func (m *Mgr) cleanWorker(h *dcProtocol.Host) error {
+	m.fileSendMutex.Lock()
+	if m.fileSendMap != nil {
+		if target, ok := m.fileSendMap[h.Server]; ok {
+			target.cleanTerminalStatus()
 		}
-		m.failFileSendMutex.Unlock()
-		target.insertFailFiles(files)
 	}
+	m.fileSendMutex.Unlock()
+
+	m.failFileSendMutex.Lock()
+	if m.failFileSendMap != nil {
+		if target, ok := m.failFileSendMap[h.Server]; ok {
+			target.cleanTerminalStatus()
+		}
+	}
+	m.failFileSendMutex.Unlock()
+
 	return nil
 }
 

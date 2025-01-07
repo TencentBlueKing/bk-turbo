@@ -458,15 +458,6 @@ func (m *Mgr) IsToolChainExsited(key string) bool {
 }
 
 // GetAllToolChainFiles return all the toolchain files
-func (m *Mgr) GetAllToolChainFiles() []dcSDK.FileDesc {
-	m.toolchainLock.RLock()
-	defer m.toolchainLock.RUnlock()
-	var files []dcSDK.FileDesc
-	for _, v := range m.toolchainMap {
-		files = append(files, *(v.files)...)
-	}
-	return files
-}
 
 // GetToolChainFiles return the toolchain files
 func (m *Mgr) GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error) {

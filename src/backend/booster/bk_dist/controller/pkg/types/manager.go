@@ -525,6 +525,14 @@ func (f *FileInfo) copy() *FileInfo {
 		SendStatus:     f.SendStatus,
 	}
 }
+func (f *FileInfo) IsTerminated() bool {
+	switch f.SendStatus {
+	case FileSendSucceed, FileSendFailed:
+		return true
+	default:
+		return false
+	}
+}
 
 // FilesByServer record files info to send for one server
 type FilesByServer struct {
