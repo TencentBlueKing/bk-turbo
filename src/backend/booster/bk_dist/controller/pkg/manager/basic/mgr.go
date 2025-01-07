@@ -457,8 +457,6 @@ func (m *Mgr) IsToolChainExsited(key string) bool {
 	return ok
 }
 
-// GetAllToolChainFiles return all the toolchain files
-
 // GetToolChainFiles return the toolchain files
 func (m *Mgr) GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error) {
 	m.toolchainLock.RLock()

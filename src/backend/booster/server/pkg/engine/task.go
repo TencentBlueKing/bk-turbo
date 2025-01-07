@@ -25,7 +25,6 @@ type TaskExtension interface {
 
 	GetWorkerNameMap() map[string]string
 
-	//NameList()
 	GetRequestInstance() int
 
 	GetWorkerCount() int
