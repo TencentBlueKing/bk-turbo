@@ -38,6 +38,8 @@ type data4resultcache struct {
 	localGroupRecord  *resultcache.RecordGroup
 	remoteGroupRecord map[string]*resultcache.RecordGroup
 
+	remoteTriggleSecs int
+
 	hashlock sync.RWMutex
 	hasher   hash
 }
@@ -87,6 +89,22 @@ func (d *data4resultcache) getRecordGroup(key string) *resultcache.RecordGroup {
 	}
 
 	return nil
+}
+
+func (d *data4resultcache) initCacheList(nodes []string) {
+	tmplist := make(map[string]*protocol.Host)
+	for _, v := range nodes {
+		tmplist[v] = &protocol.Host{
+			Server:       v,
+			TokenString:  v,
+			Hosttype:     protocol.HostRemote,
+			Jobs:         1,
+			Compresstype: protocol.CompressLZ4,
+			Protocol:     "tcp",
+		}
+	}
+
+	d.resultCacheList = tmplist
 }
 
 func (d *data4resultcache) initHash(nodes []string) {
@@ -175,23 +193,11 @@ func (m *Mgr) Start() {
 
 		rcl := m.work.Basic().GetCacheServer()
 		if len(rcl) > 0 {
-			tmplist := make(map[string]*protocol.Host)
-			for _, v := range rcl {
-				tmplist[v] = &protocol.Host{
-					Server:       v,
-					TokenString:  v,
-					Hosttype:     protocol.HostRemote,
-					Jobs:         1,
-					Compresstype: protocol.CompressLZ4,
-					Protocol:     "tcp",
-				}
-			}
-
-			m.resultdata.resultCacheList = tmplist
+			m.resultdata.initCacheList(rcl)
 			m.resultdata.initHash(rcl)
 		}
 
-		go m.initResultCacheIndex()
+		go m.initResultCacheIndex(settings.ProjectID)
 	}
 
 	m.resource.Handle(ctx)
@@ -244,7 +250,12 @@ func (m *Mgr) ExecuteTask(
 	blog.Infof("local: try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
 		strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
 
-	e, err := newExecutor(m, req, globalWork, m.work.Resource().SupportAbsPath())
+	e, err := newExecutor(m,
+		req,
+		globalWork,
+		m.work.Resource().SupportAbsPath(),
+		m.resultdata.groupKey,
+		m.resultdata.remoteTriggleSecs)
 	if err != nil {
 		blog.Errorf("local: try to execute task for work(%s) from pid(%d) get executor failed: %v",
 			m.work.ID(), req.Pid, err)
@@ -594,7 +605,7 @@ func (m *Mgr) getTryTimes(e *executor) int {
 }
 
 // --------------------------for result cache-----------------------------
-func (m *Mgr) initResultCacheIndex() {
+func (m *Mgr) initResultCacheIndex(projectid string) {
 	// get local firstly
 	m.getLocalResultCacheIndex()
 
@@ -603,6 +614,23 @@ func (m *Mgr) initResultCacheIndex() {
 	// 如果没有指定cache 列表，则从tbs server拉取
 	if len(m.resultdata.resultCacheList) == 0 {
 		blog.Infof("local: start get cache list now")
+		resouceMgr := m.work.Resource()
+		if resouceMgr != nil {
+			cachelist, err := resouceMgr.GetCacheList(projectid)
+			if err == nil && cachelist != nil && len(*cachelist) > 0 {
+				blog.Infof("local: got cache list:%v", *cachelist)
+				for _, v := range *cachelist {
+					if len(v.Hosts) > 0 {
+						m.resultdata.initCacheList(v.Hosts)
+						m.resultdata.initHash(v.Hosts)
+					}
+					if v.RemoteExecuteTimeThreshold > 0 {
+						m.resultdata.remoteTriggleSecs = v.RemoteExecuteTimeThreshold
+					}
+					break
+				}
+			}
+		}
 	}
 
 	if len(m.resultdata.resultCacheList) > 0 {
@@ -751,4 +779,8 @@ func (m *Mgr) reportRemoteResultCache(
 	}
 
 	return nil, nil
+}
+
+func (m *Mgr) getCacheList() {
+	// m.work.Resource().
 }

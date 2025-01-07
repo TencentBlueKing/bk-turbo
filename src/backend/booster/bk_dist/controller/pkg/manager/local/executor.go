@@ -34,7 +34,9 @@ const (
 func newExecutor(mgr *Mgr,
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
-	supportAbsPath bool) (*executor, error) {
+	supportAbsPath bool,
+	groupkey string,
+	remoteTriggleSecs int) (*executor, error) {
 	environ := env.NewSandbox(req.Environments)
 	bt := dcType.GetBoosterType(environ.GetEnv(env.BoosterType))
 	hdl, err := handlermap.GetHandler(bt)
@@ -91,7 +93,7 @@ func newExecutor(mgr *Mgr,
 
 	// TODO : 通过修改e.sandbox来影响e.handler，因为e.sandbox是个指针
 	//        这个方法目前是可用的，因为handler直接保存了该指针
-	e.initResultCacheInfo()
+	e.initResultCacheInfo(groupkey, remoteTriggleSecs)
 	if e.hitLocalIndex || e.hitRemoteIndex {
 		e.sandbox.Env.AppendEnv(env.KeyExecutorHasResultIndex, "true")
 	}

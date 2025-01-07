@@ -28,19 +28,25 @@ const (
 	DefaultTriggleSeconds = 300
 )
 
-func (e *executor) initResultCacheInfo() {
+func (e *executor) initResultCacheInfo(groupkey string, remoteTriggleSecs int) {
 	e.cacheType = e.handler.SupportResultCache(e.req.Commands)
 
-	e.cacheGroupKey = ""
-	if str := e.sandbox.Env.GetEnv(env.ProjectID); str != "" {
-		e.cacheGroupKey = str
+	e.cacheGroupKey = groupkey
+	if e.cacheGroupKey == "" {
+		if str := e.sandbox.Env.GetEnv(env.ProjectID); str != "" {
+			e.cacheGroupKey = str
+		}
 	}
 
-	e.remoteTriggleSecs = DefaultTriggleSeconds
-	if str := e.sandbox.Env.GetEnv(env.KeyExecutorResultCacheTriggleSecs); str != "" {
-		intv, err := strconv.Atoi(str)
-		if err == nil && intv >= 0 {
-			e.remoteTriggleSecs = intv
+	if remoteTriggleSecs > 0 {
+		e.remoteTriggleSecs = remoteTriggleSecs
+	} else {
+		e.remoteTriggleSecs = DefaultTriggleSeconds
+		if str := e.sandbox.Env.GetEnv(env.KeyExecutorResultCacheTriggleSecs); str != "" {
+			intv, err := strconv.Atoi(str)
+			if err == nil && intv >= 0 {
+				e.remoteTriggleSecs = intv
+			}
 		}
 	}
 
