@@ -179,6 +179,8 @@ message PBBodyQueryResultCacheIndexReq {
 
 message PBBodyQueryResultCacheIndexRsp {
 	optional bytes list = 1;   // 列表，可以为空
+	optional PBCompressType compresstype = 2;
+	optional int32 originlength = 3;
 }
 
 message PBBodyQueryResultCacheFileReq {

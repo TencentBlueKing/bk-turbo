@@ -780,7 +780,3 @@ func (m *Mgr) reportRemoteResultCache(
 
 	return nil, nil
 }
-
-func (m *Mgr) getCacheList() {
-	// m.work.Resource().
-}

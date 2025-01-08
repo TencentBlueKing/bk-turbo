@@ -1467,8 +1467,17 @@ func EncodeBKQueryResultCacheIndexRsp(
 	var filebuflen int64
 
 	// encode body and file to message
+	originlength := int32(len(data))
+	compresseddata := data
+	compresstype := protocol.PBCompressType_NONE
+	if originlength > 0 {
+		compresseddata, _ = dcUtil.Lz4Compress(data)
+		compresstype = protocol.PBCompressType_LZ4
+	}
 	pbbody := protocol.PBBodyQueryResultCacheIndexRsp{
-		List: data,
+		List:         compresseddata,
+		Compresstype: &compresstype,
+		Originlength: &originlength,
 	}
 
 	bodydata, err := proto.Marshal(&pbbody)
