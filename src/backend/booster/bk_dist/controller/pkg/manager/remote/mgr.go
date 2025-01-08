@@ -655,7 +655,7 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 
 // confirmWorker confirm one host is valid
 func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
-	handler := m.remoteWorker.Handler(10000, nil, nil, nil)
+	handler := m.remoteWorker.Handler(0, nil, nil, nil)
 	var c dcSDK.BKDistCommand
 	if runtime.GOOS == osLinux {
 		c = dcSDK.BKDistCommand{
@@ -1664,7 +1664,7 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 	return info.SendStatus, match
 }
 
-// querySendFile 检查目标file的sendStatus, 如果已经被发送, 则返回当前状态和true; 如果没有被发送过, 则将其置于sending, 并返回false
+// querySendFile 检查目标file的sendStatus, 如果找不到对应file，直接返回failed状态，不做修改
 func (m *Mgr) querySendFile(server string, desc dcSDK.FileDesc) types.FileSendStatus {
 	m.fileSendMutex.RLock()
 	if m.fileSendMap == nil {
@@ -2263,7 +2263,7 @@ func (m *Mgr) getRemoteFileBaseDir() string {
 func (m *Mgr) syncHostToken(hostList []*dcProtocol.Host) {
 	for _, h := range hostList {
 		go func(h *dcProtocol.Host) {
-			handler := m.remoteWorker.Handler(10000, nil, nil, nil)
+			handler := m.remoteWorker.Handler(0, nil, nil, nil)
 			var c dcSDK.BKDistCommand
 			if runtime.GOOS == osLinux {
 				c = dcSDK.BKDistCommand{
