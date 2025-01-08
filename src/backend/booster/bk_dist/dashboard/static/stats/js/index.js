@@ -295,6 +295,8 @@ function fetchStatsData(id) {
             setTimeout(initWaitingChart_instant, 0, "#waiting_chart_instant")
             setTimeout(initProcessTimeChart, 0, "#process_chart")
             setTimeout(initCommandTimeChart, 0, "#command_chart")
+            // setTimeout(initRemoteErrorTable, 0, "#remote_error_table")
+            HideRemoteErrors()
             hideLoading()
         },
         function (e) {
@@ -1175,11 +1177,22 @@ function initConcurrencyChart(target) {
     }
     let localPostData = calculate_concurrency(localPostList)
 
+    // 用最后的结束时间，模拟未执行完的任务的结束时间
+    let max_leave_time = 0
+    for (let i = 0; i < vue.jobs_data.length; i++) {
+        if (vue.jobs_data[i].leave_time > max_leave_time) {
+            max_leave_time = vue.jobs_data[i].leave_time
+        }
+    }
     let localTotalList = []
     for (let i = 0; i < vue.jobs_data.length; i++) {
-        localTotalList.push([vue.jobs_data[i].enter_time, vue.jobs_data[i].leave_time])
+        if (vue.jobs_data[i].leave_time > 0 ) {
+            localTotalList.push([vue.jobs_data[i].enter_time, vue.jobs_data[i].leave_time])
+        } else {
+            localTotalList.push([vue.jobs_data[i].enter_time, max_leave_time])
+        }
     }
-    let localTotalData = calculate_concurrency(localTotalList)
+    let localTotalData = calculate_concurrency_instant(localTotalList)
 
     let categories = []
     let delta = (vue.work_data.end_time - vue.work_data.start_time) / line_scale
@@ -1201,7 +1214,7 @@ function initConcurrencyChart(target) {
                     size: marker_size
                 }
             }, {
-                "name": "分发文件",
+                "name": "命令分发",
                 "data": sendData,
                 "color": color_set[1],
                 "markers": {
@@ -1229,7 +1242,7 @@ function initConcurrencyChart(target) {
                     size: marker_size
                 }
             }, {
-                "name": "接收文件",
+                "name": "结果接收",
                 "data": receiveData,
                 "color": color_set[5],
                 "markers": {
@@ -1250,7 +1263,7 @@ function initConcurrencyChart(target) {
                     size: marker_size
                 }
             }, {
-                "name": "分发公共文件",
+                "name": "文件分发",
                 "data": publicPrepareData,
                 "color": color_set[8],
                 "markers": {
@@ -1305,9 +1318,20 @@ function initConcurrencyChartInstant(target) {
     }
     let localPostData = calculate_concurrency_instant(localPostList)
 
+    // 用最后的结束时间，模拟未执行完的任务的结束时间
+    let max_leave_time = 0
+    for (let i = 0; i < vue.jobs_data.length; i++) {
+        if (vue.jobs_data[i].leave_time > max_leave_time) {
+            max_leave_time = vue.jobs_data[i].leave_time
+        }
+    }
     let localTotalList = []
     for (let i = 0; i < vue.jobs_data.length; i++) {
-        localTotalList.push([vue.jobs_data[i].enter_time, vue.jobs_data[i].leave_time])
+        if (vue.jobs_data[i].leave_time > 0 ) {
+            localTotalList.push([vue.jobs_data[i].enter_time, vue.jobs_data[i].leave_time])
+        } else {
+            localTotalList.push([vue.jobs_data[i].enter_time, max_leave_time])
+        }
     }
     let localTotalData = calculate_concurrency_instant(localTotalList)
 
@@ -1331,7 +1355,7 @@ function initConcurrencyChartInstant(target) {
                     size: marker_size
                 }
             }, {
-                "name": "分发文件",
+                "name": "命令分发",
                 "data": sendData,
                 "color": color_set[1],
                 "markers": {
@@ -1359,7 +1383,7 @@ function initConcurrencyChartInstant(target) {
                     size: marker_size
                 }
             }, {
-                "name": "接收文件",
+                "name": "结果接收",
                 "data": receiveData,
                 "color": color_set[5],
                 "markers": {
@@ -1385,6 +1409,7 @@ function initConcurrencyChartInstant(target) {
     });
 }
 
+/*
 function initConcurrencyChartInstant(target) {
     let lockList = []
     for (let i = 0; i < vue.jobs_data.length; i++) {
@@ -1428,9 +1453,20 @@ function initConcurrencyChartInstant(target) {
     }
     let localPostData = calculate_concurrency_instant(localPostList)
 
+    // 用最后的结束时间，模拟未执行完的任务的结束时间
+    let max_leave_time = 0
+    for (let i = 0; i < vue.jobs_data.length; i++) {
+        if (vue.jobs_data[i].leave_time > max_leave_time) {
+            max_leave_time = vue.jobs_data[i].leave_time
+        }
+    }
     let localTotalList = []
     for (let i = 0; i < vue.jobs_data.length; i++) {
-        localTotalList.push([vue.jobs_data[i].enter_time, vue.jobs_data[i].leave_time])
+        if (vue.jobs_data[i].leave_time > 0 ) {
+            localTotalList.push([vue.jobs_data[i].enter_time, vue.jobs_data[i].leave_time])
+        } else {
+            localTotalList.push([vue.jobs_data[i].enter_time, max_leave_time])
+        }
     }
     let localTotalData = calculate_concurrency_instant(localTotalList)
 
@@ -1454,7 +1490,7 @@ function initConcurrencyChartInstant(target) {
                     size: marker_size
                 }
             }, {
-                "name": "分发文件",
+                "name": "命令分发",
                 "data": sendData,
                 "color": color_set[1],
                 "markers": {
@@ -1482,7 +1518,7 @@ function initConcurrencyChartInstant(target) {
                     size: marker_size
                 }
             }, {
-                "name": "接收文件",
+                "name": "结果接收",
                 "data": receiveData,
                 "color": color_set[5],
                 "markers": {
@@ -1507,6 +1543,7 @@ function initConcurrencyChartInstant(target) {
         }
     });
 }
+*/
 
 function initSumChart(target) {
     let processList = []
@@ -2100,6 +2137,32 @@ function initCommandTimeChart(target) {
     });
 }
 
+function initRemoteErrorTable() {
+    $('#remote_error_table tbody').empty();
+    let isFirst = true;
+    for (let i = 0; i < vue.jobs_data.length; i++) {
+        let item = vue.jobs_data[i]
+        if (item.remote_error_message.length > 0) {
+            if (!isFirst) {
+                // 添加一个分割行
+                var row = '<tr class="divider-row"><td colspan="2"></td></tr>' +
+                        '<tr class="light-black">' +
+                        '<td>' + item.remote_worker + '</td>' +
+                        '<td>' + item.remote_error_message + '</td>' +
+                    '</tr>';
+                $('#remote_error_table tbody').append(row);
+            } else {
+                isFirst = false;
+                var row = '<tr class="light-black">' +
+                        '<td>' + item.remote_worker + '</td>' +
+                        '<td>' + item.remote_error_message + '</td>' +
+                    '</tr>';
+                $('#remote_error_table tbody').append(row);
+            }
+        }
+    }
+}
+
 function getTD(content) {
     return '<td>' + content + '</td>'
 }
@@ -2154,7 +2217,8 @@ function CreateReporter() {
         data += getTD(item.remote_work_start_time > 0 && !item.remote_work_success)
         data += getTD(!item.pre_work_success && item.local_work_success)
         data += getTD(!item.pre_work_success && !item.local_work_success)
-        data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && item.local_work_success)
+        // data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && item.local_work_success)
+        data += getTD(!item.post_work_success && item.local_work_success)
         data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && !item.local_work_success)
         data += getTD((item.leave_time - item.enter_time) / 1e9)
         data += getTD((item.pre_work_end_time - item.pre_work_start_time) / 1e9)
@@ -2174,6 +2238,29 @@ function CreateReporter() {
     dl.href = 'data:' + type + ', ' + data
     dl.download = "reporter_" + vue.work_data.work_id + ".xls"
     dl.click()
+}
+
+function HideRemoteErrors() {
+    var table = $('#remote_error_table');
+    var divider = $('#divider_before_table');
+    if (table.hasClass('hidden')) {
+    } else {
+        divider.addClass('hidden');
+        table.addClass('hidden');
+    }
+}
+
+function ShowOrHideRemoteErrors() {
+    var table = $('#remote_error_table');
+    var divider = $('#divider_before_table');
+    if (table.hasClass('hidden')) {
+        divider.removeClass('hidden');
+        table.removeClass('hidden');
+        initRemoteErrorTable();
+    } else {
+        divider.addClass('hidden');
+        table.addClass('hidden');
+    }
 }
 
 function setCookie(name, value, days) {
@@ -2376,7 +2463,8 @@ function shareDetailLink() {
 function fast_re() {
     for (let i=0; i<vue.jobs_data.length; i++) {
         let data = vue.jobs_data[i];
-        if (data.remote_work_start_time > 0 && (!data.remote_work_success || !data.post_work_success)) {
+        //if (data.remote_work_start_time > 0 && (!data.remote_work_success || !data.post_work_success)) {
+        if (!data.remote_work_success || !data.post_work_success) {
             console.log(data.origin_args.join(" "))
             console.log(data.remote_error_message)
         }

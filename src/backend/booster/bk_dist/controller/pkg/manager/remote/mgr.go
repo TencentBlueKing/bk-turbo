@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -318,9 +319,6 @@ func (fsm *fileSendMap) matchOrInserts(descs []*dcSDK.FileDesc) []matchResult {
 }
 
 func (fsm *fileSendMap) updateFailStatus(desc dcSDK.FileDesc, status types.FileSendStatus) {
-	if status == types.FileSendSucceed && !desc.Retry {
-		return
-	}
 	fsm.Lock()
 	defer fsm.Unlock()
 
@@ -356,9 +354,6 @@ func (fsm *fileSendMap) updateFailStatus(desc dcSDK.FileDesc, status types.FileS
 }
 
 func (fsm *fileSendMap) updateStatus(desc dcSDK.FileDesc, status types.FileSendStatus) {
-	if status != types.FileSendSucceed && desc.Retry {
-		return
-	}
 	fsm.Lock()
 	defer fsm.Unlock()
 
@@ -427,6 +422,11 @@ func (fsm *fileSendMap) getFailFiles() []dcSDK.FileDesc {
 		}
 		for _, ci := range *v {
 			if ci.SendStatus != types.FileSendFailed {
+				continue
+			}
+			_, err := os.Stat(ci.FullPath)
+			if os.IsNotExist(err) {
+				blog.Warnf("remote: get fail file %s not exist", ci.FullPath)
 				continue
 			}
 			failFiles = append(failFiles, dcSDK.FileDesc{
@@ -810,8 +810,8 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 			m.work.ID(), req.Pid, len(req.BanWorkerList))
 		return nil, errors.New("no available worker")
 	}
-	blog.Infof("remote: selected host(%s) with large file(%s)",
-		req.Server.Server, fpath)
+	blog.Infof("remote: selected host(%s) with large file(%s) for work(%s) from pid(%d)",
+		req.Server.Server, fpath, m.work.ID(), req.Pid)
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkLockTime)
 	defer dcSDK.StatsTimeNow(&req.Stats.RemoteWorkUnlockTime)
@@ -1595,25 +1595,42 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry
 	}
 }
 
+func (m *Mgr) needToUpdateFail(desc dcSDK.FileDesc, status types.FileSendStatus) bool {
+	if status == types.FileSendSucceed && !desc.Retry {
+		return false
+	}
+	if strings.HasSuffix(desc.FilePath, ".ii") {
+		return false
+	}
+	if strings.HasSuffix(desc.FilePath, ".i") {
+		return false
+	}
+	return true
+}
+
 func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.FileSendStatus) {
-	m.fileSendMutex.Lock()
-	target, ok := m.fileSendMap[server]
-	if !ok {
-		target = &fileSendMap{}
-		m.fileSendMap[server] = target
+	if status == types.FileSendSucceed || !desc.Retry {
+		m.fileSendMutex.Lock()
+		target, ok := m.fileSendMap[server]
+		if !ok {
+			target = &fileSendMap{}
+			m.fileSendMap[server] = target
+		}
+		m.fileSendMutex.Unlock()
+		target.updateStatus(desc, status)
 	}
-	m.fileSendMutex.Unlock()
-	target.updateStatus(desc, status)
 
-	m.failFileSendMutex.Lock()
-	failTarget, ok := m.failFileSendMap[server]
-	if !ok {
-		failTarget = &fileSendMap{}
-		m.failFileSendMap[server] = failTarget
+	if m.needToUpdateFail(desc, status) {
+		m.failFileSendMutex.Lock()
+		failTarget, ok := m.failFileSendMap[server]
+		if !ok {
+			failTarget = &fileSendMap{}
+			m.failFileSendMap[server] = failTarget
+		}
+		m.failFileSendMutex.Unlock()
+
+		failTarget.updateFailStatus(desc, status)
 	}
-	m.failFileSendMutex.Unlock()
-
-	failTarget.updateFailStatus(desc, status)
 }
 
 func (m *Mgr) sendToolchain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest) error {
@@ -1666,7 +1683,7 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) []*types.FileCollecti
 
 	target, ok := m.fileCollectionSendMap[server]
 	if !ok {
-		blog.Infof("remote: no found host(%s) in file send cache", server)
+		blog.Debugf("remote: no found host(%s) in file send cache", server)
 		return nil
 	}
 	fcs := make([]*types.FileCollectionInfo, 0)
