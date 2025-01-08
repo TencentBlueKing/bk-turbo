@@ -707,9 +707,6 @@ func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
 		case 1: //TOKEN check, if not match , clean terminated file status in send cache
 			blog.Debugf("remote: last host token %s", h.Token)
 			if h.Token != msg {
-				if h.Token == "" {
-					blog.Info("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
-				}
 				blog.Errorf("remote: host(%s) token %s not match before %s", h.Server, msg, h.Token)
 				m.cleanWorkerCache(h)
 				if h.Token == "" {
@@ -717,7 +714,7 @@ func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
 				} else {
 					blog.Info("remote: change host(%s) token to %s", h.Server, msg)
 				}
-
+				h.Token = msg
 			}
 		default:
 			blog.Errorf("remote: execute task result for host(%s): %s unknown", msg, h.Server)
