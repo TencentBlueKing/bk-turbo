@@ -48,7 +48,7 @@ const (
 
 var (
 	windowsTokenParam = []string{"(Get-Process bk-dist-worker).Id"}
-	linuxTokenParam   = []string{"-c", "head -n 1 /proc/self/cgroup | grep docker| sed 's|.*/||'"}
+	linuxTokenParam   = []string{"-c", "head -n 1 /proc/self/cgroup | grep kubepods| sed 's|.*/||'"}
 )
 
 // NewMgr get a new Remote Mgr
