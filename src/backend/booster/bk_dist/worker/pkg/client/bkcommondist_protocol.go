@@ -1657,11 +1657,14 @@ func decodeQueryCacheIndexRsp(
 
 	if r != nil {
 		data := r.List
-		if *r.Compresstype == protocol.PBCompressType_LZ4 && len(r.List) > 0 && *r.Originlength > 0 {
-			dst := make([]byte, *r.Originlength)
+		buflen := len(r.List)
+		originlength := *r.Originlength
+		if *r.Compresstype == protocol.PBCompressType_LZ4 && buflen > 0 && originlength > 0 {
+			dst := make([]byte, originlength)
 			outdata, err := dcUtil.Lz4Uncompress(data, dst)
 			if err == nil {
 				data = outdata
+				blog.Infof("uncompress result cache index data from %d to %d", buflen, originlength)
 			} else {
 				blog.Warnf("failed to uncompress result cache index data: %v", err)
 				return nil, err
