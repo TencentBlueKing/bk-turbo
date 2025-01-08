@@ -48,7 +48,7 @@ const (
 
 var (
 	windowsTokenParam = []string{"(Get-Process bk-dist-worker).Id"}
-	linuxTokenParam   = []string{"-c", "cat /proc/self/cgroup | grep 'cpuset'| sed 's|.*/||'"}
+	linuxTokenParam   = []string{"-c", "head -n 1 /proc/self/cgroup | grep docker| sed 's|.*/||'"}
 )
 
 // NewMgr get a new Remote Mgr
@@ -704,16 +704,23 @@ func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
 				blog.Errorf("remote: host(%s) pod name %s not match before %s", h.Server, msg, h.Name)
 				m.resource.DisableWorker(h)
 			}
-		case 1: //TOKEN check, if not match , set tool chain failed to retry
+		case 1: //TOKEN check, if not match , clean terminated file status in send cache
 			blog.Debugf("remote: last host token %s", h.Token)
-			if h.Token != "" && h.Token != msg {
-				blog.Errorf("remote: last host token %s not match before %s", msg, h.Token)
-				m.cleanWorker(h)
-				h.Token = msg
+			if h.Token != msg {
+				if h.Token == "" {
+					blog.Info("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
+				}
+				blog.Errorf("remote: host(%s) token %s not match before %s", h.Server, msg, h.Token)
+				m.cleanWorkerCache(h)
+				if h.Token == "" {
+					blog.Info("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
+				} else {
+					blog.Info("remote: change host(%s) token to %s", h.Server, msg)
+				}
+
 			}
-			if h.Token == "" {
-				h.Token = msg
-			}
+		default:
+			blog.Errorf("remote: execute task result for host(%s): %s unknown", msg, h.Server)
 		}
 	}
 }
@@ -1420,7 +1427,7 @@ func (m *Mgr) ensureSingleFile(
 				if desc.Retry {
 					status, _, _ = m.checkOrLockSendFailFile(host.Server, desc, true)
 				} else {
-					status, _ = m.checkOrLockSendFile(host.Server, desc)
+					status = m.querySendFile(host.Server, desc)
 				}
 			}
 		}
@@ -1521,7 +1528,7 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 				if desc.Retry {
 					status, _, _ = m.checkOrLockSendFailFile(host.Server, *desc, true)
 				} else {
-					status, _ = m.checkOrLockSendFile(host.Server, *desc)
+					status = m.querySendFile(host.Server, *desc)
 				}
 			}
 		}
@@ -1658,6 +1665,41 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 
 	info, match := target.matchOrInsert(desc)
 	return info.SendStatus, match
+}
+
+// querySendFile 检查目标file的sendStatus, 如果已经被发送, 则返回当前状态和true; 如果没有被发送过, 则将其置于sending, 并返回false
+func (m *Mgr) querySendFile(server string, desc dcSDK.FileDesc) types.FileSendStatus {
+	m.fileSendMutex.RLock()
+	if m.fileSendMap == nil {
+		m.fileSendMap = make(map[string]*fileSendMap)
+	}
+	fsm, ok := m.fileSendMap[server]
+	if !ok {
+		blog.Errorf("remote: query send file failed: server(%s) is not exist in cache map", server)
+		m.fileSendMutex.RUnlock()
+		return types.FileSendFailed
+	}
+	m.fileSendMutex.RUnlock()
+
+	fsm.RLock()
+	defer fsm.RUnlock()
+
+	if fsm.cache == nil {
+		blog.Errorf("remote: query send file failed: server(%s) cache is not exist", server)
+		return types.FileSendFailed
+	}
+	c, ok := fsm.cache[desc.FilePath]
+	if !ok || c == nil || len(*c) == 0 {
+		blog.Errorf("remote: query send file failed: server(%s) cache is nil", server)
+		return types.FileSendFailed
+	}
+
+	for _, ci := range *c {
+		if ci.Match(desc) {
+			return ci.SendStatus
+		}
+	}
+	return types.FileSendFailed
 }
 
 func (m *Mgr) checkOrLockSendFailFile(server string, desc dcSDK.FileDesc, query bool) (types.FileSendStatus, bool, error) {
@@ -2183,7 +2225,8 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 	return types.FileSendUnknown, nil
 }
 
-func (m *Mgr) cleanWorker(h *dcProtocol.Host) error {
+func (m *Mgr) cleanWorkerCache(h *dcProtocol.Host) error {
+	blog.Info("remote: begin to clean worker cache for server %s", h.Server)
 	m.fileSendMutex.Lock()
 	if m.fileSendMap != nil {
 		if target, ok := m.fileSendMap[h.Server]; ok {
@@ -2199,7 +2242,7 @@ func (m *Mgr) cleanWorker(h *dcProtocol.Host) error {
 		}
 	}
 	m.failFileSendMutex.Unlock()
-
+	blog.Info("remote: end to clean worker cache for server %s", h.Server)
 	return nil
 }
 
