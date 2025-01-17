@@ -81,7 +81,9 @@ func (h *Handle4QueryResultCacheIndex) Handle(
 		}
 	}
 
-	data, err := resultcache.GetInstance(config.GlobalResultCacheDir).GetRecordGroup(group_value)
+	data, err := resultcache.GetInstance(config.GlobalResultCacheDir,
+		config.GlobalMaxFileNumber,
+		config.GlobalMaxIndexNumber).GetRecordGroup(group_value)
 	if err != nil {
 		blog.Warnf("query result cache index data with error:%v", err)
 	}

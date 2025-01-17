@@ -74,6 +74,10 @@ type WorkerConfig struct {
 
 	// result cache dir
 	ResultCacheDir string `json:"result_cache_dir" value:"" usage:"result cache dir"`
+	// max result files
+	MaxResultFileNumber int `json:"max_result_file_number" value:"0" usage:"max cache file number"`
+	// max result files
+	MaxResultIndexNumber int `json:"max_result_index_number" value:"0" usage:"max cache index number"`
 }
 
 // NewConfig : return config of server
@@ -101,4 +105,6 @@ func (dsc *ServerConfig) Parse() {
 
 var (
 	GlobalResultCacheDir = ""
+	GlobalMaxFileNumber  = 0
+	GlobalMaxIndexNumber = 0
 )

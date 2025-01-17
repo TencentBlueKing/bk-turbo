@@ -81,7 +81,9 @@ func (h *Handle4ReportResultCache) Handle(
 		for _, v := range req.Attributes {
 			record[*v.Key] = *v.Value
 		}
-		resultcache.GetInstance(config.GlobalResultCacheDir).PutRecord(record)
+		resultcache.GetInstance(config.GlobalResultCacheDir,
+			config.GlobalMaxFileNumber,
+			config.GlobalMaxIndexNumber).PutRecord(record)
 		if len(req.Resultfiles) > 0 {
 			if hashstr := record.GetStringByKey(resultcache.ResultKey); hashstr != "" {
 				resultlen := len(req.Resultfiles)
@@ -96,7 +98,9 @@ func (h *Handle4ReportResultCache) Handle(
 					})
 				}
 				groupid := record.GetStringByKey(resultcache.GroupKey)
-				resultcache.GetInstance(config.GlobalResultCacheDir).PutResult(groupid, hashstr, rs)
+				resultcache.GetInstance(config.GlobalResultCacheDir,
+					config.GlobalMaxFileNumber,
+					config.GlobalMaxIndexNumber).PutResult(groupid, hashstr, rs)
 			}
 		}
 	}

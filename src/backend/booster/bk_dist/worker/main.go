@@ -34,6 +34,8 @@ func main() {
 		}
 	}
 	config.GlobalResultCacheDir = c.ResultCacheDir
+	config.GlobalMaxFileNumber = c.MaxResultFileNumber
+	config.GlobalMaxIndexNumber = c.MaxResultIndexNumber
 
 	if !filepath.IsAbs(c.LogConfig.LogDir) {
 		newabs, err := filepath.Abs(c.LogConfig.LogDir)

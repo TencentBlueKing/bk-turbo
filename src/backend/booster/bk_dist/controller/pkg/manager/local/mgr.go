@@ -642,7 +642,7 @@ func (m *Mgr) initResultCacheIndex(projectid string) {
 }
 
 func (m *Mgr) getLocalResultCacheIndex() {
-	data, err := resultcache.GetInstance("").GetRecordGroup(m.resultdata.groupKey)
+	data, err := resultcache.GetInstance("", 0, 0).GetRecordGroup(m.resultdata.groupKey)
 	if err == nil && len(data) > 0 {
 		m.resultdata.lock.Lock()
 		m.resultdata.localGroupRecord, _ = resultcache.ToRecordGroup(data)

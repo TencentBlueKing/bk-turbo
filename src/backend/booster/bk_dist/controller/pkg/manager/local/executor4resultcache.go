@@ -114,7 +114,7 @@ func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecut
 }
 
 func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
-	rs, err := resultcache.GetInstance("").GetResult(e.cacheGroupKey, e.preprocessResultKey, true)
+	rs, err := resultcache.GetInstance("", 0, 0).GetResult(e.cacheGroupKey, e.preprocessResultKey, true)
 	if err != nil {
 		return nil
 	}
@@ -339,7 +339,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			if e.preprocessResultKey != "" {
 				record[resultcache.ResultKey] = e.preprocessResultKey
 			}
-			err := resultcache.GetInstance("").PutRecord(record)
+			err := resultcache.GetInstance("", 0, 0).PutRecord(record)
 			if err != nil {
 				blog.Infof("executor: put result index to local with error:%v", err)
 			}
@@ -384,7 +384,7 @@ func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult) error {
 		})
 	}
 
-	err := resultcache.GetInstance("").PutResult(e.cacheGroupKey, e.preprocessResultKey, rs)
+	err := resultcache.GetInstance("", 0, 0).PutResult(e.cacheGroupKey, e.preprocessResultKey, rs)
 	return err
 }
 
