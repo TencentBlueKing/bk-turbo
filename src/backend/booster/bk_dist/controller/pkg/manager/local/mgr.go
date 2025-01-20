@@ -664,7 +664,7 @@ func (m *Mgr) getRemoteResultCacheIndex(key string, host *protocol.Host) {
 			host,
 			record,
 		)
-		if err == nil && result != nil {
+		if err == nil && result != nil && len(result.ResultIndex) > 0 {
 			oneGroupRecord, _ := resultcache.ToRecordGroup(result.ResultIndex)
 			if oneGroupRecord != nil {
 				m.resultdata.lock.Lock()

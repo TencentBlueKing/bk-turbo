@@ -503,7 +503,7 @@ func (t *IndexMgrWithARC) ticker() {
 	for {
 		select {
 		case <-ticker.C:
-			blog.Infof("IndexMgrWithARC: on ticker now...")
+			blog.Debugf("IndexMgrWithARC: on ticker now...")
 			t.lock.RLock()
 			for _, rg := range t.Data {
 				if rg.LastStatus == StatusModified {

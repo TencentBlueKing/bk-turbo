@@ -164,7 +164,7 @@ func (f *FileMgrWithARC) ticker() {
 	for {
 		select {
 		case <-ticker.C:
-			blog.Infof("FileMgrWithARC: on ticker now...")
+			blog.Debugf("FileMgrWithARC: on ticker now...")
 			// 最合理的策略，是根据最后的访问时间决定是否可以删除；
 			// 但当我们去取这个时间时，我们就成了最后的访问者（当观察者介入，就成了被观察世界的一部分）
 			// 所以先简单的以该文件放入内存中的时间为标准

@@ -93,7 +93,7 @@ func (h *Handle4QueryResultCacheIndex) Handle(
 	if err != nil {
 		blog.Errorf("failed to encode rsp to messages for error:%v", err)
 	}
-	blog.Infof("succeed to encode send file response to messages")
+	blog.Infof("succeed to encode query result cache index response to messages")
 
 	// send response
 	if client != nil {
