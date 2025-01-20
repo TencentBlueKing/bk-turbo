@@ -108,9 +108,9 @@ func NewARC(c int) *ARC {
 	}
 }
 
-func (a *ARC) Put(key, value interface{}) (bool, interface{}) {
+func (a *ARC) Put(key, value interface{}) (bool, interface{}, interface{}) {
 	ent, ok := a.cache[key]
-	var evict interface{}
+	var evict, deleted interface{}
 	if !ok {
 		ent = &entry{
 			key:   key,
@@ -118,31 +118,31 @@ func (a *ARC) Put(key, value interface{}) (bool, interface{}) {
 			ghost: false,
 		}
 
-		evict = a.adjust(ent, "Put")
+		evict, deleted = a.adjust(ent, "Put")
 		a.cache[key] = ent
 	} else {
 		ent.value = value
 		ent.ghost = false
-		evict = a.adjust(ent, "Put")
+		evict, deleted = a.adjust(ent, "Put")
 	}
 
 	// for debug
 	a.Dump(fmt.Sprintf("after put %s", key.(string)))
 
-	return ok, evict
+	return ok, evict, deleted
 }
 
-func (a *ARC) Get(key interface{}) (interface{}, bool, interface{}) {
+func (a *ARC) Get(key interface{}) (interface{}, bool, interface{}, interface{}) {
 	blog.Infof("[ARC]:ready get %s", key.(string))
 	// for debug
 	defer a.Dump(fmt.Sprintf("after get %s", key.(string)))
 
 	ent, ok := a.cache[key]
 	if ok {
-		evict := a.adjust(ent, "Get")
-		return ent.value, !ent.ghost, evict
+		evict, deleted := a.adjust(ent, "Get")
+		return ent.value, !ent.ghost, evict, deleted
 	}
-	return nil, false, nil
+	return nil, false, nil, nil
 }
 
 func (a *ARC) Dump(prefix string) {
@@ -151,7 +151,8 @@ func (a *ARC) Dump(prefix string) {
 		a.t1.Len()+a.b1.Len()+a.t2.Len()+a.b2.Len())
 }
 
-func (a *ARC) adjust(ent *entry, action string) interface{} {
+// 最多会触发两个淘汰，返回给业务层处理
+func (a *ARC) adjust(ent *entry, action string) (interface{}, interface{}) {
 	// 如果已存在，且不在ghost列表里，提到t2的最前面
 	if ent.ll == a.t1 || ent.ll == a.t2 {
 		if ent.ll == a.t1 {
@@ -160,7 +161,7 @@ func (a *ARC) adjust(ent *entry, action string) interface{} {
 			blog.Infof("[ARC]:%s %s hit in a.t2", action, ent.el.Value.(*entry).key.(string))
 		}
 		ent.jumpto(a.t2)
-		return nil
+		return nil, nil
 	}
 
 	// 在b1里面，意味着t1值得增加容量
@@ -179,7 +180,7 @@ func (a *ARC) adjust(ent *entry, action string) interface{} {
 		ghost := a.selectGhost(ent)
 		ent.jumpto(a.t2)
 
-		return ghost
+		return ghost, nil
 	}
 
 	// 在ghost b2里面，意味着t2值得增加容量
@@ -197,25 +198,25 @@ func (a *ARC) adjust(ent *entry, action string) interface{} {
 		ghost := a.selectGhost(ent)
 		ent.jumpto(a.t2)
 
-		return ghost
+		return ghost, nil
 	}
 
 	// 新元素，可能触发驱逐或者删除，驱逐意味着从t到b，去掉value只保留key，删除从cache删掉key
 	if ent.ll == nil {
-		var ghost interface{}
+		var ghost, deleted interface{}
 		l1len := a.t1.Len() + a.b1.Len()
 		if l1len >= a.c {
 			if a.b1.Len() > 0 {
-				a.delLRU(a.b1, "a.b1")
+				deleted = a.delLRU(a.b1, "a.b1")
 				ghost = a.selectGhost(ent)
 			} else {
-				a.delLRU(a.t1, "a.t1")
+				deleted = a.delLRU(a.t1, "a.t1")
 			}
 		} else {
 			l2len := a.t2.Len() + a.b2.Len()
 			if l1len+l2len >= a.c {
 				if l1len+l2len >= 2*a.c {
-					a.delLRU(a.b2, "a.b2")
+					deleted = a.delLRU(a.b2, "a.b2")
 				}
 				ghost = a.selectGhost(ent)
 			}
@@ -223,18 +224,19 @@ func (a *ARC) adjust(ent *entry, action string) interface{} {
 
 		ent.jumpto(a.t1)
 
-		return ghost
+		return ghost, deleted
 	}
 
-	return nil
+	return nil, nil
 }
 
 // 彻底删除
-func (a *ARC) delLRU(list *list.List, from string) {
+func (a *ARC) delLRU(list *list.List, from string) interface{} {
 	lru := list.Back()
 	list.Remove(lru)
 	delete(a.cache, lru.Value.(*entry).key)
 	blog.Infof("[ARC]:deleted %s from %s", lru.Value.(*entry).key.(string), from)
+	return lru.Value.(*entry).key
 }
 
 // 返回被驱逐的key

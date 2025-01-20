@@ -461,9 +461,12 @@ func (t *IndexMgrWithARC) initArc() {
 
 	for _, v := range t.Data {
 		for _, r := range v.Group {
-			_, evict := t.arc.Put(r.GetARCKey(), nil)
+			_, evict, deleted := t.arc.Put(r.GetARCKey(), nil)
 			if evict != nil {
 				t.deleteIndex(evict.(string))
+			}
+			if deleted != nil {
+				t.deleteIndex(deleted.(string))
 			}
 		}
 	}
@@ -475,9 +478,12 @@ func (f *IndexMgrWithARC) onPutARC(key string) {
 	f.mutexARC.Lock()
 	defer f.mutexARC.Unlock()
 
-	_, evict := f.arc.Put(key, nil)
+	_, evict, deleted := f.arc.Put(key, nil)
 	if evict != nil {
 		f.deleteIndex(evict.(string))
+	}
+	if deleted != nil {
+		f.deleteIndex(deleted.(string))
 	}
 }
 

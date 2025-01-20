@@ -97,9 +97,12 @@ func (f *FileMgrWithARC) load() {
 					f.addDelete(dir)
 				} else {
 					blog.Infof("FileMgrWithARC:ready load %s", dir)
-					_, evict := f.arc.Put(dir, nil)
+					_, evict, deleted := f.arc.Put(dir, nil)
 					if evict != nil {
 						f.deleteDir(evict.(string))
+					}
+					if deleted != nil {
+						f.deleteDir(deleted.(string))
 					}
 				}
 			}
@@ -115,9 +118,12 @@ func (f *FileMgrWithARC) onGetARC(key string) {
 	f.mutexARC.Lock()
 	defer f.mutexARC.Unlock()
 
-	_, _, evict := f.arc.Get(key)
+	_, _, evict, deleted := f.arc.Get(key)
 	if evict != nil {
 		f.deleteDir(evict.(string))
+	}
+	if deleted != nil {
+		f.deleteDir(deleted.(string))
 	}
 }
 
@@ -127,9 +133,12 @@ func (f *FileMgrWithARC) onPutARC(key string) {
 	f.mutexARC.Lock()
 	defer f.mutexARC.Unlock()
 
-	_, evict := f.arc.Put(key, nil)
+	_, evict, deleted := f.arc.Put(key, nil)
 	if evict != nil {
 		f.deleteDir(evict.(string))
+	}
+	if deleted != nil {
+		f.deleteDir(deleted.(string))
 	}
 }
 
