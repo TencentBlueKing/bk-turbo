@@ -464,11 +464,13 @@ func (s *sdk) register(config dcSDK.ControllerRegisterConfig) (dcSDK.ControllerW
 	_ = codec.EncJSON(&WorkRegisterParam{
 		BatchMode:        config.BatchMode,
 		ServerHost:       config.ServerHost,
+		ResultCacheList:  config.ResultCacheList,
 		SpecificHostList: config.SpecificHostList,
 		NeedApply:        config.NeedApply,
 		Apply:            config.Apply,
 	}, &data)
 
+	blog.Infof("sdk: ready register with data:[%s]", string(data))
 	tmp, _, err := s.request("POST", registerURI, data, config.BatchMode)
 	if err != nil {
 		retry := 0

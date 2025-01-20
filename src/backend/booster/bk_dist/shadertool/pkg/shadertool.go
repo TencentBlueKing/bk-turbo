@@ -711,6 +711,7 @@ func (h *ShaderTool) newBooster() (*pkg.Booster, error) {
 			MaxLocalPreJobs:   h.settings.MaxLocalPreJobs,
 			MaxLocalExeJobs:   h.settings.MaxLocalExeJobs,
 			MaxLocalPostJobs:  h.settings.MaxLocalPostJobs,
+			ResultCacheList:   h.settings.ResultCacheList,
 		},
 
 		Transport: dcType.BoosterTransport{

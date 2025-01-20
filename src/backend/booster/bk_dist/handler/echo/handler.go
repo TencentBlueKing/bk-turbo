@@ -256,3 +256,12 @@ func (c *Echo) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 func (c *Echo) FinalExecute([]string) {
 	return
 }
+
+// SupportResultCache check whether this command support result cache
+func (c *Echo) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (c *Echo) GetResultCacheKey(command []string) string {
+	return ""
+}
