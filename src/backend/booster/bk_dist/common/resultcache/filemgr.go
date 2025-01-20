@@ -81,7 +81,7 @@ func (f *FileMgrWithARC) load() {
 	defer f.mutexARC.Unlock()
 
 	// filedir / groupkey / hash[0] / hash[1] / hash / files..
-	// 搜索 filedir 下的所有4层子目录
+	// 搜索 filedir 下的所有第4层子目录
 	baselen := getPathDepth(f.filedir)
 	filepath.Walk(f.filedir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -90,8 +90,8 @@ func (f *FileMgrWithARC) load() {
 
 		if info.IsDir() {
 			curpathlen := getPathDepth(path)
-			if curpathlen-baselen == 3 {
-				dir := filepath.Join(path, info.Name())
+			if curpathlen-baselen == 4 {
+				dir := path
 				if strings.HasSuffix(dir, DeleteFlag) {
 					blog.Infof("FileMgrWithARC: load %s to delete cache", dir)
 					f.addDelete(dir)

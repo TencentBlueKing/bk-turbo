@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -36,6 +37,11 @@ func main() {
 	config.GlobalResultCacheDir = c.ResultCacheDir
 	config.GlobalMaxFileNumber = c.MaxResultFileNumber
 	config.GlobalMaxIndexNumber = c.MaxResultIndexNumber
+	if c.ResultCache {
+		resultcache.GetInstance(config.GlobalResultCacheDir,
+			config.GlobalMaxFileNumber,
+			config.GlobalMaxIndexNumber)
+	}
 
 	if !filepath.IsAbs(c.LogConfig.LogDir) {
 		newabs, err := filepath.Abs(c.LogConfig.LogDir)
