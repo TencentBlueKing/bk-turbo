@@ -139,6 +139,8 @@ type BoosterWorks struct {
 	ResultCacheList        []string
 	ResultCacheType        int
 	ResultCacheTriggleSecs int
+	ResultCacheIndexNum    int
+	ResultCacheFileNum     int
 }
 
 // BoosterTransport describe the transport data to controller

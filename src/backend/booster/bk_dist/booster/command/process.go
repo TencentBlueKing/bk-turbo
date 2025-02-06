@@ -376,6 +376,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
 			DynamicPort:         withDynamicPort,
 			WorkerOfferSlot:     c.Bool(FlagWorkerOfferSlot),
+			ResultCacheIndexNum: c.Int(FlagResultCacheIndexNum),
+			ResultCacheFileNum:  c.Int(FlagResultCacheFileNum),
 		},
 	}
 

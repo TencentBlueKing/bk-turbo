@@ -146,6 +146,8 @@ type ControllerConfig struct {
 	LongTCP             bool
 	UseDefaultWorker    bool
 	WorkerOfferSlot     bool
+	ResultCacheIndexNum int
+	ResultCacheFileNum  int
 }
 
 // Target return the server ip and port of controller

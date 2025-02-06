@@ -36,7 +36,9 @@ func newExecutor(mgr *Mgr,
 	globalWork *types.Work,
 	supportAbsPath bool,
 	groupkey string,
-	remoteTriggleSecs int) (*executor, error) {
+	remoteTriggleSecs int,
+	localIndexNum int,
+	localFileNum int) (*executor, error) {
 	environ := env.NewSandbox(req.Environments)
 	bt := dcType.GetBoosterType(environ.GetEnv(env.BoosterType))
 	hdl, err := handlermap.GetHandler(bt)
@@ -44,12 +46,14 @@ func newExecutor(mgr *Mgr,
 		return nil, err
 	}
 	e := &executor{
-		mgr:        mgr,
-		req:        req,
-		stats:      req.Stats,
-		resource:   mgr.resource,
-		handler:    hdl,
-		globalWork: globalWork,
+		mgr:           mgr,
+		req:           req,
+		stats:         req.Stats,
+		resource:      mgr.resource,
+		handler:       hdl,
+		globalWork:    globalWork,
+		localIndexNum: localIndexNum,
+		localFileNum:  localFileNum,
 	}
 
 	// TODO: 临时代码, 临时去除CCACHE_PREFIX, 防止其循环调用, 但还是要考虑一个周全办法
@@ -125,6 +129,8 @@ type executor struct {
 	remoteExecuteSecs   int
 	hitLocalIndex       bool
 	hitRemoteIndex      bool
+	localIndexNum       int
+	localFileNum        int
 }
 
 // Stdout return the execution stdout

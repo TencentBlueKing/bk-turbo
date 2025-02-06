@@ -196,6 +196,8 @@ func (h *ShaderTool) getControllerConfig() dcSDK.ControllerConfig {
 		DynamicPort:         h.settings.ControllerDynamicPort,
 		WorkerOfferSlot:     h.settings.ControllerWorkerOfferSlot,
 		UseLocalCPUPercent:  h.settings.ControllerUseLocalCPUPercent,
+		ResultCacheIndexNum: h.settings.ControllerResultCacheIndexNum,
+		ResultCacheFileNum:  h.settings.ControllerResultCacheFileNum,
 	}
 
 	return *h.controllerconfig

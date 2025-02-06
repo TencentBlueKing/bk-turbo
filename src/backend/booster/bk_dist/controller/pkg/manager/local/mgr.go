@@ -40,6 +40,9 @@ type data4resultcache struct {
 
 	remoteTriggleSecs int
 
+	localResultCacheIndexNum int
+	localResultCacheFileNum  int
+
 	hashlock sync.RWMutex
 	hasher   hash
 }
@@ -187,8 +190,10 @@ func (m *Mgr) Start() {
 				m.work.Config().SendFileMemoryLimit,
 				m.work.Config().SendMemoryCache,
 			),
-			resultCacheList:   make(map[string]*protocol.Host),
-			remoteGroupRecord: make(map[string]*resultcache.RecordGroup),
+			resultCacheList:          make(map[string]*protocol.Host),
+			remoteGroupRecord:        make(map[string]*resultcache.RecordGroup),
+			localResultCacheIndexNum: m.work.Config().ResultCacheIndexNum,
+			localResultCacheFileNum:  m.work.Config().ResultCacheFileNum,
 		}
 
 		rcl := m.work.Basic().GetCacheServer()
@@ -255,7 +260,9 @@ func (m *Mgr) ExecuteTask(
 		globalWork,
 		m.work.Resource().SupportAbsPath(),
 		m.resultdata.groupKey,
-		m.resultdata.remoteTriggleSecs)
+		m.resultdata.remoteTriggleSecs,
+		m.resultdata.localResultCacheIndexNum,
+		m.resultdata.localResultCacheFileNum)
 	if err != nil {
 		blog.Errorf("local: try to execute task for work(%s) from pid(%d) get executor failed: %v",
 			m.work.ID(), req.Pid, err)
@@ -642,7 +649,9 @@ func (m *Mgr) initResultCacheIndex(projectid string) {
 }
 
 func (m *Mgr) getLocalResultCacheIndex() {
-	data, err := resultcache.GetInstance("", 0, 0).GetRecordGroup(m.resultdata.groupKey)
+	data, err := resultcache.GetInstance("",
+		m.resultdata.localResultCacheFileNum,
+		m.resultdata.localResultCacheIndexNum).GetRecordGroup(m.resultdata.groupKey)
 	if err == nil && len(data) > 0 {
 		m.resultdata.lock.Lock()
 		m.resultdata.localGroupRecord, _ = resultcache.ToRecordGroup(data)

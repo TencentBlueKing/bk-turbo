@@ -428,7 +428,9 @@ func (s *sdk) launchServer() error {
 		" %s %s"+
 		" %s %s"+
 		" %s"+
-		" %s",
+		" %s"+
+		" --result_cache_index_num=%d"+
+		" --result_cache_file_num=%d",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -456,6 +458,8 @@ func (s *sdk) launchServer() error {
 		useDefaultWorker,
 		dynamicPort,
 		workerOfferSlot,
+		s.config.ResultCacheIndexNum,
+		s.config.ResultCacheFileNum,
 	))
 }
 
