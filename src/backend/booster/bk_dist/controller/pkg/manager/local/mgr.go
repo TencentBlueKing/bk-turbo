@@ -388,6 +388,7 @@ func (m *Mgr) ExecuteTask(
 			" from pid(%d) in env(%v) dir(%s)",
 			m.work.ID(),
 			req.Pid, req.Environments, req.Dir)
+		req.Stats.TBSPreprocessHit = true
 		return cacheresult, nil
 	}
 
