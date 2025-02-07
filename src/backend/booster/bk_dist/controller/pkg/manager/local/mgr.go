@@ -12,6 +12,7 @@ package local
 import (
 	"context"
 	"fmt"
+	"os/user"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/analyser"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -42,6 +44,10 @@ type data4resultcache struct {
 
 	localResultCacheIndexNum int
 	localResultCacheFileNum  int
+
+	uniqID string
+	user   string
+	ip     string
 
 	hashlock sync.RWMutex
 	hasher   hash
@@ -183,6 +189,19 @@ func (m *Mgr) Start() {
 
 	// get result cache index now
 	if settings.ProjectID != "" {
+		usrname := ""
+		usr, err := user.Current()
+		if err != nil {
+			blog.Warnf("local: get current user failed: %v", err)
+		} else {
+			usrname = usr.Username
+		}
+		ip := ""
+		ips := dcUtil.GetIPAddress()
+		if len(ips) > 0 {
+			ip = ips[0]
+		}
+
 		m.resultdata = &data4resultcache{
 			groupKey: settings.ProjectID,
 			remoteWorker: client.NewCommonRemoteWorkerWithSlot(
@@ -194,6 +213,9 @@ func (m *Mgr) Start() {
 			remoteGroupRecord:        make(map[string]*resultcache.RecordGroup),
 			localResultCacheIndexNum: m.work.Config().ResultCacheIndexNum,
 			localResultCacheFileNum:  m.work.Config().ResultCacheFileNum,
+			uniqID:                   dcUtil.UniqID(),
+			user:                     usrname,
+			ip:                       ip,
 		}
 
 		rcl := m.work.Basic().GetCacheServer()
@@ -259,10 +281,7 @@ func (m *Mgr) ExecuteTask(
 		req,
 		globalWork,
 		m.work.Resource().SupportAbsPath(),
-		m.resultdata.groupKey,
-		m.resultdata.remoteTriggleSecs,
-		m.resultdata.localResultCacheIndexNum,
-		m.resultdata.localResultCacheFileNum)
+		m.resultdata)
 	if err != nil {
 		blog.Errorf("local: try to execute task for work(%s) from pid(%d) get executor failed: %v",
 			m.work.ID(), req.Pid, err)

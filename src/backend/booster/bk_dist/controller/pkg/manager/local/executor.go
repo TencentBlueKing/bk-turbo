@@ -35,10 +35,7 @@ func newExecutor(mgr *Mgr,
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
 	supportAbsPath bool,
-	groupkey string,
-	remoteTriggleSecs int,
-	localIndexNum int,
-	localFileNum int) (*executor, error) {
+	resultdata *data4resultcache) (*executor, error) {
 	environ := env.NewSandbox(req.Environments)
 	bt := dcType.GetBoosterType(environ.GetEnv(env.BoosterType))
 	hdl, err := handlermap.GetHandler(bt)
@@ -52,8 +49,9 @@ func newExecutor(mgr *Mgr,
 		resource:      mgr.resource,
 		handler:       hdl,
 		globalWork:    globalWork,
-		localIndexNum: localIndexNum,
-		localFileNum:  localFileNum,
+		resultdata:    resultdata,
+		localIndexNum: resultdata.localResultCacheIndexNum,
+		localFileNum:  resultdata.localResultCacheFileNum,
 	}
 
 	// TODO: 临时代码, 临时去除CCACHE_PREFIX, 防止其循环调用, 但还是要考虑一个周全办法
@@ -97,7 +95,7 @@ func newExecutor(mgr *Mgr,
 
 	// TODO : 通过修改e.sandbox来影响e.handler，因为e.sandbox是个指针
 	//        这个方法目前是可用的，因为handler直接保存了该指针
-	e.initResultCacheInfo(groupkey, remoteTriggleSecs)
+	e.initResultCacheInfo(resultdata.groupKey, resultdata.remoteTriggleSecs)
 	if e.hitLocalIndex || e.hitRemoteIndex {
 		e.sandbox.Env.AppendEnv(env.KeyExecutorHasResultIndex, "true")
 	}
@@ -131,6 +129,7 @@ type executor struct {
 	hitRemoteIndex      bool
 	localIndexNum       int
 	localFileNum        int
+	resultdata          *data4resultcache
 }
 
 // Stdout return the execution stdout

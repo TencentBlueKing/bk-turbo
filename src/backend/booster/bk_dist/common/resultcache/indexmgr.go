@@ -36,6 +36,9 @@ const (
 	CommandKey           = "command_key"
 	ResultKey            = "result_key"
 	RemoteExecuteTimeKey = "remote_execute_time_key"
+	MachineIDKey         = "machine_id_key"
+	UserKey              = "user_key"
+	IPKey                = "ip_key"
 )
 
 const (

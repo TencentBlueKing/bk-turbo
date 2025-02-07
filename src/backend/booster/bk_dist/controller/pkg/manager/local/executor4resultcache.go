@@ -340,6 +340,9 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			if e.preprocessResultKey != "" {
 				record[resultcache.ResultKey] = e.preprocessResultKey
 			}
+			record[resultcache.MachineIDKey] = e.resultdata.uniqID
+			record[resultcache.UserKey] = e.resultdata.user
+			record[resultcache.IPKey] = e.resultdata.ip
 			err := resultcache.GetInstance("", e.localFileNum, e.localIndexNum).PutRecord(record)
 			if err != nil {
 				blog.Infof("executor: put result index to local with error:%v", err)
@@ -355,6 +358,9 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 				if e.preprocessResultKey != "" {
 					record[resultcache.ResultKey] = e.preprocessResultKey
 				}
+				record[resultcache.MachineIDKey] = e.resultdata.uniqID
+				record[resultcache.UserKey] = e.resultdata.user
+				record[resultcache.IPKey] = e.resultdata.ip
 			}
 
 			err := e.putRemoteResult(r, record)
