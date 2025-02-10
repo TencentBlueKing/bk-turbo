@@ -184,6 +184,8 @@ type ResourceMgr interface {
 
 	// TODO : check whether support abs path
 	SupportAbsPath() bool
+
+	GetCacheList(projectid string) (*v2.CacheConfigList, error)
 }
 
 // BasicMgr describe a manager for handling all actions with work basic issues
@@ -271,4 +273,6 @@ type BasicMgr interface {
 
 	// search toolchain files by cmd, ensure only execute once
 	SearchToolChain(cmd, path string) error
+
+	GetCacheServer() []string
 }

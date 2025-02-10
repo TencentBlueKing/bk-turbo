@@ -59,6 +59,19 @@ type RemoteWorkerHandler interface {
 		req *BKQuerySlot,
 		c chan *BKQuerySlotResult,
 		timeout int) (*net.TCPConn, error)
+
+	ExecuteReportResultCache(
+		server *dcProtocol.Host,
+		attributes map[string]string,
+		results []*FileDesc) (*BKReportResultCacheResult, error)
+
+	ExecuteQueryResultCacheIndex(
+		server *dcProtocol.Host,
+		attributes map[string]string) (*BKQueryResultCacheIndexResult, error)
+
+	ExecuteQueryResultCacheFile(
+		server *dcProtocol.Host,
+		attributes map[string]string) (*BKQueryResultCacheFileResult, error)
 }
 
 // FileDescPriority from 0 ~ 100, from high to low
@@ -158,6 +171,23 @@ type BKDistResult struct {
 // BKSendFileResult return to handler
 type BKSendFileResult struct {
 	Results []FileResult `json:"file_results"`
+}
+
+// BKReportResultCacheResult result for report result cache
+type BKReportResultCacheResult struct {
+	RetCode       int32  `json:"retcode"`
+	OutputMessage string `json:"output_message"`
+	ErrorMessage  string `json:"error_message"`
+}
+
+// BKQueryResultCacheIndexResult result for query result cache index
+type BKQueryResultCacheIndexResult struct {
+	ResultIndex []byte `'json:"result_index"`
+}
+
+// BKQueryResultCacheFileResult result for query result cache file
+type BKQueryResultCacheFileResult struct {
+	Resultfiles []FileDesc `'json:"result_files"`
 }
 
 // LocalTaskResult

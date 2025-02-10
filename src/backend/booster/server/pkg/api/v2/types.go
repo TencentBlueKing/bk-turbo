@@ -12,7 +12,11 @@ package v2
 import "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 
 const (
-	queryTaskIDKey = "task_id"
+	queryTaskIDKey    = "task_id"
+	queryProjectIDKey = "project_id"
+
+	cacheListFile         = "cache_list.json"
+	cacheDefaultProjectID = "default"
 )
 
 // ParamApply describe the protocol of applying a piece of resources for distribute workers
@@ -102,3 +106,11 @@ const (
 	MessageTask    MessageType = "task"
 	MessageProject MessageType = "project"
 )
+
+// CacheConfigList return cache config list
+type CacheConfigList map[string]CacheConfig
+
+type CacheConfig struct {
+	Hosts                      []string `json:"hosts"`
+	RemoteExecuteTimeThreshold int      `json:"remote_execute_time_threshold"`
+}

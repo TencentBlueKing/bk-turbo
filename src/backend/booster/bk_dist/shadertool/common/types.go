@@ -69,6 +69,7 @@ type ApplyParameters struct {
 	ProjectID                     string            `json:"project_id"`
 	Scene                         string            `json:"scene"`
 	ServerHost                    string            `json:"server_host"`
+	ResultCacheList               []string          `json:"result_cache_list"`
 	BatchMode                     bool              `json:"batch_mode"`
 	WorkerList                    []string          `json:"specific_host_list"`
 	NeedApply                     bool              `json:"need_apply"`
@@ -94,6 +95,8 @@ type ApplyParameters struct {
 	Env                           map[string]string `json:"env"`
 	ContinueOnError               bool              `json:"continue_on_error" usage:"if false, the program will stop on error immediately"`
 	ControllerUseLocalCPUPercent  int               `json:"controller_use_local_cpu_percent"`
+	ControllerResultCacheIndexNum int               `json:"controller_result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
+	ControllerResultCacheFileNum  int               `json:"controller_result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
 }
 
 // Actionresult define action result
