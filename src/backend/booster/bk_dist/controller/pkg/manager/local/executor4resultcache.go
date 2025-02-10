@@ -63,7 +63,7 @@ func (e *executor) initResultCacheInfo(groupkey string, remoteTriggleSecs int) {
 		e.hitRemoteIndex, _ = e.mgr.hitRemoteIndex(e.commandKey, record)
 	}
 
-	blog.Infof("executor: got cache type:%d,cache group key:%s,command:[%s],"+
+	blog.Infof("executor cache: got cache type:%d,cache group key:%s,command:[%s],"+
 		"hitLocalIndex:%v,hitRemoteIndex:%v,"+
 		"remoteTriggleSecs:%d",
 		e.cacheType, e.cacheGroupKey, e.commandKey,
@@ -84,6 +84,7 @@ func (e *executor) cacheEnabled() bool {
 }
 
 func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
+	blog.Debugf("executor cache: ready get cache result now")
 	if len(c.Commands) != 1 {
 		return nil
 	}
@@ -91,6 +92,7 @@ func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecut
 	if e.cacheEnabled() {
 		e.preprocessResultKey = e.handler.GetResultCacheKey(e.req.Commands)
 		if e.preprocessResultKey == "" {
+			blog.Debugf("executor cache: preprocessResultKey is empty when get cache, do nothing")
 			return nil
 		}
 
@@ -158,7 +160,7 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 		}
 
 		if !found {
-			blog.Warnf("executor: not found cache for file %s", r)
+			blog.Warnf("executor cache: not found cache for file %s", r)
 			return nil
 		}
 	}
@@ -170,18 +172,18 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 		}
 		f, err := os.Create(fp)
 		if err != nil {
-			blog.Errorf("executor: create file %s with error: %v", fp, err)
+			blog.Errorf("executor cache: create file %s with error: %v", fp, err)
 			return nil
 		}
 
 		_, err = f.Write(rs[v].CompressDataBuf)
 		if err != nil {
 			f.Close()
-			blog.Errorf("executor: save file %s with error: %v", fp, err)
+			blog.Errorf("executor cache: save file %s with error: %v", fp, err)
 			return nil
 		}
 		f.Close()
-		blog.Infof("executor: got cache result file %s with key:%s", fp, e.preprocessResultKey)
+		blog.Infof("executor cache: got cache result file %s with key:%s", fp, e.preprocessResultKey)
 	}
 
 	e.stats.PostWorkSuccess = true
@@ -199,7 +201,7 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 }
 
 func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
-	blog.Debugf("executor: ready get remote result files now")
+	blog.Debugf("executor cache: ready get remote result files now")
 	rs, err := e.mgr.getRemoteResultCacheFile(e.commandKey, e.cacheGroupKey, e.preprocessResultKey)
 	if err != nil {
 		return nil
@@ -243,7 +245,7 @@ func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTask
 		}
 
 		if !found {
-			blog.Warnf("executor: not found cache for file %s", r)
+			blog.Warnf("executor cache: not found cache for file %s", r)
 			return nil
 		}
 	}
@@ -255,13 +257,13 @@ func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTask
 			dst := make([]byte, rs.Resultfiles[v].FileSize)
 			outdata, err := util.Lz4Uncompress(data, dst)
 			if err != nil {
-				blog.Errorf("executor: decompress with error: [%v], data len:[%d], "+
+				blog.Errorf("executor cache: decompress with error: [%v], data len:[%d], "+
 					"buffer len:[%d], filesize:[%d]",
 					err, len(data), len(dst),
 					rs.Resultfiles[v].FileSize)
 				return nil
 			}
-			blog.Infof("executor: uncompressed %s from %d to %d, "+
+			blog.Infof("executor cache: uncompressed %s from %d to %d, "+
 				"expected from %d to %d",
 				k, len(data), len(outdata),
 				rs.Resultfiles[v].CompressedSize, rs.Resultfiles[v].FileSize)
@@ -274,18 +276,18 @@ func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTask
 		}
 		f, err := os.Create(fp)
 		if err != nil {
-			blog.Errorf("executor: create file %s with error: %v", fp, err)
+			blog.Errorf("executor cache: create file %s with error: %v", fp, err)
 			return nil
 		}
 
 		_, err = f.Write(data)
 		if err != nil {
 			f.Close()
-			blog.Errorf("executor: save file %s with error: %v", fp, err)
+			blog.Errorf("executor cache: save file %s with error: %v", fp, err)
 			return nil
 		}
 		f.Close()
-		blog.Infof("executor: got cache result file %s with key:%s", fp, e.preprocessResultKey)
+		blog.Infof("executor cache: got cache result file %s with key:%s", fp, e.preprocessResultKey)
 	}
 
 	e.stats.PostWorkSuccess = true
@@ -315,7 +317,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 		if stat != nil {
 			dura := stat.RemoteWorkProcessEndTime.Unix() - stat.RemoteWorkProcessStartTime.Unix()
 			e.remoteExecuteSecs = int(dura)
-			blog.Infof("executor: remote executed %d seconds for this command", e.remoteExecuteSecs)
+			blog.Infof("executor cache: remote executed %d seconds for this command", e.remoteExecuteSecs)
 		}
 		if e.remoteExecuteSecs > 0 {
 			remoteTooLong = e.remoteExecuteSecs >= e.remoteTriggleSecs
@@ -329,7 +331,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			if e.preprocessResultKey != "" {
 				err := e.putLocalResultFiles(r)
 				if err != nil {
-					blog.Infof("executor: put result file to local with error:%v", err)
+					blog.Infof("executor cache: put result file to local with error:%v", err)
 				}
 			}
 
@@ -345,7 +347,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			record[resultcache.IPKey] = e.resultdata.ip
 			err := resultcache.GetInstance("", e.localFileNum, e.localIndexNum).PutRecord(record)
 			if err != nil {
-				blog.Infof("executor: put result index to local with error:%v", err)
+				blog.Infof("executor cache: put result index to local with error:%v", err)
 			}
 		}
 
@@ -365,7 +367,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 
 			err := e.putRemoteResult(r, record)
 			if err != nil {
-				blog.Infof("executor: put result file to remote with error:%v", err)
+				blog.Infof("executor cache: put result file to remote with error:%v", err)
 			}
 		}
 	}
@@ -397,7 +399,7 @@ func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult) error {
 }
 
 func (e *executor) putRemoteResult(r *dcSDK.BKDistResult, record resultcache.Record) error {
-	blog.Debugf("executor: ready put record:%v to remote now", record)
+	blog.Debugf("executor cache: ready put record:%v to remote now", record)
 
 	if len(r.Results) != 1 {
 		return nil
