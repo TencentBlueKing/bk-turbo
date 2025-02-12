@@ -302,7 +302,12 @@ func (cl *TaskCL) LocalLockWeight(command []string) int32 {
 
 // PostExecute 后置处理
 func (cl *TaskCL) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
-	return cl.postExecute(r)
+	return cl.postExecute(r, false)
+}
+
+// PostExecuteByCLFilter 后置处理，由clfilter调用
+func (cl *TaskCL) PostExecuteByCLFilter(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+	return cl.postExecute(r, true)
 }
 
 // LocalExecuteNeed no need
@@ -1045,7 +1050,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}, dcType.ErrorNone
 }
 
-func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult, byclfilter bool) dcType.BKDistCommonError {
 	blog.Infof("cl: start post execute for: %v", cl.originArgs)
 	if r == nil || len(r.Results) == 0 {
 		blog.Warnf("cl: parameter is invalid")
@@ -1099,9 +1104,11 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if cl.preprocessedErrorBuf != "" {
 				cl.parseOutput(cl.preprocessedErrorBuf)
 			}
-		} else {
-			// simulate output with inputFile
-			// r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
+		}
+
+		// simulate output with inputFile
+		if !byclfilter {
+			r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
 		}
 
 		// if remote succeed with pump,do not need copy head file
