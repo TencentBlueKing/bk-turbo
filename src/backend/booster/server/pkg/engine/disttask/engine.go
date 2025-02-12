@@ -964,8 +964,8 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 
 	workerList := make([]taskWorker, 0, 100)
 	for _, endpoints := range info.AvailableEndpoints {
-		servicePort, _ := endpoints.Ports[portsService]
-		statsPort, _ := endpoints.Ports[portsStats]
+		servicePort := endpoints.Ports[portsService]
+		statsPort := endpoints.Ports[portsStats]
 
 		workerList = append(workerList, taskWorker{
 			CPU:       task.Operator.RequestCPUPerUnit,
@@ -973,6 +973,7 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 			IP:        endpoints.IP,
 			Port:      servicePort,
 			StatsPort: statsPort,
+			Name:      endpoints.Name,
 		})
 	}
 

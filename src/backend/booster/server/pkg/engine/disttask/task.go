@@ -58,6 +58,16 @@ func (dt *distTask) WorkerList() []string {
 	return workers
 }
 
+// GetWorkerNameMap return worker name map
+func (dt *distTask) GetWorkerNameMap() map[string]string {
+	workerNames := make(map[string]string, 0)
+	for _, v := range dt.Workers {
+		workerNames[fmt.Sprintf("%s:%d", v.IP, v.Port)] = v.Name
+	}
+
+	return workerNames
+}
+
 func (dt *distTask) GetRequestInstance() int {
 	return dt.Operator.RequestInstance
 }
@@ -188,6 +198,7 @@ type taskWorker struct {
 	Port      int
 	StatsPort int
 	Message   string
+	Name      string
 }
 
 type taskInheritSetting struct {

@@ -59,7 +59,7 @@ let vue = new Vue({
                 return "编译中"
             }
 
-            if (this.work_data.success) {
+            if (this.task_data.status == "finish") {
                 return "成功"
             }
 
@@ -2218,8 +2218,8 @@ function CreateReporter() {
         data += getTD(!item.pre_work_success && item.local_work_success)
         data += getTD(!item.pre_work_success && !item.local_work_success)
         // data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && item.local_work_success)
-        data += getTD(!item.post_work_success && item.local_work_success)
-        data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && !item.local_work_success)
+        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && item.local_work_success)
+        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && !item.local_work_success)
         data += getTD((item.leave_time - item.enter_time) / 1e9)
         data += getTD((item.pre_work_end_time - item.pre_work_start_time) / 1e9)
         data += getTD((item.remote_work_process_end_time - item.remote_work_process_start_time) / 1e9)

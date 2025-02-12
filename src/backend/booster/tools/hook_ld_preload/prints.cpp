@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/timeb.h>
+#include <ctime>
 
 #include "prints.h"
 

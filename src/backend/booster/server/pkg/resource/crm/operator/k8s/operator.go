@@ -588,6 +588,7 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 		availableEndpoint = append(availableEndpoint, &op.Endpoint{
 			IP:    pod.Status.HostIP,
 			Ports: ports,
+			Name:  pod.Name,
 		})
 	}
 	// if taskgroup are not all built, just means that the application is staging yet.
