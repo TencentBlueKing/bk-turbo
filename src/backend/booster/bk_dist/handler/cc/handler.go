@@ -935,6 +935,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			}
 		}
 
+		blog.Infof("cc: [%s] get preprocessedFile: %s, size:%d", cc.tag, cc.preprocessedFile, fileSize)
 		cc.sendFiles = append(cc.sendFiles, dcSDK.FileDesc{
 			FilePath:           cc.preprocessedFile,
 			Compresstype:       protocol.CompressLZ4,
@@ -1532,14 +1533,6 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	}
 	blog.Infof("cc: [%s] success to execute pre-process and get %s: %s",
 		cc.tag, outputFile, strings.Join(newArgs2, " "))
-
-	f := dcFile.Stat(outputFile)
-	md5string, err := f.Md5()
-	if err != nil {
-		blog.Warnf("cc: [%s] failed to get md5 of output file \"%s\" when pre-processing: %v",
-			cc.tag, outputFile, err)
-	}
-	blog.Infof("cc: [%s] get outputfile: %s(%d), size:%d, md5:%s", cc.tag, outputFile, output.Fd(), f.Basic().Size(), md5string)
 
 	return outputFile, parseInspectHeader(errBuf.String()), nil
 }
