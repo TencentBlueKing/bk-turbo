@@ -1115,13 +1115,11 @@ func makeTmpFile(tmpDir, prefix, filename string) (string, error) {
 		blog.Errorf("cc: mkdir dir for %s failed: %v", filepath.Dir(target), err)
 		return "", err
 	}
-	blog.Debugf("cc test1: success to make tmp file \"%s\"", target)
 	f, err := os.Create(target)
 	if err != nil {
 		blog.Errorf("cc: failed to create tmp file \"%s\": %s", target, err)
 		return target, err
 	}
-	blog.Debugf("cc test1: success to make tmp file \"%s\"", target)
 	if err = f.Close(); err != nil {
 		blog.Errorf("cc: failed to close tmp file \"%s\": %s", target, err)
 		return target, err
