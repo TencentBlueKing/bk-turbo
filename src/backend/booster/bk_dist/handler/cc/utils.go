@@ -1098,38 +1098,35 @@ func hasOptions(r []string, s string) bool {
 //
 // The file will be reopened later, possibly in a child.  But we know
 // that it exists with appropriately tight permissions.
-func makeTmpFile(tmpDir, prefix, filename string) (string, string, error) {
+func makeTmpFile(tmpDir, prefix, filename string) (string, error) {
 	stat, err := os.Stat(tmpDir)
 	if err != nil {
 		blog.Errorf("cc: can not access tmp dir \"%s\": %s", tmpDir, err)
-		return "", "", err
+		return "", err
 	}
 	if !stat.IsDir() || stat.Mode()&0555 == 0 {
 		blog.Errorf("cc: can not access tmp dir \"%s\": is not a dir or could not be write or execute.", tmpDir)
-		return "", "", ErrorFileInvalid
+		return "", ErrorFileInvalid
 	}
 
-	baseDir := filepath.Join(tmpDir,
-		fmt.Sprintf("%s_%d_%s_%d", prefix, os.Getpid(), commonUtil.RandomString(8), time.Now().UnixNano()))
-	target := filepath.Join(baseDir, filename)
+	target := filepath.Join(tmpDir,
+		fmt.Sprintf("%s_%d_%s_%d_%s", prefix, os.Getpid(), commonUtil.RandomString(8), time.Now().UnixNano(), filename))
 	if err = os.MkdirAll(filepath.Dir(target), os.ModePerm); err != nil {
 		blog.Errorf("cc: mkdir dir for %s failed: %v", filepath.Dir(target), err)
-		return "", "", err
+		return "", err
 	}
-
 	f, err := os.Create(target)
 	if err != nil {
 		blog.Errorf("cc: failed to create tmp file \"%s\": %s", target, err)
-		return "", baseDir, err
+		return target, err
 	}
-
 	if err = f.Close(); err != nil {
 		blog.Errorf("cc: failed to close tmp file \"%s\": %s", target, err)
-		return "", baseDir, err
+		return target, err
 	}
 
 	blog.Infof("cc: success to make tmp file \"%s\"", target)
-	return target, baseDir, nil
+	return target, nil
 }
 
 func getPumpIncludeFile(tmpDir, prefix, ext string, args []string, workdir string) (string, error) {

@@ -979,13 +979,14 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	// generate the input files for pre-process file
 	inputFiles := []dcSDK.FileDesc{{
-		FilePath:       cl.preprocessedFile,
-		Compresstype:   protocol.CompressLZ4,
-		FileSize:       fileSize,
-		Lastmodifytime: modifyTime,
-		Md5:            "",
-		Filemode:       fileMode,
-		Buffer:         cl.preprocessedBuffer,
+		FilePath:           cl.preprocessedFile,
+		Compresstype:       protocol.CompressLZ4,
+		FileSize:           fileSize,
+		Lastmodifytime:     modifyTime,
+		Md5:                "",
+		Filemode:           fileMode,
+		Buffer:             cl.preprocessedBuffer,
+		Targetrelativepath: filepath.Dir(cl.preprocessedFile),
 	}}
 
 	// if there is a pch file, add it into the inputFiles, it should be also sent to remote
