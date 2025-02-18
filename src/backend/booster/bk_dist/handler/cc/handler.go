@@ -820,7 +820,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		req, err, notifyerr := cc.trypumpwithcache(command)
 		if err != nil {
 			if notifyerr == ErrorNotSupportRemote {
-				blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
+				blog.Warnf("cc: [%s] pre execute failed to try pump %v: %v", cc.tag, command, err)
 				return nil, dcType.BKDistCommonError{
 					Code:  dcType.UnknowCode,
 					Error: err,
@@ -855,18 +855,18 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	// obtain force key set by booster
 	forcekeystr := cc.sandbox.Env.GetEnv(env.KeyExecutorForceLocalKeys)
 	if forcekeystr != "" {
-		blog.Infof("cc: got force local key string: %s", forcekeystr)
+		blog.Infof("cc: [%s] got force local key string: %s", cc.tag, forcekeystr)
 		forcekeylist := strings.Split(forcekeystr, env.CommonBKEnvSepKey)
 		if len(forcekeylist) > 0 {
 			cc.ForceLocalCppFileKeys = append(cc.ForceLocalCppFileKeys, forcekeylist...)
-			blog.Infof("cc: ForceLocalCppFileKeys: %v", cc.ForceLocalCppFileKeys)
+			blog.Infof("cc: [%s] ForceLocalCppFileKeys: %v", cc.tag, cc.ForceLocalCppFileKeys)
 		}
 	}
 
 	for _, v := range args {
 		for _, v1 := range cc.ForceLocalCppFileKeys {
 			if v1 != "" && strings.Contains(v, v1) {
-				blog.Warnf("cc: pre execute found %s is in force local list, do not deal now", v)
+				blog.Warnf("cc: [%s] pre execute found %s is in force local list, do not deal now", cc.tag, v)
 				// return nil, fmt.Errorf("arg %s is in force local cpp list", v)
 				return nil, dcType.ErrorPreForceLocal
 			}
@@ -935,13 +935,15 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			}
 		}
 
+		blog.Infof("cc: [%s] get preprocessedFile: %s, size:%d", cc.tag, cc.preprocessedFile, fileSize)
 		cc.sendFiles = append(cc.sendFiles, dcSDK.FileDesc{
-			FilePath:       cc.preprocessedFile,
-			Compresstype:   protocol.CompressLZ4,
-			FileSize:       fileSize,
-			Lastmodifytime: modifyTime,
-			Md5:            "",
-			Filemode:       fileMode,
+			FilePath:           cc.preprocessedFile,
+			Compresstype:       protocol.CompressLZ4,
+			FileSize:           fileSize,
+			Lastmodifytime:     modifyTime,
+			Md5:                "",
+			Filemode:           fileMode,
+			Targetrelativepath: filepath.Dir(cc.preprocessedFile),
 		})
 	}
 
@@ -968,7 +970,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			break
 		}
 	}
-	blog.Infof("cc: env which ready sent to remote:[%v]", envs)
+	blog.Infof("cc: [%s] env which ready sent to remote:[%v]", cc.tag, envs)
 
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
@@ -1000,17 +1002,17 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	resultfilenum := 0
 	// by tomtian 20201224,to ensure existed result file
 	if len(r.Results[0].ResultFiles) == 0 {
-		blog.Warnf("cc: not found result file for: %v", cc.originArgs)
+		blog.Warnf("cc: [%s] not found result file for: %v", cc.tag, cc.originArgs)
 		goto ERROREND
 	}
-	blog.Infof("cc: found %d result files for result[0]", len(r.Results[0].ResultFiles))
+	blog.Infof("cc: [%s] found %d result files for result[0]", cc.tag, len(r.Results[0].ResultFiles))
 
 	// resultfilenum := 0
 	if len(r.Results[0].ResultFiles) > 0 {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
-					blog.Errorf("cc: failed to save file [%s]", f.FilePath)
+					blog.Errorf("cc: [%s] failed to save file [%s]", cc.tag, f.FilePath)
 					return dcType.BKDistCommonError{
 						Code:  dcType.UnknowCode,
 						Error: err,
@@ -1023,7 +1025,7 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 
 	// by tomtian 20201224,to ensure existed result file
 	if resultfilenum == 0 {
-		blog.Warnf("cc: not found result file for: %v", cc.originArgs)
+		blog.Warnf("cc: [%s] not found result file for: %v", cc.tag, cc.originArgs)
 		goto ERROREND
 	}
 
@@ -1042,7 +1044,7 @@ ERROREND:
 	// write error message into
 	if cc.saveTemp() && len(r.Results[0].ErrorMessage) > 0 {
 		// make the tmp file for storing the stderr from server compiler.
-		stderrFile, _, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox),
+		stderrFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox),
 			"cc", "server_stderr.txt")
 		if err != nil {
 			blog.Warnf("cc: [%s] make tmp file for stderr from server failed: %v", cc.tag, err)
@@ -1056,7 +1058,7 @@ ERROREND:
 	}
 
 	if cc.pumpremote {
-		blog.Infof("cc: ready remove pump head file: %s after failed pump remote, generate it next time", cc.pumpHeadFile)
+		blog.Infof("cc: [%s] ready remove pump head file: %s after failed pump remote, generate it next time", cc.tag, cc.pumpHeadFile)
 		os.Remove(cc.pumpHeadFile)
 	}
 
@@ -1457,8 +1459,8 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	}
 	blog.Infof("cc: [%s] get preprocessed file: %s", cc.tag, preprocessedF)
 
-	outputFile, tmpFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc", preprocessedF)
-	cc.addTmpFile(tmpFile)
+	outputFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc", preprocessedF)
+	cc.addTmpFile(outputFile)
 	if err != nil {
 		blog.Warnf("cc: [%s] do pre-process get output file failed: %v", cc.tag, err)
 		return "", nil, err
