@@ -30,11 +30,11 @@ import (
 	commonHttp "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
-	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
 )
 
@@ -143,7 +143,7 @@ func (o *tcpManager) reportTimer() {
 
 func (o *tcpManager) getLocalIP() (string, error) {
 	blog.Infof("[p2p] initLocalIp...")
-	ips := dcUtil.GetIPAddress()
+	ips := util.GetIPAddress()
 	if len(ips) <= 0 {
 		err := fmt.Errorf("get none local ip")
 		blog.Infof("[p2p] get none local ip")

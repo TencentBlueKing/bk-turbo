@@ -20,4 +20,12 @@ var (
 	// ClientCertPwd describe the encrypt password for client cert key file.
 	// Will be specific when compiling.
 	ClientCertPwd = ""
+
+	InnerIPClassA  = "192.168.0.0/16"
+	InnerIPClassA1 = "192.168.0.0/16"
+	InnerIPClassAa = "192.168.0.0/16"
+	InnerIPClassB  = "192.168.0.0/16"
+	InnerIPClassC  = "192.168.0.0/16"
+
+	InnerIPClassDefault = "192.168.0.0/16"
 )

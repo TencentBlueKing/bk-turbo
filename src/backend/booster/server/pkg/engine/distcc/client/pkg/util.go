@@ -11,7 +11,6 @@ package pkg
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"regexp"
@@ -20,19 +19,12 @@ import (
 	"syscall"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/hook"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 )
 
 const (
 	localIPKKey  = "BK_DISTCC_LOCAL_IP"
 	exitCodeFile = "bk_origin_exit_code"
-)
-
-var (
-	_, classA, _  = net.ParseCIDR("10.0.0.0/8")
-	_, classA1, _ = net.ParseCIDR("9.0.0.0/8")
-	_, classAa, _ = net.ParseCIDR("100.64.0.0/10")
-	_, classB, _  = net.ParseCIDR("172.16.0.0/12")
-	_, classC, _  = net.ParseCIDR("192.168.0.0/16")
 )
 
 // compilerBitset for detect compilers
@@ -85,38 +77,6 @@ var (
 	}
 )
 
-func getIPAddress() (addrList []string) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return addrList
-	}
-	for _, addr := range addrs {
-		if ip, ok := addr.(*net.IPNet); ok && !ip.IP.IsLoopback() && ip.IP.To4() != nil {
-			if classA.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classA1.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classAa.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classB.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classC.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-		}
-	}
-	return addrList
-}
-
 func getLocalIP() (string, error) {
 	// get local ip from env first, if not exists or empty, then get from net
 	ip := os.Getenv(localIPKKey)
@@ -124,7 +84,7 @@ func getLocalIP() (string, error) {
 		return ip, nil
 	}
 
-	ips := getIPAddress()
+	ips := util.GetIPAddress()
 	if len(ips) == 0 {
 		return "", fmt.Errorf("get local IP failed, the client will exit")
 	}

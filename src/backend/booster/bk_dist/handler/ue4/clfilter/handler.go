@@ -222,20 +222,20 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcTy
 func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cf: start post execute for: %v", cf.originArgs)
 
-	bkerr := cf.clhandle.PostExecute(r)
+	bkerr := cf.clhandle.PostExecuteByCLFilter(r)
 	if bkerr.Error != nil {
 		return bkerr
 	}
 
 	// save include to txt file
 	blog.Debugf("cf: ready parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
-	output, err := cf.parseOutput(string(r.Results[0].OutputMessage))
+	_, err := cf.parseOutput(string(r.Results[0].OutputMessage))
 	if err != nil {
 		blog.Warnf("cf: parse output(%s) with error:%v", r.Results[0].OutputMessage, err)
 		return dcType.ErrorUnknown
 	}
 
-	r.Results[0].OutputMessage = []byte(output)
+	r.Results[0].OutputMessage = []byte("")
 	blog.Debugf("cf: after parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
 	return dcType.ErrorNone
 }

@@ -302,7 +302,12 @@ func (cl *TaskCL) LocalLockWeight(command []string) int32 {
 
 // PostExecute 后置处理
 func (cl *TaskCL) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
-	return cl.postExecute(r)
+	return cl.postExecute(r, false)
+}
+
+// PostExecuteByCLFilter 后置处理，由clfilter调用
+func (cl *TaskCL) PostExecuteByCLFilter(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+	return cl.postExecute(r, true)
 }
 
 // LocalExecuteNeed no need
@@ -1046,17 +1051,22 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}, dcType.ErrorNone
 }
 
-func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult, byclfilter bool) dcType.BKDistCommonError {
 	blog.Infof("cl: start post execute for: %v", cl.originArgs)
-	if r == nil || len(r.Results) == 0 {
-		blog.Warnf("cl: parameter is invalid")
-		return dcType.BKDistCommonError{
-			Code:  dcType.UnknowCode,
-			Error: fmt.Errorf("parameter is invalid"),
-		}
-	}
 
 	resultfilenum := 0
+	var dealError error
+
+	if r == nil || len(r.Results) == 0 {
+		// blog.Warnf("cl: parameter is invalid")
+		// return dcType.BKDistCommonError{
+		// 	Code:  dcType.UnknowCode,
+		// 	Error: fmt.Errorf("parameter is invalid"),
+		// }
+		goto ERROREND
+	}
+
+	// resultfilenum := 0
 	// by tomtian 20201224,to ensure existed result file
 	if len(r.Results[0].ResultFiles) == 0 {
 		blog.Warnf("cl: not found result file for: %v", cl.originArgs)
@@ -1070,10 +1080,12 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cl.sandbox.Dir); err != nil {
 					blog.Errorf("cl: failed to save file [%s]", f.FilePath)
-					return dcType.BKDistCommonError{
-						Code:  dcType.UnknowCode,
-						Error: err,
-					}
+					// return dcType.BKDistCommonError{
+					// 	Code:  dcType.UnknowCode,
+					// 	Error: err,
+					// }
+					dealError = err
+					goto ERROREND
 				}
 				resultfilenum++
 			}
@@ -1100,9 +1112,11 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if cl.preprocessedErrorBuf != "" {
 				cl.parseOutput(cl.preprocessedErrorBuf)
 			}
-		} else {
-			// simulate output with inputFile
-			// r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
+		}
+
+		// simulate output with inputFile
+		if !byclfilter {
+			r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
 		}
 
 		// if remote succeed with pump,do not need copy head file
@@ -1114,6 +1128,32 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	}
 
 ERROREND:
+	// 如果预处理模式下远程失败，则提前生成pump的依赖文件
+	// 因为默认本地命令生成的依赖文件不全
+	if !cl.pumpremote && cl.needcopypumpheadfile {
+		if cl.forcedepend && cl.preprocessedErrorBuf != "" {
+			cl.parseOutput(cl.preprocessedErrorBuf)
+		}
+
+		cl.copyPumpHeadFile(cl.sandbox.Dir)
+		cl.needcopypumpheadfile = false
+	}
+
+	if r == nil || len(r.Results) == 0 {
+		blog.Warnf("cl: parameter is invalid")
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
+	}
+
+	if dealError != nil {
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: dealError,
+		}
+	}
+
 	// write error message into
 	if cl.saveTemp() && len(r.Results[0].ErrorMessage) > 0 {
 		// make the tmp file for storing the stderr from server compiler.

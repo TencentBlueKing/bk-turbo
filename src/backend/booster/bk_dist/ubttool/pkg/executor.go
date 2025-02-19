@@ -12,6 +12,7 @@ package pkg
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 // Executor define dist executor
@@ -115,21 +117,38 @@ func (d *Executor) runWork(fullargs []string, workdir string) (int, string, erro
 	// 如果控制台字符集不是utf8，则我们默认为gbk（936），这种情况下，控制台应该可以正确显示中文字符集，无需处理
 	// 如果控制台字符集是utf8（65001），则检查字节流中是否都是合法的utf8字符，如果不是，当做gbk处理，尝试将gbk字符串转为utf8
 
-	if len(r.Stdout) > 0 {
+	blog.Infof("ubtexecutor: got result with exit code: %d, outmsg:%s,errmsg:%s,cmd:%v,charcode:%d",
+		r.ExitCode, string(r.Stdout), string(r.Stderr), fullargs, charcode)
+
+	if len(r.Stdout) > 1 {
 		d.outputmsg = r.Stdout
 		hasNewline := bytes.HasSuffix(r.Stdout, []byte("\n"))
 
 		output := r.Stdout
 		if charcode == 65001 {
 			isUTF8 := utf8.Valid(r.Stdout)
-			blog.Infof("string [%s] is utf8? %v,charcode:%d", string(r.Stdout), isUTF8, charcode)
+			blog.Infof("ubtexecutor: string [%s] is utf8? %v,charcode:%d", string(r.Stdout), isUTF8, charcode)
 			if !isUTF8 {
 				// 尝试转为utf8
-				gbk, err1 := simplifiedchinese.GBK.NewDecoder().Bytes(r.Stdout)
+				utf8bytes, err1 := simplifiedchinese.GBK.NewDecoder().Bytes(r.Stdout)
 				if err1 != nil {
-					blog.Infof("convert gbk string [%s] to utf8 failed with error:%v", string((r.Stdout)), err1)
+					blog.Infof("ubtexecutor: convert gbk string [%s] to utf8 failed with error:%v", string((r.Stdout)), err1)
 				} else {
-					output = gbk
+					output = utf8bytes
+				}
+			}
+		} else if charcode == 936 {
+			isUTF8 := utf8.Valid(r.Stdout)
+			blog.Infof("ubtexecutor: r.Stdout is utf8?%v", isUTF8)
+
+			// 如果是utf8编码，将其从utf8转换为 GBK
+			if isUTF8 {
+				reader := transform.NewReader(strings.NewReader(string(r.Stdout)), simplifiedchinese.GBK.NewEncoder())
+				gbkBytes, err := io.ReadAll(reader)
+				if err != nil {
+					blog.Infof("ubtexecutor: transform chardet with error:%v", err)
+				} else {
+					output = gbkBytes
 				}
 			}
 		}
@@ -148,14 +167,26 @@ func (d *Executor) runWork(fullargs []string, workdir string) (int, string, erro
 		output := r.Stderr
 		if charcode == 65001 {
 			isUTF8 := utf8.Valid(r.Stderr)
-			blog.Infof("string [%s] is utf8? %v,charcode:%d", string(r.Stderr), isUTF8, charcode)
+			blog.Infof("ubtexecutor: string [%s] is utf8? %v,charcode:%d", string(r.Stderr), isUTF8, charcode)
 			if !isUTF8 {
 				// 尝试转为utf8
-				gbk, err1 := simplifiedchinese.GBK.NewDecoder().Bytes(r.Stderr)
+				utf8bytes, err1 := simplifiedchinese.GBK.NewDecoder().Bytes(r.Stderr)
 				if err1 != nil {
-					blog.Infof("convert gbk string [%s] to utf8 failed with error:%v", string((r.Stderr)), err1)
+					blog.Infof("ubtexecutor: convert gbk string [%s] to utf8 failed with error:%v", string((r.Stderr)), err1)
 				} else {
-					output = gbk
+					output = utf8bytes
+				}
+			}
+		} else if charcode == 936 {
+			isUTF8 := utf8.Valid(r.Stderr)
+			// 如果是utf8编码，将其从utf8转换为 GBK
+			if isUTF8 {
+				reader := transform.NewReader(strings.NewReader(string(r.Stderr)), simplifiedchinese.GBK.NewEncoder())
+				gbkBytes, err := io.ReadAll(reader)
+				if err != nil {
+					blog.Infof("ubtexecutor: transform chardet with error:%v", err)
+				} else {
+					output = gbkBytes
 				}
 			}
 		}
