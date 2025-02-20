@@ -10,6 +10,7 @@
 package env
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 )
@@ -97,4 +98,12 @@ func ensureKey(key string) string {
 	}
 
 	return key
+}
+
+// AppendEnv append key and value to env
+func (sb *Sandbox) AppendEnv(key, value string) {
+	fullkey := GetEnvKey(key)
+	envstr := fmt.Sprintf("%s=%s", fullkey, value)
+	sb.env = append(sb.env, envstr)
+	sb.envIndex[fullkey] = len(sb.env) - 1
 }

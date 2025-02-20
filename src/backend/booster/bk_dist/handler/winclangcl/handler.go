@@ -232,3 +232,12 @@ func (cc *WinClangCl) preprocess(command cmd.Commandline) error {
 	tmpfile.Close()
 	return err
 }
+
+// SupportResultCache check whether this command support result cache
+func (cc *WinClangCl) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (cc *WinClangCl) GetResultCacheKey(command []string) string {
+	return ""
+}

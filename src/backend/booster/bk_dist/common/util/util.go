@@ -12,6 +12,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/denisbrodbeck/machineid"
 
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
@@ -670,4 +672,30 @@ func GetAllLinkDir(files []string) []string {
 	}
 
 	return nil
+}
+
+// GetResultCacheDir get the runtime result cache dir
+func GetResultCacheDir() string {
+	dir := path.Join(GetRuntimeDir(), "result_cache")
+	_ = os.MkdirAll(dir, os.ModePerm)
+	return dir
+}
+
+func HashFile(f string) (uint64, error) {
+	if !dcFile.Stat(f).Exist() {
+		return 0, fmt.Errorf("%s not existed", f)
+	}
+
+	file, err := os.Open(f)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	d := xxhash.New()
+	if _, err := io.Copy(d, file); err != nil {
+		return 0, err
+	}
+
+	return d.Sum64(), nil
 }
