@@ -835,11 +835,12 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 						Code:  dcType.UnknowCode,
 						Error: err,
 					}
-			} else {
-				// for debug
-				blog.Debugf("cc: after try pump, req: %+v", *req)
-				cc.pumpremote = true
-				return req, dcType.ErrorNone
+				} else {
+					// for debug
+					blog.Debugf("cc: after try pump, req: %+v", *req)
+					cc.pumpremote = true
+					return req, dcType.ErrorNone
+				}
 			}
 		}
 	}

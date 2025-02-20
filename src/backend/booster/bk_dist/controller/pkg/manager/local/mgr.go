@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/manager/analyser"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 )
 
 // 一个方案id对应的result cache相关信息
@@ -197,7 +198,7 @@ func (m *Mgr) Start() {
 			usrname = usr.Username
 		}
 		ip := ""
-		ips := dcUtil.GetIPAddress()
+		ips := util.GetIPAddress()
 		if len(ips) > 0 {
 			ip = ips[0]
 		}
