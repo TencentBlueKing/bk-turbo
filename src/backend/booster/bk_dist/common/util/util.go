@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -31,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	"github.com/pierrec/lz4"
 	"github.com/shirou/gopsutil/process"
@@ -38,15 +38,6 @@ import (
 	"golang.org/x/text/transform"
 
 	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
-)
-
-// define vars
-var (
-	_, classA, _  = net.ParseCIDR("10.0.0.0/8")
-	_, classA1, _ = net.ParseCIDR("9.0.0.0/8")
-	_, classAa, _ = net.ParseCIDR("100.64.0.0/10")
-	_, classB, _  = net.ParseCIDR("172.16.0.0/12")
-	_, classC, _  = net.ParseCIDR("192.168.0.0/16")
 )
 
 // GetCaller return the current caller functions
@@ -63,60 +54,6 @@ func GetCaller() string {
 	}
 
 	return fmt.Sprintf("%s:%d", file, line)
-}
-
-// GetIPAddress get local usable inner ip address
-func GetIPAddress() (addrList []string) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return addrList
-	}
-	for _, addr := range addrs {
-		if ip, ok := addr.(*net.IPNet); ok && !ip.IP.IsLoopback() && ip.IP.To4() != nil {
-			if classA.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classA1.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classAa.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classB.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classC.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-		}
-	}
-	return addrList
-}
-
-// IsLocalIP check whether ip is local
-func IsLocalIP(ip net.IP) bool {
-	if classA.Contains(ip) {
-		return true
-	}
-	if classA1.Contains(ip) {
-		return true
-	}
-	if classAa.Contains(ip) {
-		return true
-	}
-	if classB.Contains(ip) {
-		return true
-	}
-	if classC.Contains(ip) {
-		return true
-	}
-
-	return false
 }
 
 // GetHomeDir get home dir by system env
@@ -456,7 +393,7 @@ func UniqID() string {
 		return id
 	}
 
-	ips := GetIPAddress()
+	ips := util.GetIPAddress()
 	if len(ips) > 0 {
 		return ips[0]
 	}

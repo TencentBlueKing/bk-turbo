@@ -96,8 +96,8 @@ type ResourceManager interface {
 	// RegisterUser receive a user and return a HandlerWithUser which operates under this user.
 	RegisterUser(user string) (HandlerWithUser, error)
 
-	// GetResourceDetail return details of resource description.
-	GetResourceDetail() *rsc.Details
+	// // GetResourceDetail return details of resource description.
+	// GetResourceDetail() *rsc.Details
 
 	// Run the manager.
 	Run() error
@@ -197,7 +197,7 @@ type resourceManager struct {
 
 	// following should be init in recover
 	registeredResourceMap     map[string]*resource
-	registeredResourceMapLock sync.Mutex
+	registeredResourceMapLock sync.RWMutex
 
 	nodeInfoPool *op.NodeInfoPool
 
@@ -227,13 +227,13 @@ func (rm *resourceManager) RegisterUser(user string) (HandlerWithUser, error) {
 	return rm.registerUser(user)
 }
 
-// GetResourceDetail get the details of all resources in pool.
-func (rm *resourceManager) GetResourceDetail() *rsc.Details {
-	return &rsc.Details{
-		Rsc: rm.rscDetail,
-		App: rm.appDetail,
-	}
-}
+// // GetResourceDetail get the details of all resources in pool.
+// func (rm *resourceManager) GetResourceDetail() *rsc.Details {
+// 	return &rsc.Details{
+// 		Rsc: rm.rscDetail,
+// 		App: rm.appDetail,
+// 	}
+// }
 
 // Run the resource manager. Listen to role change events. Start manager when master, stop when not.
 func (rm *resourceManager) Run() error {
@@ -279,7 +279,7 @@ func (rm *resourceManager) start() {
 	go rm.runLockCleaner()
 	go rm.runBrokerChecker()
 	go rm.runRscDetailSync()
-	go rm.runAppDetailSync()
+	// go rm.runAppDetailSync()
 }
 
 func (rm *resourceManager) stop() {
@@ -370,47 +370,47 @@ func (rm *resourceManager) runRscDetailSync() {
 	}
 }
 
-func (rm *resourceManager) runAppDetailSync() {
-	blog.Infof("crm: begin to run app detail sync")
-	ticker := time.NewTimer(syncAppDetailTimeGap)
-	defer ticker.Stop()
+// func (rm *resourceManager) runAppDetailSync() {
+// 	blog.Infof("crm: begin to run app detail sync")
+// 	ticker := time.NewTimer(syncAppDetailTimeGap)
+// 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-rm.ctx.Done():
-			blog.Warnf("crm: app detail sync done")
-			return
-		case <-ticker.C:
-			if rm.registeredResourceMap == nil {
-				continue
-			}
+// 	for {
+// 		select {
+// 		case <-rm.ctx.Done():
+// 			blog.Warnf("crm: app detail sync done")
+// 			return
+// 		case <-ticker.C:
+// 			if rm.registeredResourceMap == nil {
+// 				continue
+// 			}
 
-			appDetail := make([]*rsc.AppDetails, 0, 100)
-			rm.registeredResourceMapLock.Lock()
-			for _, r := range rm.registeredResourceMap {
-				if r.status == resourceStatusReleased {
-					continue
-				}
+// 			appDetail := make([]*rsc.AppDetails, 0, 100)
+// 			rm.registeredResourceMapLock.RLock()
+// 			for _, r := range rm.registeredResourceMap {
+// 				if r.status == resourceStatusReleased {
+// 					continue
+// 				}
 
-				appDetail = append(appDetail, &rsc.AppDetails{
-					ResourceID:       r.resourceID,
-					BrokerID:         r.brokerResourceID,
-					BrokerName:       r.brokerName,
-					BrokerSold:       r.brokerSold,
-					User:             r.user,
-					Status:           r.status.String(),
-					Image:            r.param.Image,
-					CreateTime:       r.initTime,
-					RequestInstance:  r.requestInstance,
-					NotReadyInstance: r.noReadyInstance,
-					Label:            r.param.City,
-				})
-			}
-			rm.registeredResourceMapLock.Unlock()
-			rm.appDetail = appDetail
-		}
-	}
-}
+// 				appDetail = append(appDetail, &rsc.AppDetails{
+// 					ResourceID:       r.resourceID,
+// 					BrokerID:         r.brokerResourceID,
+// 					BrokerName:       r.brokerName,
+// 					BrokerSold:       r.brokerSold,
+// 					User:             r.user,
+// 					Status:           r.status.String(),
+// 					Image:            r.param.Image,
+// 					CreateTime:       r.initTime,
+// 					RequestInstance:  r.requestInstance,
+// 					NotReadyInstance: r.noReadyInstance,
+// 					Label:            r.param.City,
+// 				})
+// 			}
+// 			rm.registeredResourceMapLock.RUnlock()
+// 			rm.appDetail = appDetail
+// 		}
+// 	}
+// }
 
 func (rm *resourceManager) logResourceStats() {
 	blog.Infof("crm: report resources(%s) following: %s", rm.conf.Operator, rm.nodeInfoPool.GetStats())
@@ -679,14 +679,16 @@ func (rm *resourceManager) createResources(r *resource) error {
 
 func (rm *resourceManager) saveResources(r *resource) error {
 	rm.registeredResourceMapLock.Lock()
-	defer rm.registeredResourceMapLock.Unlock()
+	// defer rm.registeredResourceMapLock.Unlock()
 
 	rm.registeredResourceMap[r.resourceID] = r
 	if r.status == resourceStatusReleased {
 		delete(rm.registeredResourceMap, r.resourceID)
 	}
+	tr := resource2Table(r)
+	rm.registeredResourceMapLock.Unlock()
 
-	return rm.mysql.PutResource(resource2Table(r))
+	return rm.mysql.PutResource(tr)
 }
 
 func (rm *resourceManager) updateResourcesCache(r *resource) error {
@@ -699,8 +701,8 @@ func (rm *resourceManager) updateResourcesCache(r *resource) error {
 }
 
 func (rm *resourceManager) getResources(resourceID string) (*resource, error) {
-	rm.registeredResourceMapLock.Lock()
-	defer rm.registeredResourceMapLock.Unlock()
+	rm.registeredResourceMapLock.RLock()
+	defer rm.registeredResourceMapLock.RUnlock()
 
 	r, ok := rm.registeredResourceMap[resourceID]
 	if !ok {
@@ -858,6 +860,7 @@ func (rm *resourceManager) launch(
 		blog.Errorf("crm: try launching service failed, resource(%s) user(%s): %v", resourceID, user, err)
 		return err
 	}
+	blog.Infof("crm: try launching service, resource(%s) for user(%s)", resourceID, user)
 
 	// specify city
 	originCity := r.param.City
@@ -907,7 +910,7 @@ func (rm *resourceManager) launch(
 	}
 
 	// 在启动协程前，将resource刷新到内存，其它协程依赖该数据
-	r.status = resourceStatusDeploying
+	// r.status = resourceStatusDeploying
 	rm.updateResourcesCache(r)
 
 	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
@@ -952,7 +955,10 @@ func (rm *resourceManager) realLaunch(
 	// TODO : 这个地方可能会导致资源泄漏（远程资源创建了，但是记录db失败，如果这时server重启，则没办法跟踪和释放）；
 	//        概率比较小，先不处理
 	r.status = resourceStatusDeploying
-	if err = rm.saveResources(r); err != nil {
+	rm.lockResource(resourceID)
+	err = rm.saveResources(r)
+	rm.unlockResource(resourceID)
+	if err != nil {
 		blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
 			resourceID, user, err)
 

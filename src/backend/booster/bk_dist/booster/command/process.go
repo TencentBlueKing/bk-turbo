@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	"github.com/shirou/gopsutil/process"
 	commandCli "github.com/urfave/cli"
@@ -167,7 +168,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 
 	controllerIP := ControllerIP
 	if c.Bool(FlagDashboard) {
-		if ipList := dcUtil.GetIPAddress(); len(ipList) > 0 {
+		if ipList := util.GetIPAddress(); len(ipList) > 0 {
 			controllerIP = ipList[0]
 		}
 	}

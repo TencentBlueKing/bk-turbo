@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import java.time.LocalDate
-import java.time.YearMonth
 
 @Service
 class ProjectResourcesService @Autowired constructor(
@@ -95,11 +94,9 @@ class ProjectResourcesService @Autowired constructor(
     }
 
     private fun checkDatesInMonth(month: String, start: LocalDate, end: LocalDate) {
-        val year = month.substring(0, 4).toInt()
-        val monthValue = month.substring(4).toInt()
-        val monthParam = YearMonth.of(year, monthValue).month
+        val monthDate = LocalDate.parse("${month.substring(0, 4)}-${month.substring(4, 6)}-01")
         // 归属月份需要在日期范围内，且开始日期不能大于结束日期，且结束日期不能大于当前日期
-        if (monthParam < start.month || monthParam > end.month || start > end || end > LocalDate.now()) {
+        if (monthDate.isBefore(start) || monthDate.isAfter(end) || start.isAfter(end)) {
             throw TurboException(
                 TURBO_PARAM_INVALID,
                 "The start and end dates are not within the month range of $month or start date is after end date."
