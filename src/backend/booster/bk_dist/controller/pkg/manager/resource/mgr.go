@@ -251,7 +251,11 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					Compresstype: dcProtocol.CompressLZ4,
 					Protocol:     "tcp",
 				}
-
+				if r.taskInfo.HostNameMap != nil {
+					if _, ok := r.taskInfo.HostNameMap[hostField[0]]; ok {
+						host.Name = r.taskInfo.HostNameMap[hostField[0]]
+					}
+				}
 				hosts = append(hosts, host)
 			}
 		}
