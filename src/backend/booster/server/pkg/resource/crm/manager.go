@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/rd"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
 	dcmac "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator/dc_mac"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -202,7 +201,7 @@ type resourceManager struct {
 	nodeInfoPool *op.NodeInfoPool
 
 	rscDetail []*rsc.RscDetails
-	appDetail []*rsc.AppDetails
+	//appDetail []*rsc.AppDetails
 }
 
 const (
@@ -414,7 +413,7 @@ func (rm *resourceManager) runRscDetailSync() {
 
 func (rm *resourceManager) logResourceStats() {
 	blog.Infof("crm: report resources(%s) following: %s", rm.conf.Operator, rm.nodeInfoPool.GetStats())
-	operator.PrintNoReadyInfo()
+	op.PrintNoReadyInfo()
 }
 
 func (rm *resourceManager) recover() error {
@@ -432,6 +431,7 @@ func (rm *resourceManager) recover() error {
 
 	rm.registeredResourceMap = make(map[string]*resource, 1000)
 	for _, r := range rl {
+		blog.Debugf("crm: recover resource(%s) status(%s)", r.resourceID, r.status.String())
 		if rm.conf.Operator == config.CRMOperatorK8S && rm.conf.InstanceType != nil {
 			isBelongToRm := false
 			for _, ist := range rm.conf.InstanceType {
@@ -659,6 +659,7 @@ func (rm *resourceManager) listResources(status ...resourceStatus) ([]*resource,
 	opts := commonMySQL.NewListOptions()
 	opts.In("status", status)
 	opts.Limit(-1)
+	opts.Gt("update_at", time.Now().Add(-24*time.Hour))
 	trl, _, err := rm.mysql.ListResource(opts)
 	if err != nil {
 		blog.Errorf("crm: list resources with status(%v) failed: %v", status, err)
@@ -768,10 +769,12 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 	return info, nil
 }
 
-func (rm *resourceManager) isServicePreparing(resourceID, user string) (bool, error) {
+func (rm *resourceManager) isServicePreparing(resourceID string) (bool, error) {
 	if !rm.running {
 		return false, ErrorManagerNotRunning
 	}
+	rm.lockResource(resourceID)
+	defer rm.unlockResource(resourceID)
 
 	r, err := rm.getResources(resourceID)
 	// if resource not exist, it's meet "no preparing"
@@ -1234,7 +1237,7 @@ func (hwu *handlerWithUser) GetServiceInfo(resourceID string) (*op.ServiceInfo, 
 
 // IsServicePreparing
 func (hwu *handlerWithUser) IsServicePreparing(resourceID string) (bool, error) {
-	return hwu.mgr.isServicePreparing(hwu.resourceID(resourceID), hwu.user)
+	return hwu.mgr.isServicePreparing(hwu.resourceID(resourceID))
 }
 
 // Release
