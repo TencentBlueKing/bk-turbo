@@ -11,6 +11,8 @@ replace (
 
 require (
 	github.com/bitly/go-simplejson v0.5.0
+	github.com/cespare/xxhash v1.1.0
+	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/coreos/etcd v3.3.25+incompatible
 	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/emicklei/go-restful v2.15.0+incompatible
@@ -42,7 +44,6 @@ require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/coreos/bbolt v1.3.2 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect

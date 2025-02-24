@@ -135,6 +135,12 @@ type BoosterWorks struct {
 
 	SearchToolchain  bool
 	IgnoreHttpStatus bool
+
+	ResultCacheList        []string
+	ResultCacheType        int
+	ResultCacheTriggleSecs int
+	ResultCacheIndexNum    int
+	ResultCacheFileNum     int
 }
 
 // BoosterTransport describe the transport data to controller

@@ -59,6 +59,9 @@ type ServerConfig struct {
 	DynamicPort bool `json:"dynamic_port" value:"false" usage:"if true, controller will listen dynamic port"`
 
 	WorkerOfferSlot bool `json:"worker_offer_slot" value:"false" usage:"if true, controller will get remote slot by worker offer"`
+
+	ResultCacheIndexNum int `json:"result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
+	ResultCacheFileNum  int `json:"result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
 }
 
 // CertConfig  configuration of Cert

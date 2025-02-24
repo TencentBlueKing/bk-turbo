@@ -51,7 +51,9 @@ let vue = new Vue({
         remote_error_avg_time: "0s",
         remote_compile_err_count: 0,
         remote_fatal_count: 0,
-        remote_fatal: []
+        remote_fatal: [],
+        tbs_direct_hit: 0,
+        tbs_preprocess_hit: 0
     },
     computed: {
         work_result: function () {
@@ -153,6 +155,18 @@ let vue = new Vue({
         },
         remote_fatal_without_timeout_count: function () {
             return this.remote_fatal_count-this.remote_fatal_timeout_count
+        },
+        tbs_direct_hit_var: function () {
+            return this.tbs_direct_hit
+        },
+        tbs_preprocess_hit_var: function () {
+            return this.tbs_preprocess_hit
+        },
+        tbs_miss_var: function () {
+            return this.work_data.job_remote_ok - this.tbs_direct_hit - this.tbs_preprocess_hit
+        },
+        tbs_hit_rate_var: function () {
+            return ((this.tbs_direct_hit + this.tbs_preprocess_hit) / this.work_data.job_remote_ok * 100).toFixed(2) + "%"
         }
     },
     methods: {
@@ -583,9 +597,20 @@ function calculate_jobs_data() {
     let remote_fatal_count = 0
     let remote_fatal = []
 
+    let tbs_direct_hit = 0
+    let tbs_preprocess_hit = 0
+
     let time
     for (let i = 0; i < vue.jobs_data.length; i++) {
         let data = vue.jobs_data[i]
+
+        if ('tbs_preprocess_hit' in data && data.tbs_preprocess_hit) {
+            tbs_preprocess_hit += 1
+        }
+
+        if ('tbs_direct_hit' in data && data.tbs_direct_hit) {
+            tbs_direct_hit += 1
+        }
 
         if (data.remote_work_start_time > 0 && !data.remote_work_success) {
             remote_fatal_count += 1
@@ -820,6 +845,10 @@ function calculate_jobs_data() {
             }
         }
     }
+
+    // tbs hit
+    vue.tbs_direct_hit = tbs_direct_hit
+    vue.tbs_preprocess_hit = tbs_preprocess_hit
 
     // fatal
     vue.remote_compile_err_count = remote_compile_err_count

@@ -76,6 +76,9 @@ const (
 	KeyExecutorUELinkLocalCPUWeight    = "UE_LINK_LOCAL_CPU_WEIGHT"
 	KeyExecutorUEShaderLocalCPUWeight  = "UE_SHADER_LOCAL_CPU_WEIGHT"
 	KeyExecutorIgnoreHttpStatus        = "IGNORE_HTTP_STATUS"
+	KeyExecutorResultCacheType         = "RESULT_CACHE_TYPE"
+	KeyExecutorResultCacheTriggleSecs  = "RESULT_CACHE_TRIGGLE_SECS"
+	KeyExecutorHasResultIndex          = "HAS_RESULT_INDEX"
 
 	KeyUserDefinedLogLevel         = "USER_DEFINED_LOG_LEVEL"
 	KeyUserDefinedExecutorLogLevel = "USER_DEFINED_EXECUTOR_LOG_LEVEL"

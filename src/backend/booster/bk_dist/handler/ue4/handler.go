@@ -61,16 +61,19 @@ func NewUE4() (handler.Handler, error) {
 // UE4 定义了ue4场景下的各类子场景总和,
 // 包含了win/mac/linux平台下的c/c++代码编译, 链接, shader编译等
 type UE4 struct {
-	sandbox      *dcSyscall.Sandbox
-	innerhandler handler.Handler
+	sandbox                  *dcSyscall.Sandbox
+	innerhandler             handler.Handler
+	innerhandlersanboxinited bool
 }
 
 // InitSandbox set sandbox to ue4 scene handler
 func (u *UE4) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	u.sandbox = sandbox
-	if u.innerhandler != nil {
-		u.innerhandler.InitSandbox(sandbox)
-	}
+	// if u.innerhandler != nil && !u.innerhandlersanboxinited {
+	// 	u.innerhandler.InitSandbox(sandbox)
+	// 	u.innerhandlersanboxinited = true
+	// }
+	u.initInnerHandleSanbox()
 }
 
 // InitExtra no need
@@ -155,9 +158,10 @@ func (u *UE4) CanExecuteWithLocalIdleResource(command []string) bool {
 		u.initInnerHandle(command)
 	}
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.CanExecuteWithLocalIdleResource(command)
 	}
 
@@ -180,9 +184,10 @@ func (u *UE4) PreLockWeight(command []string) int32 {
 		u.initInnerHandle(command)
 	}
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.PreLockWeight(command)
 	}
 	return 1
@@ -198,9 +203,10 @@ func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistC
 	u.initInnerHandle(command)
 
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.PreExecute(command)
 	}
 
@@ -251,6 +257,13 @@ func (u *UE4) initInnerHandle(command []string) {
 			u.innerhandler = link.NewTaskLink()
 			blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
 		}
+	}
+}
+
+func (u *UE4) initInnerHandleSanbox() {
+	if u.innerhandler != nil && !u.innerhandlersanboxinited && u.sandbox != nil {
+		u.innerhandler.InitSandbox(u.sandbox)
+		u.innerhandlersanboxinited = true
 	}
 }
 
@@ -331,9 +344,10 @@ func (u *UE4) LocalLockWeight(command []string) int32 {
 	}
 
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.LocalLockWeight(command)
 	}
 
@@ -354,4 +368,31 @@ func (u *UE4) FinalExecute(args []string) {
 	if u.innerhandler != nil {
 		u.innerhandler.FinalExecute(args)
 	}
+}
+
+// SupportResultCache check whether this command support result cache
+func (u *UE4) SupportResultCache(command []string) int {
+	if u.innerhandler == nil {
+		u.initInnerHandle(command)
+	}
+
+	if u.innerhandler != nil {
+		u.initInnerHandleSanbox()
+		return u.innerhandler.SupportResultCache(command)
+	}
+
+	return 0
+}
+
+func (u *UE4) GetResultCacheKey(command []string) string {
+	if u.innerhandler == nil {
+		u.initInnerHandle(command)
+	}
+
+	if u.innerhandler != nil {
+		u.initInnerHandleSanbox()
+		return u.innerhandler.GetResultCacheKey(command)
+	}
+
+	return ""
 }

@@ -196,6 +196,8 @@ func (h *ShaderTool) getControllerConfig() dcSDK.ControllerConfig {
 		DynamicPort:         h.settings.ControllerDynamicPort,
 		WorkerOfferSlot:     h.settings.ControllerWorkerOfferSlot,
 		UseLocalCPUPercent:  h.settings.ControllerUseLocalCPUPercent,
+		ResultCacheIndexNum: h.settings.ControllerResultCacheIndexNum,
+		ResultCacheFileNum:  h.settings.ControllerResultCacheFileNum,
 	}
 
 	return *h.controllerconfig
@@ -711,6 +713,7 @@ func (h *ShaderTool) newBooster() (*pkg.Booster, error) {
 			MaxLocalPreJobs:   h.settings.MaxLocalPreJobs,
 			MaxLocalExeJobs:   h.settings.MaxLocalExeJobs,
 			MaxLocalPostJobs:  h.settings.MaxLocalPostJobs,
+			ResultCacheList:   h.settings.ResultCacheList,
 		},
 
 		Transport: dcType.BoosterTransport{
