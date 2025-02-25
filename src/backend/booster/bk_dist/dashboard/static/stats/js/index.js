@@ -172,6 +172,14 @@ let vue = new Vue({
             }
         },
         tbs_hit_rate_var: function () {
+            if (this.tbs_hit_index <= 0) {
+                if (this.tbs_direct_hit + this.tbs_preprocess_hit > 0) {
+                    return "100.00%"
+                } else {
+                    return "0.00%"
+                }
+            }
+
             let hit_rate = (this.tbs_direct_hit + this.tbs_preprocess_hit) / this.tbs_hit_index * 100
             if (hit_rate >= 100.00) {
                 return "100.00%"
