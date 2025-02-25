@@ -164,7 +164,7 @@ let vue = new Vue({
             return this.tbs_preprocess_hit
         },
         tbs_miss_var: function () {
-            let tbs_miss = this.work_data.tbs_hit_index - this.tbs_direct_hit - this.tbs_preprocess_hit
+            let tbs_miss = this.tbs_hit_index - this.tbs_direct_hit - this.tbs_preprocess_hit
             if (tbs_miss <= 0) {
                 return 0
             } else {
@@ -172,7 +172,7 @@ let vue = new Vue({
             }
         },
         tbs_hit_rate_var: function () {
-            let hit_rate = (this.tbs_direct_hit + this.tbs_preprocess_hit) / this.work_data.tbs_hit_index * 100
+            let hit_rate = (this.tbs_direct_hit + this.tbs_preprocess_hit) / this.tbs_hit_index * 100
             if (hit_rate >= 100.00) {
                 return "100.00%"
             } else {
