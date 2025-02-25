@@ -100,7 +100,7 @@ func (h *Handle4ReportResultCache) Handle(
 				groupid := record.GetStringByKey(resultcache.GroupKey)
 				resultcache.GetInstance(config.GlobalResultCacheDir,
 					config.GlobalMaxFileNumber,
-					config.GlobalMaxIndexNumber).PutResult(groupid, hashstr, rs)
+					config.GlobalMaxIndexNumber).PutResult(groupid, hashstr, rs, record)
 			}
 		}
 	}

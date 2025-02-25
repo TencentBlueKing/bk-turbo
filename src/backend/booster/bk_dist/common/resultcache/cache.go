@@ -22,7 +22,7 @@ import (
 type ResultCacheMgr interface {
 	// 文件
 	GetResult(groupkey, resultkey string, needUnzip bool) ([]*Result, error)
-	PutResult(groupkey, resultkey string, rs []*Result) error
+	PutResult(groupkey, resultkey string, rs []*Result, record Record) error
 
 	// 索引
 	GetRecordGroup(key string) ([]byte, error)
@@ -44,8 +44,7 @@ var (
 
 type ResultCache struct {
 	indexmgr IndexMgr
-
-	filemgr FileMgr
+	filemgr  FileMgr
 }
 
 func GetInstance(localdir string, maxFileNum, maxIndexNum int) ResultCacheMgr {
@@ -85,12 +84,12 @@ func (rc *ResultCache) GetResult(groupkey, resultkey string, needUnzip bool) ([]
 	return rc.filemgr.GetResult(groupkey, resultkey, needUnzip)
 }
 
-func (rc *ResultCache) PutResult(groupkey, resultkey string, rs []*Result) error {
+func (rc *ResultCache) PutResult(groupkey, resultkey string, rs []*Result, record Record) error {
 	if len(rs) == 0 {
 		return nil
 	}
 
-	return rc.filemgr.PutResult(groupkey, resultkey, rs)
+	return rc.filemgr.PutResult(groupkey, resultkey, rs, record)
 }
 
 func (rc *ResultCache) GetRecordGroup(key string) ([]byte, error) {

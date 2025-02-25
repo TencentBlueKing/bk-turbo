@@ -24,13 +24,14 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 	"github.com/cespare/xxhash/v2"
 )
 
 type FileMgr interface {
 	Init()
 	GetResult(groupkey, resultkey string, needUnzip bool) ([]*Result, error)
-	PutResult(groupkey, resultkey string, rs []*Result) error
+	PutResult(groupkey, resultkey string, rs []*Result, record Record) error
 }
 
 type FileMgrWithARC struct {
@@ -43,6 +44,10 @@ type FileMgrWithARC struct {
 	// 保存需要删除的文件
 	deleteMutex  sync.RWMutex
 	deletedFiles map[string]time.Time
+
+	// 文件目录读写锁
+	fileDirLock  sync.RWMutex
+	fileDirLocks map[string]*sync.RWMutex
 }
 
 const (
@@ -51,6 +56,8 @@ const (
 	DeleteFlag     = "deleted_flag"
 	CheckTick      = 300 * time.Second
 	DeleteDuration = 30 * time.Minute
+
+	RecordFileName = "record.json"
 )
 
 func NewFileMgrWithARC(filedir string, num int) FileMgr {
@@ -62,6 +69,7 @@ func NewFileMgrWithARC(filedir string, num int) FileMgr {
 		filedir:      filedir,
 		arc:          NewARC(num),
 		deletedFiles: make(map[string]time.Time),
+		fileDirLocks: make(map[string]*sync.RWMutex),
 	}
 }
 
@@ -148,13 +156,15 @@ func (f *FileMgrWithARC) onPutARC(key string) {
 func (f *FileMgrWithARC) deleteDir(dir string) {
 	blog.Infof("FileMgrWithARC:ready delete dir %s", dir)
 	if file.Stat(dir).Exist() {
-		newname := fmt.Sprintf("%s_%s", dir, DeleteFlag)
+		newname := fmt.Sprintf("%s_%s_%d_%s", dir, util.RandomString(8), time.Now().UnixNano(), DeleteFlag)
 		err := os.Rename(dir, newname)
 		blog.Infof("FileMgrWithARC: rename %s to %s with error:%v", dir, newname, err)
 		if err == nil {
 			f.addDelete(newname)
 		}
 	}
+
+	f.deleteDirLock(dir)
 }
 
 func (f *FileMgrWithARC) addDelete(key string) {
@@ -327,6 +337,12 @@ func (fmgr *FileMgrWithARC) GetResult(groupkey, resultkey string, needUnzip bool
 		return nil, err
 	}
 
+	dirlock := fmgr.getDirLock(dir)
+	if dirlock != nil {
+		dirlock.RLock()
+		defer dirlock.RUnlock()
+	}
+
 	f, err := os.Open(dir)
 	if err != nil {
 		blog.Warnf("FileMgrWithARC: failed to open dir %s with error:%v", dir, err)
@@ -338,6 +354,9 @@ func (fmgr *FileMgrWithARC) GetResult(groupkey, resultkey string, needUnzip bool
 	rs := make([]*Result, 0, len(fis))
 	for _, fi := range fis {
 		f := filepath.Join(dir, fi.Name())
+		if strings.HasSuffix(f, RecordFileName) {
+			continue
+		}
 		r := ToResult(f, needUnzip)
 		if r != nil {
 			rs = append(rs, r)
@@ -349,7 +368,7 @@ func (fmgr *FileMgrWithARC) GetResult(groupkey, resultkey string, needUnzip bool
 	return rs, nil
 }
 
-func (fmgr *FileMgrWithARC) PutResult(groupkey, resultkey string, rs []*Result) error {
+func (fmgr *FileMgrWithARC) PutResult(groupkey, resultkey string, rs []*Result, record Record) error {
 	dir, err := getDir(fmgr.filedir, groupkey, resultkey)
 	if err != nil {
 		blog.Warnf("FileMgrWithARC: get dir by group key %s result key: %s with error:%v",
@@ -357,12 +376,25 @@ func (fmgr *FileMgrWithARC) PutResult(groupkey, resultkey string, rs []*Result) 
 		return err
 	}
 
-	os.RemoveAll(dir)
-	if !dcFile.Stat(dir).Exist() {
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			blog.Warnf("FileMgrWithARC: create dir %s with error:%v", dir, err)
-			return err
-		}
+	// 同一个hashkey，保留一份结果就够了
+	if dcFile.Stat(dir).Exist() {
+		return nil
+	}
+
+	dirlock := fmgr.getDirLock(dir)
+	if dirlock != nil {
+		dirlock.Lock()
+		defer dirlock.Unlock()
+	}
+
+	// 同一个hashkey，保留一份结果就够了
+	if dcFile.Stat(dir).Exist() {
+		return nil
+	}
+
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		blog.Warnf("FileMgrWithARC: create dir %s with error:%v", dir, err)
+		return err
 	}
 
 	for _, r := range rs {
@@ -372,7 +404,60 @@ func (fmgr *FileMgrWithARC) PutResult(groupkey, resultkey string, rs []*Result) 
 		}
 	}
 
+	// 额外存储来源信息
+	if record != nil {
+		saveRecordFile(dir, record.ToString())
+	}
+
 	go fmgr.onPutARC(dir)
+
+	return nil
+}
+
+func saveRecordFile(dir string, data string) error {
+	if data == "" {
+		return nil
+	}
+
+	fp := filepath.Join(dir, RecordFileName)
+	f, err := os.Create(fp)
+	if err != nil {
+		blog.Errorf("FileMgrWithARC: create file %s error: %v", fp, err)
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write([]byte(data))
+	if err != nil {
+		blog.Errorf("FileMgrWithARC: save file [%s] error: %v", fp, err)
+		return err
+	}
+
+	blog.Infof("FileMgrWithARC: succeed save file %s", fp)
+	return nil
+}
+
+func (fmgr *FileMgrWithARC) getDirLock(dir string) *sync.RWMutex {
+	fmgr.fileDirLock.Lock()
+	onedirlock, ok := fmgr.fileDirLocks[dir]
+	if !ok {
+		onedirlock = new(sync.RWMutex)
+		fmgr.fileDirLocks[dir] = onedirlock
+		blog.Infof("FileMgrWithARC: generate lock for dir %s", dir)
+	}
+	fmgr.fileDirLock.Unlock()
+
+	return onedirlock
+}
+
+func (fmgr *FileMgrWithARC) deleteDirLock(dir string) error {
+	fmgr.fileDirLock.Lock()
+	_, ok := fmgr.fileDirLocks[dir]
+	if ok {
+		delete(fmgr.fileDirLocks, dir)
+		blog.Infof("FileMgrWithARC: delete lock for dir %s", dir)
+	}
+	fmgr.fileDirLock.Unlock()
 
 	return nil
 }

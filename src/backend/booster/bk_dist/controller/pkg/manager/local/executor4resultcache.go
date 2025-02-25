@@ -331,14 +331,6 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 
 		// local cache
 		if e.localCacheEnabled() && (e.hitLocalIndex || remoteTooLong) {
-			// report result files
-			if e.preprocessResultKey != "" {
-				err := e.putLocalResultFiles(r)
-				if err != nil {
-					blog.Infof("executor cache: put result file to local with error:%v", err)
-				}
-			}
-
 			// report result index
 			record[resultcache.GroupKey] = e.cacheGroupKey
 			record[resultcache.CommandKey] = e.commandKey
@@ -352,6 +344,14 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			err := resultcache.GetInstance("", e.localFileNum, e.localIndexNum).PutRecord(record)
 			if err != nil {
 				blog.Infof("executor cache: put result index to local with error:%v", err)
+			}
+
+			// report result files
+			if e.preprocessResultKey != "" {
+				err := e.putLocalResultFiles(r, record)
+				if err != nil {
+					blog.Infof("executor cache: put result file to local with error:%v", err)
+				}
 			}
 		}
 
@@ -379,7 +379,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 	return nil
 }
 
-func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult) error {
+func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult, record resultcache.Record) error {
 	if len(r.Results) != 1 {
 		return nil
 	}
@@ -398,7 +398,7 @@ func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult) error {
 	}
 
 	err := resultcache.GetInstance("", e.localFileNum, e.localIndexNum).
-		PutResult(e.cacheGroupKey, e.preprocessResultKey, rs)
+		PutResult(e.cacheGroupKey, e.preprocessResultKey, rs, record)
 	return err
 }
 

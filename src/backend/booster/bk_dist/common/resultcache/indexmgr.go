@@ -364,7 +364,7 @@ func (t *IndexMgrWithARC) GetRecordGroup(key string) ([]byte, error) {
 }
 
 const (
-	indexSuffix = ".txt"
+	indexSuffix = ".json"
 )
 
 func (t *IndexMgrWithARC) save(rg *RecordGroup) error {
