@@ -90,6 +90,10 @@ func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecut
 	}
 
 	if e.cacheEnabled() {
+		if e.hitLocalIndex || e.hitRemoteIndex {
+			e.req.Stats.TBSHitIndex = true
+		}
+
 		e.preprocessResultKey = e.handler.GetResultCacheKey(e.req.Commands)
 		if e.preprocessResultKey == "" {
 			blog.Debugf("executor cache: preprocessResultKey is empty when get cache, do nothing")

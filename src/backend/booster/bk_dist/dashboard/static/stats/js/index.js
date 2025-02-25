@@ -52,6 +52,7 @@ let vue = new Vue({
         remote_compile_err_count: 0,
         remote_fatal_count: 0,
         remote_fatal: [],
+        tbs_hit_index: 0,
         tbs_direct_hit: 0,
         tbs_preprocess_hit: 0
     },
@@ -163,10 +164,20 @@ let vue = new Vue({
             return this.tbs_preprocess_hit
         },
         tbs_miss_var: function () {
-            return this.work_data.job_remote_ok - this.tbs_direct_hit - this.tbs_preprocess_hit
+            let tbs_miss = this.work_data.tbs_hit_index - this.tbs_direct_hit - this.tbs_preprocess_hit
+            if (tbs_miss <= 0) {
+                return 0
+            } else {
+                return tbs_miss
+            }
         },
         tbs_hit_rate_var: function () {
-            return ((this.tbs_direct_hit + this.tbs_preprocess_hit) / this.work_data.job_remote_ok * 100).toFixed(2) + "%"
+            let hit_rate = (this.tbs_direct_hit + this.tbs_preprocess_hit) / this.work_data.tbs_hit_index * 100
+            if (hit_rate >= 100.00) {
+                return "100.00%"
+            } else {
+                return hit_rate.toFixed(2) + "%"
+            }
         }
     },
     methods: {
@@ -597,12 +608,17 @@ function calculate_jobs_data() {
     let remote_fatal_count = 0
     let remote_fatal = []
 
+    let tbs_hit_index = 0
     let tbs_direct_hit = 0
     let tbs_preprocess_hit = 0
 
     let time
     for (let i = 0; i < vue.jobs_data.length; i++) {
         let data = vue.jobs_data[i]
+
+        if ('tbs_hit_index' in data && data.tbs_hit_index) {
+            tbs_hit_index += 1
+        }
 
         if ('tbs_preprocess_hit' in data && data.tbs_preprocess_hit) {
             tbs_preprocess_hit += 1
@@ -847,6 +863,7 @@ function calculate_jobs_data() {
     }
 
     // tbs hit
+    vue.tbs_hit_index = tbs_hit_index
     vue.tbs_direct_hit = tbs_direct_hit
     vue.tbs_preprocess_hit = tbs_preprocess_hit
 

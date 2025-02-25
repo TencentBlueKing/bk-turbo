@@ -299,6 +299,7 @@ type ControllerJobStats struct {
 	LocalWorkStartTime  StatsTime `json:"local_work_start_time"`
 	LocalWorkEndTime    StatsTime `json:"local_work_end_time"`
 
+	TBSHitIndex      bool `json:"tbs_hit_index"`
 	TBSDirectHit     bool `json:"tbs_direct_hit"`
 	TBSPreprocessHit bool `json:"tbs_preprocess_hit"`
 }
