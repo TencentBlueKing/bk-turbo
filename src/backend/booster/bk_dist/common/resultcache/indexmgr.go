@@ -115,7 +115,7 @@ func (r Record) EqualByKey(another Record, key string) bool {
 	return myvalue == anothervalue
 }
 
-func (r Record) GreaterIntByKey(another Record, key string) bool {
+func (r Record) GreaterEqualIntByKey(another Record, key string) bool {
 	if another == nil {
 		return false
 	}
@@ -141,7 +141,7 @@ func (r Record) GreaterIntByKey(another Record, key string) bool {
 		return false
 	}
 
-	return myvalue > anothervalue
+	return myvalue >= anothervalue
 }
 
 func (r *Record) ToString() string {
@@ -221,7 +221,7 @@ func (rg *RecordGroup) HitIndex(record Record) (bool, error) {
 
 	for _, v := range rg.Group {
 		if record.EqualByKey(*v, CommandKey) {
-			if v.GreaterIntByKey(record, RemoteExecuteTimeKey) {
+			if v.GreaterEqualIntByKey(record, RemoteExecuteTimeKey) {
 				return true, nil
 			}
 			break

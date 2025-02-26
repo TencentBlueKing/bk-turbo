@@ -690,8 +690,8 @@ func (m *Mgr) getLocalResultCacheIndex() {
 		m.resultdata.localGroupRecord, _ = resultcache.ToRecordGroup(data)
 		m.resultdata.lock.Unlock()
 
-		blog.Infof("local: got local group record:[%s] with key:%s",
-			m.resultdata.localGroupRecord.ToString(), m.resultdata.groupKey)
+		// blog.Infof("local: got local group record:[%s] with key:%s",
+		// 	m.resultdata.localGroupRecord.ToString(), m.resultdata.groupKey)
 	}
 }
 
@@ -713,8 +713,8 @@ func (m *Mgr) getRemoteResultCacheIndex(key string, host *protocol.Host) {
 				m.resultdata.remoteGroupRecord[key] = oneGroupRecord
 				m.resultdata.lock.Unlock()
 			}
-			blog.Infof("local: got one remote group record:[%s] with key:%s from host:%s",
-				oneGroupRecord.ToString(), m.resultdata.groupKey, key)
+			// blog.Infof("local: got one remote group record:[%s] with key:%s from host:%s",
+			// 	oneGroupRecord.ToString(), m.resultdata.groupKey, key)
 		}
 	}
 }
@@ -741,28 +741,6 @@ func (m *Mgr) hitRemoteIndex(command string, record resultcache.Record) (bool, e
 
 	return groupRecord.HitIndex(record)
 }
-
-// func (m *Mgr) hitLocalResult(record resultcache.Record) (bool, error) {
-// 	m.resultdata.lock.RLock()
-// 	defer m.resultdata.lock.RUnlock()
-
-// 	if m.resultdata.localGroupRecord == nil {
-// 		return false, nil
-// 	}
-
-// 	return m.resultdata.localGroupRecord.HitResult(record)
-// }
-
-// func (m *Mgr) hitRemoteResult(record resultcache.Record) (bool, error) {
-// 	m.resultdata.lock.RLock()
-// 	defer m.resultdata.lock.RUnlock()
-
-// 	if m.resultdata.remoteGroupRecord == nil {
-// 		return false, nil
-// 	}
-
-// 	return m.resultdata.remoteGroupRecord.HitResult(record)
-// }
 
 func (m *Mgr) getRemoteResultCacheFile(
 	command string,
