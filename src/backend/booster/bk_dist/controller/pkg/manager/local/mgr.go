@@ -383,13 +383,14 @@ func (m *Mgr) ExecuteTask(
 	// TODO : try to query cache if enabled and with preprocess
 	// 需要handle提供cache的key，从c的ResultFiles获取预期的结果列表
 	// 如果cache查询到了，则按预期的结果列表保存
-	cacheresult := e.getCacheResult(c)
+	cacheresult, fromlocal := e.getCacheResult(c)
 	if cacheresult != nil {
 		blog.Infof("local: success to execute task by query cache for work(%s)"+
 			" from pid(%d) in env(%v) dir(%s)",
 			m.work.ID(),
 			req.Pid, req.Environments, req.Dir)
 		req.Stats.TBSPreprocessHit = true
+		go e.putHitRecord(fromlocal)
 		return cacheresult, nil
 	}
 
@@ -770,7 +771,7 @@ func (m *Mgr) getRemoteResultCacheFile(
 
 	host := m.resultdata.getHost(command)
 	if host == nil {
-		return nil, nil
+		return nil, fmt.Errorf("not found any host")
 	}
 
 	if m.resultdata.remoteWorker != nil {
@@ -791,7 +792,7 @@ func (m *Mgr) getRemoteResultCacheFile(
 		return result, err
 	}
 
-	return nil, nil
+	return nil, fmt.Errorf("not got result")
 }
 
 func (m *Mgr) reportRemoteResultCache(

@@ -83,10 +83,12 @@ func (e *executor) cacheEnabled() bool {
 	return e.localCacheEnabled() || e.remoteCacheEnabled()
 }
 
-func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
+func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) (*types.LocalTaskExecuteResult, bool) {
 	blog.Debugf("executor cache: ready get cache result now")
+
+	fromlocal := false
 	if len(c.Commands) != 1 {
-		return nil
+		return nil, fromlocal
 	}
 
 	if e.cacheEnabled() {
@@ -97,13 +99,14 @@ func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecut
 		e.preprocessResultKey = e.handler.GetResultCacheKey(e.req.Commands)
 		if e.preprocessResultKey == "" {
 			blog.Debugf("executor cache: preprocessResultKey is empty when get cache, do nothing")
-			return nil
+			return nil, fromlocal
 		}
 
 		if e.localCacheEnabled() {
 			result := e.getLocalResultFiles(c)
 			if result != nil {
-				return result
+				fromlocal = true
+				return result, fromlocal
 			}
 		}
 
@@ -111,12 +114,13 @@ func (e *executor) getCacheResult(c *dcSDK.BKDistCommand) *types.LocalTaskExecut
 		if e.remoteCacheEnabled() {
 			result := e.getRemoteResultFiles(c)
 			if result != nil {
-				return result
+				fromlocal = false
+				return result, fromlocal
 			}
 		}
 	}
 
-	return nil
+	return nil, fromlocal
 }
 
 func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
@@ -207,7 +211,7 @@ func (e *executor) getLocalResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskE
 func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTaskExecuteResult {
 	blog.Debugf("executor cache: ready get remote result files now")
 	rs, err := e.mgr.getRemoteResultCacheFile(e.commandKey, e.cacheGroupKey, e.preprocessResultKey)
-	if err != nil {
+	if err != nil || rs == nil {
 		return nil
 	}
 
@@ -308,6 +312,22 @@ func (e *executor) getRemoteResultFiles(c *dcSDK.BKDistCommand) *types.LocalTask
 	}
 }
 
+func (e *executor) getRecord() resultcache.Record {
+	record := resultcache.Record{}
+
+	record[resultcache.GroupKey] = e.cacheGroupKey
+	record[resultcache.CommandKey] = e.commandKey
+	record[resultcache.RemoteExecuteTimeKey] = strconv.Itoa(e.remoteExecuteSecs)
+	if e.preprocessResultKey != "" {
+		record[resultcache.ResultKey] = e.preprocessResultKey
+	}
+	record[resultcache.MachineIDKey] = e.resultdata.uniqID
+	record[resultcache.UserKey] = e.resultdata.user
+	record[resultcache.IPKey] = e.resultdata.ip
+
+	return record
+}
+
 // 1. 如果在index里面，则一定需要上报到cache
 // 2. 如果不在index里面，则判断是否符合上报条件（比如远程执行时间）
 // 3. 如果result key为空，则无需上报结果文件；否则，需要上报index和结果文件
@@ -331,23 +351,15 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 
 		// local cache
 		if e.localCacheEnabled() && (e.hitLocalIndex || remoteTooLong) {
-			// report result index
-			record[resultcache.GroupKey] = e.cacheGroupKey
-			record[resultcache.CommandKey] = e.commandKey
-			record[resultcache.RemoteExecuteTimeKey] = strconv.Itoa(e.remoteExecuteSecs)
-			if e.preprocessResultKey != "" {
-				record[resultcache.ResultKey] = e.preprocessResultKey
-			}
-			record[resultcache.MachineIDKey] = e.resultdata.uniqID
-			record[resultcache.UserKey] = e.resultdata.user
-			record[resultcache.IPKey] = e.resultdata.ip
+			record = e.getRecord()
+
 			err := resultcache.GetInstance("", e.localFileNum, e.localIndexNum).PutRecord(record)
 			if err != nil {
 				blog.Infof("executor cache: put result index to local with error:%v", err)
 			}
 
 			// report result files
-			if e.preprocessResultKey != "" {
+			if e.preprocessResultKey != "" && r != nil {
 				err := e.putLocalResultFiles(r, record)
 				if err != nil {
 					blog.Infof("executor cache: put result file to local with error:%v", err)
@@ -358,21 +370,41 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 		// remote cache
 		if e.remoteCacheEnabled() && (e.hitRemoteIndex || remoteTooLong) {
 			if len(record) == 0 {
-				record[resultcache.GroupKey] = e.cacheGroupKey
-				record[resultcache.CommandKey] = e.commandKey
-				record[resultcache.RemoteExecuteTimeKey] = strconv.Itoa(e.remoteExecuteSecs)
-				if e.preprocessResultKey != "" {
-					record[resultcache.ResultKey] = e.preprocessResultKey
-				}
-				record[resultcache.MachineIDKey] = e.resultdata.uniqID
-				record[resultcache.UserKey] = e.resultdata.user
-				record[resultcache.IPKey] = e.resultdata.ip
+				record = e.getRecord()
 			}
 
 			err := e.putRemoteResult(r, record)
 			if err != nil {
 				blog.Infof("executor cache: put result file to remote with error:%v", err)
 			}
+		}
+	}
+
+	return nil
+}
+
+// 命中缓存后上报record信息，用于远端淘汰策略刷新，防止该结果被淘汰
+func (e *executor) putHitRecord(fromlocal bool) error {
+	record := resultcache.Record{}
+
+	// local cache
+	if fromlocal {
+		record = e.getRecord()
+		record[resultcache.HitResultKey] = "true"
+
+		err := resultcache.GetInstance("", e.localFileNum, e.localIndexNum).PutRecord(record)
+		if err != nil {
+			blog.Infof("executor cache: put result index to local with error:%v", err)
+			return err
+		}
+	} else {
+		record = e.getRecord()
+		record[resultcache.HitResultKey] = "true"
+
+		err := e.putRemoteResult(nil, record)
+		if err != nil {
+			blog.Infof("executor cache: put result file to remote with error:%v", err)
+			return err
 		}
 	}
 
@@ -405,12 +437,8 @@ func (e *executor) putLocalResultFiles(r *dcSDK.BKDistResult, record resultcache
 func (e *executor) putRemoteResult(r *dcSDK.BKDistResult, record resultcache.Record) error {
 	blog.Debugf("executor cache: ready put record:%v to remote now", record)
 
-	if len(r.Results) != 1 {
-		return nil
-	}
-
 	var err error
-	if e.preprocessResultKey != "" {
+	if e.preprocessResultKey != "" && r != nil && len(r.Results) == 1 {
 		// 保存结果数据到cache
 		resultlen := len(r.Results[0].ResultFiles)
 		rs := make([]*dcSDK.FileDesc, 0, resultlen)

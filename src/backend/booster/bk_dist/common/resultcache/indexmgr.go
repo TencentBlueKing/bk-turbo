@@ -39,6 +39,7 @@ const (
 	MachineIDKey         = "machine_id_key"
 	UserKey              = "user_key"
 	IPKey                = "ip_key"
+	HitResultKey         = "hit_result_key"
 )
 
 const (
@@ -302,6 +303,14 @@ func (t *IndexMgrWithARC) PutRecord(record Record) error {
 	if !record.Valid() {
 		blog.Infof("IndexMgrWithARC: record:%v is invalid", record)
 		return ErrorRecordInvalid
+	}
+
+	// 如果命中了结果，则只刷新淘汰算法，不更新实际内容
+	hitresult, ok := record[HitResultKey]
+	if ok && hitresult == "true" {
+		go t.onPutARC(record.GetARCKey())
+		blog.Infof("IndexMgrWithARC: record:%v hit result file,only fresh elimination strategy", record)
+		return nil
 	}
 
 	v, _ := record[GroupKey]
