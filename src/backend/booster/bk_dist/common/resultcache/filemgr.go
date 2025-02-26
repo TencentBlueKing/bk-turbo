@@ -57,7 +57,7 @@ const (
 	CheckTick      = 300 * time.Second
 	DeleteDuration = 30 * time.Minute
 
-	RecordFileName = "record.json"
+	RecordFileName = "tbs_command_record.json"
 )
 
 func NewFileMgrWithARC(filedir string, num int) FileMgr {
