@@ -273,7 +273,7 @@ func ToRecordGroup(data []byte) (*RecordGroup, error) {
 		return nil, ErrorRecordInvalid
 	}
 
-	return nil, nil
+	return nil, ErrorRecordInvalid
 }
 
 // IndexMgrWithARC

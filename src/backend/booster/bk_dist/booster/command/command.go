@@ -488,7 +488,7 @@ var (
 		},
 		commandCli.IntFlag{
 			Name:  "result_cache_type",
-			Usage: "use which result cache type,0:no cache,1:local cache,2:remote cache,3:both",
+			Usage: "use which result cache type, 0:no cache, 1:local cache, 2:remote cache, 3:both",
 		},
 		commandCli.IntFlag{
 			Name:  "result_cache_triggle_secs",

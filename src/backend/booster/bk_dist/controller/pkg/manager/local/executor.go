@@ -159,7 +159,7 @@ func (e *executor) skipLocalRetry() bool {
 }
 
 func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
-	// blog.Infof("executor: try to execute pre-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor: try to execute pre-task from pid(%d)", e.req.Pid)
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.PreWorkEnterTime)

@@ -713,6 +713,8 @@ func (m *Mgr) getRemoteResultCacheIndex(key string, host *protocol.Host) {
 				m.resultdata.remoteGroupRecord[key] = oneGroupRecord
 				m.resultdata.lock.Unlock()
 			}
+			blog.Infof("local: got one remote group record len:[%d] with key:%s from host:%s",
+				len(result.ResultIndex), m.resultdata.groupKey, key)
 			// blog.Infof("local: got one remote group record:[%s] with key:%s from host:%s",
 			// 	oneGroupRecord.ToString(), m.resultdata.groupKey, key)
 		}

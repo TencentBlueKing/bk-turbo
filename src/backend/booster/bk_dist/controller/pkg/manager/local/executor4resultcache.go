@@ -65,10 +65,10 @@ func (e *executor) initResultCacheInfo(groupkey string, remoteTriggleSecs int) {
 
 	blog.Infof("executor cache: got cache type:%d,cache group key:%s,command:[%s],"+
 		"hitLocalIndex:%v,hitRemoteIndex:%v,"+
-		"remoteTriggleSecs:%d",
+		"remoteTriggleSecs:%d from pid(%d)",
 		e.cacheType, e.cacheGroupKey, e.commandKey,
 		e.hitLocalIndex, e.hitRemoteIndex,
-		e.remoteTriggleSecs)
+		e.remoteTriggleSecs, e.req.Pid)
 }
 
 func (e *executor) localCacheEnabled() bool {
@@ -360,6 +360,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 
 			// report result files
 			if e.preprocessResultKey != "" && r != nil {
+				blog.Debugf("executor cache: ready put cache result now, record:%v, enable:%v ,hit:%v,long:%v", record, e.localCacheEnabled(), e.hitLocalIndex, remoteTooLong)
 				err := e.putLocalResultFiles(r, record)
 				if err != nil {
 					blog.Infof("executor cache: put result file to local with error:%v", err)
@@ -372,7 +373,7 @@ func (e *executor) putCacheResult(r *dcSDK.BKDistResult, stat *dcSDK.ControllerJ
 			if len(record) == 0 {
 				record = e.getRecord()
 			}
-
+			blog.Debugf("executor cache: ready put remote cache result now, record:%v, enable:%v ,hit:%v,long:%v", record, e.remoteCacheEnabled(), e.hitRemoteIndex, remoteTooLong)
 			err := e.putRemoteResult(r, record)
 			if err != nil {
 				blog.Infof("executor cache: put result file to remote with error:%v", err)

@@ -104,7 +104,7 @@ func (f *FileMgrWithARC) load() {
 					blog.Infof("FileMgrWithARC: load %s to delete cache", dir)
 					f.addDelete(dir)
 				} else {
-					blog.Infof("FileMgrWithARC:ready load %s", dir)
+					//blog.Infof("FileMgrWithARC:ready load %s", dir)
 					_, evict, deleted := f.arc.Put(dir, nil)
 					if evict != nil {
 						f.deleteDir(evict.(string))
