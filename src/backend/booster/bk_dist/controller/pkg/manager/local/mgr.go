@@ -765,8 +765,8 @@ func (m *Mgr) getRemoteResultCacheFile(
 			record,
 		)
 		if err == nil && result != nil {
-			blog.Infof("local: got [%d] result files with key:%s",
-				len(result.Resultfiles), resultkey)
+			blog.Infof("local: got [%d] result files with key:%s from host:%s",
+				len(result.Resultfiles), resultkey, host.Server)
 		}
 
 		return result, err

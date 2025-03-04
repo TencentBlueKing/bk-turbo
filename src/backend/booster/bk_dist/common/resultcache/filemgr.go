@@ -282,7 +282,7 @@ func ToResult(f string, needUnzip bool) *Result {
 					blog.Warnf("resultcache: file %s decompress size %d not equal realsize %d", f, outlen, realsize)
 					return nil
 				}
-
+				blog.Infof("resultcache: file %s decompress from %d to %d", f, len(data), outlen)
 				data = outdata
 				compressType = protocol.CompressNone
 			}
@@ -313,7 +313,7 @@ func (r *Result) save(dir string) error {
 		return err
 	}
 
-	blog.Infof("Result: succeed save file %s", fp)
+	blog.Infof("Result: succeed save file %s with r.CompressDataBuf %v", fp, len(r.CompressDataBuf))
 	return nil
 }
 
