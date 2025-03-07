@@ -25,3 +25,10 @@ const val BASE_EXCLUDED_PROJECT_ID_LIST = "EXCLUDED_PROJECT_ID_LIST"
  * 内部测试的方案，服务计费时需要过滤掉
  */
 const val BASE_EXCLUDED_COMMON_PLAN_ID = "EXCLUDED_COMMON_PLAN_ID_LIST"
+
+/**
+ * 常用整数
+ */
+const val COMMON_NUM_0L = 0L
+const val COMMON_NUM_1L = 1L
+const val COMMON_NUM_10L = 10L
