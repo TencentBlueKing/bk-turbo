@@ -25,6 +25,7 @@ const (
 	ServerErrGetServersFailed
 	ServerErrSendMessageFailed
 	ServerErrUnknownMessageType
+	ServerErrReadJSONFailed
 )
 
 var serverErrCode = map[ServerErrCode]string{
@@ -40,6 +41,7 @@ var serverErrCode = map[ServerErrCode]string{
 	ServerErrGetServersFailed:      "get servers failed",
 	ServerErrSendMessageFailed:     "send message failed",
 	ServerErrUnknownMessageType:    "unknown message type",
+	ServerErrReadJSONFailed:        "read json failed",
 }
 
 // String get error string from error code

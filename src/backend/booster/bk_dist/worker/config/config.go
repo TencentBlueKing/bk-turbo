@@ -71,6 +71,15 @@ type WorkerConfig struct {
 
 	// slot由worker提供，而不是客户端指定
 	OfferSlot bool `json:"offer_slot" value:"true" usage:"whether support offer slot"`
+
+	// result cache switch
+	ResultCache bool `json:"result_cache" value:"false" usage:"whether support result cache"`
+	// result cache dir
+	ResultCacheDir string `json:"result_cache_dir" value:"" usage:"result cache dir"`
+	// max result files
+	MaxResultFileNumber int `json:"max_result_file_number" value:"0" usage:"max cache file number"`
+	// max result files
+	MaxResultIndexNumber int `json:"max_result_index_number" value:"0" usage:"max cache index number"`
 }
 
 // NewConfig : return config of server
@@ -95,3 +104,9 @@ func (dsc *ServerConfig) Parse() {
 		dsc.ServerCert.IsSSL = true
 	}
 }
+
+var (
+	GlobalResultCacheDir = ""
+	GlobalMaxFileNumber  = 0
+	GlobalMaxIndexNumber = 0
+)

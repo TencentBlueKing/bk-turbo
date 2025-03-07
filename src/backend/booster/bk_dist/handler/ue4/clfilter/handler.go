@@ -229,13 +229,13 @@ func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonEr
 
 	// save include to txt file
 	blog.Debugf("cf: ready parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
-	_, err := cf.parseOutput(string(r.Results[0].OutputMessage))
+	filteredout, err := cf.parseOutput(string(r.Results[0].OutputMessage))
 	if err != nil {
 		blog.Warnf("cf: parse output(%s) with error:%v", r.Results[0].OutputMessage, err)
 		return dcType.ErrorUnknown
 	}
 
-	r.Results[0].OutputMessage = []byte("")
+	r.Results[0].OutputMessage = []byte(filteredout)
 	blog.Debugf("cf: after parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
 	return dcType.ErrorNone
 }
@@ -309,4 +309,21 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 	}
 
 	return strings.Join(output, ""), nil
+}
+
+// SupportResultCache check whether this command support result cache
+func (cf *TaskCLFilter) SupportResultCache(command []string) int {
+	if cf.clhandle != nil {
+		return cf.clhandle.SupportResultCache(command)
+	}
+
+	return 0
+}
+
+func (cf *TaskCLFilter) GetResultCacheKey(command []string) string {
+	if cf.clhandle != nil {
+		return cf.clhandle.GetResultCacheKey(command)
+	}
+
+	return ""
 }

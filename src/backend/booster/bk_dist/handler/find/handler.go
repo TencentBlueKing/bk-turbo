@@ -343,3 +343,12 @@ func (c *Finder) hasBelongsMark(line string) (string, string) {
 
 	return "", line
 }
+
+// SupportResultCache check whether this command support result cache
+func (c *Finder) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (c *Finder) GetResultCacheKey(command []string) string {
+	return ""
+}

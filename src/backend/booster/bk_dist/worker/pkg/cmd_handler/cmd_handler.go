@@ -39,11 +39,14 @@ var handlemap map[dcProtocol.PBCmdType]Handler
 // InitHandlers init handlers
 func InitHandlers() {
 	handlemap = map[dcProtocol.PBCmdType]Handler{
-		dcProtocol.PBCmdType_DISPATCHTASKREQ: NewHandle4DispatchReq(),
-		dcProtocol.PBCmdType_SYNCTIMEREQ:     NewHandle4SyncTime(),
-		dcProtocol.PBCmdType_SENDFILEREQ:     NewHandle4SendFile(),
-		dcProtocol.PBCmdType_CHECKCACHEREQ:   NewHandle4FileCache(),
-		dcProtocol.PBCmdType_UNKNOWN:         NewHandle4Unknown(),
+		dcProtocol.PBCmdType_DISPATCHTASKREQ:          NewHandle4DispatchReq(),
+		dcProtocol.PBCmdType_SYNCTIMEREQ:              NewHandle4SyncTime(),
+		dcProtocol.PBCmdType_SENDFILEREQ:              NewHandle4SendFile(),
+		dcProtocol.PBCmdType_CHECKCACHEREQ:            NewHandle4FileCache(),
+		dcProtocol.PBCmdType_REPORTRESULTCACHEREQ:     NewHandle4ReportResultCache(),
+		dcProtocol.PBCmdType_QUERYRESULTCACHEINDEXREQ: NewHandle4QueryResultCacheIndex(),
+		dcProtocol.PBCmdType_QUERYRESULTCACHEFILEREQ:  NewHandle4QueryResultCacheFile(),
+		dcProtocol.PBCmdType_UNKNOWN:                  NewHandle4Unknown(),
 	}
 }
 
