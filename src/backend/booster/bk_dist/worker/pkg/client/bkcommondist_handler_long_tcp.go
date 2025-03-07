@@ -441,3 +441,17 @@ func (r *CommonRemoteHandler) ExecuteSyncTimeLongTCP(server string) (int64, erro
 	blog.Debugf("remote task done, get remote time:%d", rsp.GetTimenanosecond())
 	return rsp.GetTimenanosecond(), nil
 }
+
+// func (r *CommonRemoteHandler) ExecuteReportResultCacheLongTCP(
+// 	server *dcProtocol.Host,
+// 	attributes map[string]string,
+// 	results []*dcSDK.FileDesc,
+// 	mgr dcSDK.LockMgr) (*dcSDK.BKReportResultCacheResult, error) {
+// 	return nil, nil
+// }
+
+// func (r *CommonRemoteHandler) ExecuteQueryResultCacheLongTCP(
+// 	server *dcProtocol.Host,
+// 	attributes map[string]string) (*dcSDK.BKQueryResultCacheResult, error) {
+// 	return nil, nil
+// }

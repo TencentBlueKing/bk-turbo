@@ -42,6 +42,9 @@ func InitStorage() (err error) {
 	api.RegisterV2Action(api.Action{
 		Verb: "GET", Path: "/upgrade/worker", Params: nil, Handler: api.MasterRequired(QueryWorkerUpgradeInfo),
 	})
+	api.RegisterV2Action(api.Action{
+		Verb: "GET", Path: "/build/cachelist", Params: nil, Handler: api.MasterRequired(QueryCacheList),
+	})
 
 	return nil
 }

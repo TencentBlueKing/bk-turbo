@@ -10,8 +10,11 @@
 package v2
 
 import (
+	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -334,4 +337,61 @@ func QueryWorkerUpgradeInfo(req *restful.Request, resp *restful.Response) {
 		data = []byte("")
 	}
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: data})
+}
+
+// QueryCacheList handle the http request for querying cache list
+func QueryCacheList(req *restful.Request, resp *restful.Response) {
+	projectID := req.QueryParameter(queryProjectIDKey)
+	if projectID == "" {
+		blog.Errorf("query cache list: url(%s): projectID not specified", req.Request.URL.String())
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam,
+			Message: "project_id no specific"})
+		return
+	}
+
+	// 打开JSON文件
+	file, err := os.Open(cacheListFile)
+	if err != nil {
+		blog.Errorf("query cache list: url(%s) open %s with error:%v",
+			req.Request.URL.String(), cacheListFile, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReadJSONFailed,
+			Message: "not found cache list"})
+		return
+	}
+	defer file.Close()
+
+	// 读取文件内容
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		blog.Errorf("query cache list: url(%s) read %s with error:%v",
+			req.Request.URL.String(), cacheListFile, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReadJSONFailed,
+			Message: "not found cache list"})
+		return
+	}
+
+	// 解析JSON到结构体
+	var config CacheConfigList
+	err = json.Unmarshal(bytes, &config)
+	if err != nil {
+		blog.Errorf("query cache list: url(%s) Unmarshal %s with error:%v",
+			req.Request.URL.String(), cacheListFile, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReadJSONFailed,
+			Message: "not found cache list"})
+		return
+	}
+
+	// 过滤
+	configfilter := make(map[string]CacheConfig)
+	v, ok := config[projectID]
+	if ok {
+		configfilter[projectID] = v
+	} else {
+		v, ok = config[cacheDefaultProjectID]
+		if ok {
+			configfilter[cacheDefaultProjectID] = v
+		}
+	}
+
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: configfilter})
 }

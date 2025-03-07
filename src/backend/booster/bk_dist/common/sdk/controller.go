@@ -146,6 +146,8 @@ type ControllerConfig struct {
 	LongTCP             bool
 	UseDefaultWorker    bool
 	WorkerOfferSlot     bool
+	ResultCacheIndexNum int
+	ResultCacheFileNum  int
 }
 
 // Target return the server ip and port of controller
@@ -184,6 +186,7 @@ type CommonControllerConfig struct {
 type ControllerRegisterConfig struct {
 	BatchMode        bool
 	ServerHost       string
+	ResultCacheList  []string
 	SpecificHostList []string
 	NeedApply        bool
 	Apply            *v2.ParamApply
@@ -284,12 +287,21 @@ type ControllerJobStats struct {
 	RemoteWorkUnpackStartTime     StatsTime `json:"remote_work_unpack_start_time"`
 	RemoteWorkUnpackEndTime       StatsTime `json:"remote_work_unpack_end_time"`
 
+	ReportCachePackCommonStartTime StatsTime `json:"report_cache_pack_common_start_time"`
+	ReportCachePackCommonEndTime   StatsTime `json:"report_cache_pack_common_end_time"`
+	ReportCacheSendCommonStartTime StatsTime `json:"report_cache_send_common_start_time"`
+	ReportCacheSendCommonEndTime   StatsTime `json:"report_cache_send_common_end_time"`
+
 	LocalWorkEnterTime  StatsTime `json:"local_work_enter_time"`
 	LocalWorkLeaveTime  StatsTime `json:"local_work_leave_time"`
 	LocalWorkLockTime   StatsTime `json:"local_work_lock_time"`
 	LocalWorkUnlockTime StatsTime `json:"local_work_unlock_time"`
 	LocalWorkStartTime  StatsTime `json:"local_work_start_time"`
 	LocalWorkEndTime    StatsTime `json:"local_work_end_time"`
+
+	TBSHitIndex      bool `json:"tbs_hit_index"`
+	TBSDirectHit     bool `json:"tbs_direct_hit"`
+	TBSPreprocessHit bool `json:"tbs_preprocess_hit"`
 }
 
 // ControllerWorkStats describe the work stats info
