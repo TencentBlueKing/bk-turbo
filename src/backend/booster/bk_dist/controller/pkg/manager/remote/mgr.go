@@ -455,29 +455,36 @@ func (fsm *fileSendMap) getFailFiles() []dcSDK.FileDesc {
 	return failFiles
 }
 
-func (fsm *fileSendMap) cleanTerminalStatus() {
+func (fsm *fileSendMap) cleanTerminatedStatus() {
 	fsm.Lock()
 	defer fsm.Unlock()
 
 	if fsm.cache == nil {
 		return
 	}
-	blog.Debugf("remote: before clean terminal status: %v", fsm.cache)
+	blog.Debugf("remote: before clean terminated status: %v", fsm.cache)
+	removedTotal := 0
 	for _, v := range fsm.cache {
 		if v == nil {
 			continue
 		}
-		resultfiles := make([]*types.FileInfo, 0)
+		original := *v
+		resultfiles := make([]*types.FileInfo, len(original))
 		for _, ci := range *v {
 			if !ci.IsTerminated() {
 				resultfiles = append(resultfiles, ci)
 			} else {
-				ci = nil
+				blog.Warnf("remote: clean terminated status: %s for %s", ci.SendStatus.String(), ci.FullPath)
 			}
 		}
+		// 显式释放原切片内存
+		for i := range original {
+			original[i] = nil
+		}
 		*v = resultfiles
+		removedTotal += len(original) - len(resultfiles)
 	}
-	blog.Debugf("remote: after clean terminal status: %v", fsm.cache)
+	blog.Warnf("remote: cleaned %d terminated entries", removedTotal)
 }
 
 // Init do the initialization for remote manager
@@ -2223,11 +2230,11 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 }
 
 func (m *Mgr) cleanWorkerCache(h *dcProtocol.Host) error {
-	blog.Info("remote: begin to clean worker cache for server %s", h.Server)
+	blog.Warnf("remote: begin to clean worker cache for server %s", h.Server)
 	m.fileSendMutex.Lock()
 	if m.fileSendMap != nil {
 		if target, ok := m.fileSendMap[h.Server]; ok {
-			target.cleanTerminalStatus()
+			target.cleanTerminatedStatus()
 		}
 	}
 	m.fileSendMutex.Unlock()
@@ -2235,11 +2242,11 @@ func (m *Mgr) cleanWorkerCache(h *dcProtocol.Host) error {
 	m.failFileSendMutex.Lock()
 	if m.failFileSendMap != nil {
 		if target, ok := m.failFileSendMap[h.Server]; ok {
-			target.cleanTerminalStatus()
+			target.cleanTerminatedStatus()
 		}
 	}
 	m.failFileSendMutex.Unlock()
-	blog.Info("remote: end to clean worker cache for server %s", h.Server)
+	blog.Warnf("remote: end to clean worker cache for server %s", h.Server)
 	return nil
 }
 
