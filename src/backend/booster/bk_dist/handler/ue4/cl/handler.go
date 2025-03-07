@@ -1589,6 +1589,10 @@ func (cl *TaskCL) hasResultIndex() bool {
 }
 
 func (cl *TaskCL) GetResultCacheKey(command []string) string {
+	if cl.preprocessedFile == "" {
+		blog.Infof("cl: cl.preprocessedFile is null , no need to get result cache key")
+		return ""
+	}
 	if !dcFile.Stat(cl.preprocessedFile).Exist() {
 		blog.Warnf("cl: cl.preprocessedFile %s not existed when get result cache key", cl.preprocessedFile)
 		return ""
