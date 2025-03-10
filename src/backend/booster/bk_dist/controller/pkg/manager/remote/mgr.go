@@ -469,17 +469,13 @@ func (fsm *fileSendMap) cleanTerminatedStatus() {
 			continue
 		}
 		original := *v
-		resultfiles := make([]*types.FileInfo, len(original))
-		for _, ci := range *v {
+		resultfiles := make([]*types.FileInfo, 0, len(original))
+		for _, ci := range original {
 			if !ci.IsTerminated() {
 				resultfiles = append(resultfiles, ci)
 			} else {
 				blog.Warnf("remote: clean terminated status: %s for %s", ci.SendStatus.String(), ci.FullPath)
 			}
-		}
-		// 显式释放原切片内存
-		for i := range original {
-			original[i] = nil
 		}
 		*v = resultfiles
 		removedTotal += len(original) - len(resultfiles)
@@ -1675,7 +1671,8 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 func (m *Mgr) querySendFile(server string, desc dcSDK.FileDesc) types.FileSendStatus {
 	m.fileSendMutex.RLock()
 	if m.fileSendMap == nil {
-		m.fileSendMap = make(map[string]*fileSendMap)
+		blog.Errorf("remote: fileSendMap not initialized for server(%s)", server)
+		return types.FileSendFailed
 	}
 	fsm, ok := m.fileSendMap[server]
 	if !ok {
