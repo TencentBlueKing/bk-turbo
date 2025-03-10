@@ -44,7 +44,7 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 
 	tb, err := defaultManager.CreateTask(param)
 	if err != nil {
-		if err == engine.ErrorProjectNoFound {
+		if err == engine.ErrorProjectNoFound || err == types.ErrorConcurrencyLimit {
 			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
 		} else {
 			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
@@ -268,9 +268,11 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 	}
 
 	hostlist := []string{}
+	hostNameMap := map[string]string{}
 	extra := ""
 	if te != nil {
 		hostlist = te.WorkerList()
+		hostNameMap = te.GetWorkerNameMap()
 		extra = string(te.Dump())
 	}
 
@@ -278,6 +280,7 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 		TaskID:      tb.ID,
 		Status:      tb.Status.Status,
 		HostList:    hostlist,
+		HostNameMap: hostNameMap,
 		QueueNumber: rank,
 		Message:     tb.Status.Message,
 		Extra:       extra,
