@@ -179,18 +179,22 @@ func (s *Sandbox) ExecRawByFile(name string, arg ...string) (int, error) {
 	fullArgs := strings.Join(arg, " ")
 	argsFile, err := ioutil.TempFile(GetHandlerTmpDir(s), "args-*.txt")
 	if err != nil {
-		blog.Warnf("cmd too long and failed to create tmp file")
+		blog.Errorf("sanbox: cmd too long and failed to create tmp file")
 		return -1, err
 	}
 
 	err = ioutil.WriteFile(argsFile.Name(), []byte(fullArgs), os.ModePerm)
 	if err != nil {
 		argsFile.Close() // 关闭文件
-		blog.Warnf("cmd too long and failed to write tmp file %s", argsFile.Name())
+		blog.Errorf("sanbox: cmd too long and failed to write tmp file %s", argsFile.Name())
 		return -1, err
 	}
 	argsFile.Close() // 关闭文件
-	return s.execCommand(name, "@"+argsFile.Name())
+	code, err := s.execCommand(name, "@"+argsFile.Name())
+	if err != nil {
+		blog.Errorf("sanbox: cmd too long and failed to exec command [%s] %s in file (%s) ", name, fullArgs, argsFile.Name())
+	}
+	return code, err
 }
 
 // GetHandlerTmpDir get temp dir by booster type
