@@ -23,6 +23,8 @@ type TaskExtension interface {
 	// get worker list from task
 	WorkerList() []string
 
+	GetWorkerNameMap() map[string]string
+
 	GetRequestInstance() int
 
 	GetWorkerCount() int

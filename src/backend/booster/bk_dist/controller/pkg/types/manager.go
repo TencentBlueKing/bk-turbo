@@ -33,6 +33,7 @@ import (
 type WorkRegisterConfig struct {
 	BatchMode        bool           `json:"batch_mode"`
 	ServerHost       string         `json:"server_host"`
+	ResultCacheList  []string       `json:"result_cache_list"`
 	SpecificHostList []string       `json:"specific_host_list"`
 	NeedApply        bool           `json:"need_apply"`
 	Apply            *v2.ParamApply `json:"apply"`
@@ -523,6 +524,14 @@ func (f *FileInfo) copy() *FileInfo {
 		LastModifyTime: f.LastModifyTime,
 		Md5:            f.Md5,
 		SendStatus:     f.SendStatus,
+	}
+}
+func (f *FileInfo) IsTerminated() bool {
+	switch f.SendStatus {
+	case FileSendSucceed, FileSendFailed:
+		return true
+	default:
+		return false
 	}
 }
 

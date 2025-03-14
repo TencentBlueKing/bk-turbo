@@ -988,8 +988,8 @@ func outputFromSource(filename, ext string) (string, error) {
 		return "", ErrorInvalidOption
 	}
 
-	// return strings.TrimSuffix(filename, filepath.Ext(filename)) + ext, nil
-	return strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)) + ext, nil
+	return strings.TrimSuffix(filename, filepath.Ext(filename)) + ext, nil
+	// return strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)) + ext, nil
 }
 
 // rewrite "cc" to directly call gcc or clang

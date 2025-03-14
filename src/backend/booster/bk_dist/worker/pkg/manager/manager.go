@@ -400,6 +400,12 @@ func (o *tcpManager) dealTCPConn(conn *net.TCPConn) error {
 		return o.dealSendFileCmd(client, head)
 	case dcProtocol.PBCmdType_CHECKCACHEREQ:
 		return o.dealCheckCacheCmd(client, head)
+	case dcProtocol.PBCmdType_REPORTRESULTCACHEREQ:
+		return o.dealReportResultCacheCmd(client, head)
+	case dcProtocol.PBCmdType_QUERYRESULTCACHEINDEXREQ:
+		return o.dealQueryResultCacheIndexCmd(client, head)
+	case dcProtocol.PBCmdType_QUERYRESULTCACHEFILEREQ:
+		return o.dealQueryResultCacheFileCmd(client, head)
 	case dcProtocol.PBCmdType_QUERYSLOTREQ:
 		return o.dealQuerySlotCmd(client, head)
 	case dcProtocol.PBCmdType_LONGTCPHANDSHAKEREQ:
@@ -537,6 +543,114 @@ func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtoco
 }
 
 func (o *tcpManager) dealCheckCacheCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
+	handler := pbcmd.GetHandler(head.GetCmdtype())
+	if handler == nil {
+		err := fmt.Errorf("failed to get handler for cmd %s", head.GetCmdtype())
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	body, err := handler.ReceiveBody(client, head, "", o.filepathchan)
+	if err != nil {
+		blog.Errorf("failed to receive body error: %v", err)
+		_ = client.Close()
+		return err
+	}
+
+	if body == nil {
+		err := fmt.Errorf("body is nil")
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	defer func() {
+		blog.Infof("ready to close tcp connection after deal this cmd")
+		_ = client.Close()
+		debug.FreeOSMemory() // free memory anyway
+	}()
+
+	//
+	err = handler.Handle(client, head, body, time.Now(), "", nil, nil, nil)
+	return err
+}
+
+func (o *tcpManager) dealReportResultCacheCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
+	handler := pbcmd.GetHandler(head.GetCmdtype())
+	if handler == nil {
+		err := fmt.Errorf("failed to get handler for cmd %s", head.GetCmdtype())
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	body, err := handler.ReceiveBody(client, head, "", o.filepathchan)
+	if err != nil {
+		blog.Errorf("failed to receive body error: %v", err)
+		_ = client.Close()
+		return err
+	}
+
+	if body == nil {
+		err := fmt.Errorf("body is nil")
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	defer func() {
+		blog.Infof("ready to close tcp connection after deal this cmd")
+		_ = client.Close()
+		debug.FreeOSMemory() // free memory anyway
+	}()
+
+	//
+	err = handler.Handle(client, head, body, time.Now(), "", nil, nil, nil)
+	return err
+}
+
+func (o *tcpManager) dealQueryResultCacheIndexCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
+	handler := pbcmd.GetHandler(head.GetCmdtype())
+	if handler == nil {
+		err := fmt.Errorf("failed to get handler for cmd %s", head.GetCmdtype())
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	body, err := handler.ReceiveBody(client, head, "", o.filepathchan)
+	if err != nil {
+		blog.Errorf("failed to receive body error: %v", err)
+		_ = client.Close()
+		return err
+	}
+
+	if body == nil {
+		err := fmt.Errorf("body is nil")
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	debug.FreeOSMemory() // free memory anyway
+
+	defer func() {
+		blog.Infof("ready to close tcp connection after deal this cmd")
+		_ = client.Close()
+		debug.FreeOSMemory() // free memory anyway
+	}()
+
+	//
+	err = handler.Handle(client, head, body, time.Now(), "", nil, nil, nil)
+	return err
+}
+
+func (o *tcpManager) dealQueryResultCacheFileCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
 	handler := pbcmd.GetHandler(head.GetCmdtype())
 	if handler == nil {
 		err := fmt.Errorf("failed to get handler for cmd %s", head.GetCmdtype())

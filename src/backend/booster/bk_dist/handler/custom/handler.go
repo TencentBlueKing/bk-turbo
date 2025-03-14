@@ -202,3 +202,12 @@ func (c *Custom) PostExecuteNeedLock(result *dcSDK.BKDistResult) bool {
 func (c *Custom) FinalExecute(command []string) {
 	c.innerHandler.FinalExecute(command)
 }
+
+// SupportResultCache check whether this command support result cache
+func (c *Custom) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (c *Custom) GetResultCacheKey(command []string) string {
+	return ""
+}

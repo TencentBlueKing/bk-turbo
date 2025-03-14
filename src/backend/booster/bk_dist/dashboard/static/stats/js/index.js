@@ -51,7 +51,10 @@ let vue = new Vue({
         remote_error_avg_time: "0s",
         remote_compile_err_count: 0,
         remote_fatal_count: 0,
-        remote_fatal: []
+        remote_fatal: [],
+        tbs_hit_index: 0,
+        tbs_direct_hit: 0,
+        tbs_preprocess_hit: 0
     },
     computed: {
         work_result: function () {
@@ -59,7 +62,7 @@ let vue = new Vue({
                 return "编译中"
             }
 
-            if (this.work_data.success) {
+            if (this.task_data.status == "finish") {
                 return "成功"
             }
 
@@ -153,6 +156,36 @@ let vue = new Vue({
         },
         remote_fatal_without_timeout_count: function () {
             return this.remote_fatal_count-this.remote_fatal_timeout_count
+        },
+        tbs_direct_hit_var: function () {
+            return this.tbs_direct_hit
+        },
+        tbs_preprocess_hit_var: function () {
+            return this.tbs_preprocess_hit
+        },
+        tbs_miss_var: function () {
+            let tbs_miss = this.tbs_hit_index - this.tbs_direct_hit - this.tbs_preprocess_hit
+            if (tbs_miss <= 0) {
+                return 0
+            } else {
+                return tbs_miss
+            }
+        },
+        tbs_hit_rate_var: function () {
+            if (this.tbs_hit_index <= 0) {
+                if (this.tbs_direct_hit + this.tbs_preprocess_hit > 0) {
+                    return "100.00%"
+                } else {
+                    return "0.00%"
+                }
+            }
+
+            let hit_rate = (this.tbs_direct_hit + this.tbs_preprocess_hit) / this.tbs_hit_index * 100
+            if (hit_rate >= 100.00) {
+                return "100.00%"
+            } else {
+                return hit_rate.toFixed(2) + "%"
+            }
         }
     },
     methods: {
@@ -583,9 +616,25 @@ function calculate_jobs_data() {
     let remote_fatal_count = 0
     let remote_fatal = []
 
+    let tbs_hit_index = 0
+    let tbs_direct_hit = 0
+    let tbs_preprocess_hit = 0
+
     let time
     for (let i = 0; i < vue.jobs_data.length; i++) {
         let data = vue.jobs_data[i]
+
+        if ('tbs_hit_index' in data && data.tbs_hit_index) {
+            tbs_hit_index += 1
+        }
+
+        if ('tbs_preprocess_hit' in data && data.tbs_preprocess_hit) {
+            tbs_preprocess_hit += 1
+        }
+
+        if ('tbs_direct_hit' in data && data.tbs_direct_hit) {
+            tbs_direct_hit += 1
+        }
 
         if (data.remote_work_start_time > 0 && !data.remote_work_success) {
             remote_fatal_count += 1
@@ -820,6 +869,11 @@ function calculate_jobs_data() {
             }
         }
     }
+
+    // tbs hit
+    vue.tbs_hit_index = tbs_hit_index
+    vue.tbs_direct_hit = tbs_direct_hit
+    vue.tbs_preprocess_hit = tbs_preprocess_hit
 
     // fatal
     vue.remote_compile_err_count = remote_compile_err_count
@@ -2218,8 +2272,8 @@ function CreateReporter() {
         data += getTD(!item.pre_work_success && item.local_work_success)
         data += getTD(!item.pre_work_success && !item.local_work_success)
         // data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && item.local_work_success)
-        data += getTD(!item.post_work_success && item.local_work_success)
-        data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && !item.local_work_success)
+        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && item.local_work_success)
+        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && !item.local_work_success)
         data += getTD((item.leave_time - item.enter_time) / 1e9)
         data += getTD((item.pre_work_end_time - item.pre_work_start_time) / 1e9)
         data += getTD((item.remote_work_process_end_time - item.remote_work_process_start_time) / 1e9)

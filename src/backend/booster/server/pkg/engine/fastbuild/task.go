@@ -91,7 +91,12 @@ func (t *fastbuildTask) WorkerList() []string {
 	return t.WorkerIPList
 }
 
-//GetRequestInstance define
+// GetWorkerNameMap return worker name map
+func (t *fastbuildTask) GetWorkerNameMap() map[string]string {
+	return nil
+}
+
+// GetRequestInstance define
 func (t *fastbuildTask) GetRequestInstance() int {
 	return 0
 }

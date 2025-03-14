@@ -317,3 +317,12 @@ func (l *TaskLib) scan(args []string) error {
 	blog.Infof("lib: scan success for enter args: %v", args)
 	return nil
 }
+
+// SupportResultCache check whether this command support result cache
+func (l *TaskLib) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (l *TaskLib) GetResultCacheKey(command []string) string {
+	return ""
+}

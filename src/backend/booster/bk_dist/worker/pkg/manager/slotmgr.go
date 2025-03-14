@@ -94,10 +94,10 @@ func notifySlot() {
 
 // 触发条件： 1. 定时 2. 有任务结束  3. 有新的客户端查询进来  4. 已分配的slot超时未使用清理
 // 需要考虑各种异常情况：
-// 1. 发送通知失败，则该可用槽需要回收（计数器回退），同时将该客户端从等待的池子中删除
-// 2. 发送成功，但客户端这时没有任务了，则占了一个槽但没有用到，这种情况下根据超时来清理，比如分配了1分钟还没有任务过来，则清理掉,
-//    同时降低该客户端的优先级
-// 3. 客户端任务的端口是变化的，根据客户端的ip来对比（如果没有对比上，是否考虑直接丢弃？能否同时支持p2p和非p2p的任务？）
+//  1. 发送通知失败，则该可用槽需要回收（计数器回退），同时将该客户端从等待的池子中删除
+//  2. 发送成功，但客户端这时没有任务了，则占了一个槽但没有用到，这种情况下根据超时来清理，比如分配了1分钟还没有任务过来，则清理掉,
+//     同时降低该客户端的优先级
+//  3. 客户端任务的端口是变化的，根据客户端的ip来对比（如果没有对比上，是否考虑直接丢弃？能否同时支持p2p和非p2p的任务？）
 func (o *tcpManager) slotTimer() {
 	blog.Infof("[slotmgr] start estimate slot timer")
 	tick := time.NewTicker(estimateSlotIntervalTime)
@@ -325,13 +325,13 @@ func (o *tcpManager) receiveSlotRspAck(client *protocol.TCPClient) (*dcProtocol.
 
 // 检查客户端连接是否正常，如果异常了，则清理掉
 func (o *tcpManager) checkClient() {
-	blog.Infof("[slotmgr] check all client now")
+	blog.Debugf("[slotmgr] check all client now")
 	clientLock.Lock()
 	defer clientLock.Unlock()
 
 	needclean := false
 	for i := range clientCache {
-		blog.Infof("[slotmgr] check client %+v", *clientCache[i])
+		blog.Debugf("[slotmgr] check client %+v", *clientCache[i])
 		if clientCache[i].tcpclient.Closed() {
 			needclean = true
 			clientCache[i].valid = false
@@ -361,7 +361,7 @@ func (o *tcpManager) checkClient() {
 // 检查分配的slot是否超时，需要考虑客户端发送工具链的额外时间，先将超时时间设置稍微大点
 // 超时的slot意味着什么？ 后续是否继续为该客户端分配slot？ worker端先不管，由客户端来检查和释放连接
 func (o *tcpManager) checkSlot() {
-	blog.Infof("[slotmgr] check slot now")
+	blog.Debugf("[slotmgr] check slot now")
 
 	slotLock.Lock()
 	defer slotLock.Unlock()
@@ -465,8 +465,9 @@ func (o *tcpManager) onTaskReceived(ip string) {
 }
 
 // 如果相应的客户端有发送文件过来，也可以认为该slot是激活的，超时时间可以往后推
-//        因为现在任务执行前需要发送依赖文件
-//        只激活超时时间的起始时间，不去掉预扣的slot
+//
+//	因为现在任务执行前需要发送依赖文件
+//	只激活超时时间的起始时间，不去掉预扣的slot
 func (o *tcpManager) onFileReceived(ip string) {
 	blog.Infof("[slotmgr] on file received from client:%s", ip)
 
