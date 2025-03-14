@@ -17,9 +17,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -27,12 +29,12 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
-	ExitErrorCode = 99
-
+	ExitErrorCode            = 99
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
 )
 
@@ -170,6 +172,54 @@ func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
 		HideWindow: true,
 	}
 	return s.execCommand(caller)
+}
+
+// ExecCommand run the origin commands by file
+func (s *Sandbox) ExecRawByFile(name string, arg ...string) (int, error) {
+	fullArgs := strings.Join(arg, " ")
+	argsFile, err := ioutil.TempFile(GetHandlerTmpDir(s), "args-*.txt")
+	if err != nil {
+		blog.Errorf("sanbox: cmd too long and failed to create tmp file")
+		return -1, err
+	}
+
+	err = ioutil.WriteFile(argsFile.Name(), []byte(fullArgs), os.ModePerm)
+	if err != nil {
+		argsFile.Close() // 关闭文件
+		blog.Errorf("sanbox: cmd too long and failed to write tmp file %s", argsFile.Name())
+		return -1, err
+	}
+	argsFile.Close() // 关闭文件
+	code, err := s.execCommand(name, "@"+argsFile.Name())
+	if err != nil {
+		blog.Errorf("sanbox: cmd too long and failed to exec command [%s] %s in file (%s) ", name, fullArgs, argsFile.Name())
+	}
+	return code, err
+}
+
+// GetHandlerTmpDir get temp dir by booster type
+func GetHandlerTmpDir(sandBox *Sandbox) string {
+	var baseTmpDir string
+	if sandBox == nil {
+		baseTmpDir = os.TempDir()
+	} else {
+		if baseTmpDir = sandBox.Env.GetOriginEnv("TMPDIR"); baseTmpDir == "" {
+			baseTmpDir = os.TempDir()
+		}
+	}
+
+	if baseTmpDir != "" {
+		fullTmpDir := path.Join(baseTmpDir, protocol.BKDistDir)
+		if !dcFile.Stat(fullTmpDir).Exist() {
+			if err := os.MkdirAll(fullTmpDir, os.ModePerm); err != nil {
+				blog.Warnf("common util: create tmp dir failed with error:%v", err)
+				return ""
+			}
+		}
+		return fullTmpDir
+	}
+
+	return ""
 }
 
 // ExecScriptsWithMessage run the scripts and return the output
