@@ -125,6 +125,10 @@ func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
 	return 1, fmt.Errorf("not support")
 }
 
+func (s *Sandbox) ExecRawByFile(name string, arg ...string) (int, error) {
+	return 1, fmt.Errorf("not support")
+}
+
 // ExecScriptsWithMessage run the scripts and return the output
 func (s *Sandbox) ExecScriptsWithMessage(src string) (int, []byte, []byte, error) {
 	caller, options := GetCallerAndOptions()
