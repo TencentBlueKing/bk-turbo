@@ -507,8 +507,8 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 
 	// dirty data which created as init but no one launch it.
 	// if a broker is in deploying status for more then 2min, then release it.
-	if resource.status == resourceStatusInit ||
-		(resource.status == resourceStatusDeploying && time.Now().Local().After(startTime.Add(waitTime4Create))) {
+	if (resource.status == resourceStatusInit || resource.status == resourceStatusDeploying) &&
+		time.Now().Local().After(startTime.Add(waitTime4Create)) {
 		blog.Infof("crm broker: clean dirty resource(%s) in status(%s) from broker(%s) with user(%s)",
 			resourceID, resource.status.String(), b.name, b.user)
 		err = b.mgr.release(resource.resourceID, b.user)
