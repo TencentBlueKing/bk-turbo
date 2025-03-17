@@ -523,7 +523,7 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 		return true
 	}
 
-	if resource.status != resourceStatusDeploying {
+	if resource.status != resourceStatusDeploying && resource.status != resourceStatusInit {
 		blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s) has status(%s), no need track",
 			resourceID, b.name, b.user, resource.status.String())
 		return true
