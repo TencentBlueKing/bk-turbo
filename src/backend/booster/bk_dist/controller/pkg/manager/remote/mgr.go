@@ -530,6 +530,18 @@ func (m *Mgr) callback4ResChanged() error {
 	// TODO : deal with p2p resource
 
 	hl := m.work.Resource().GetHosts()
+	// init pod name for hosts
+	info := m.work.Resource().GetStatus()
+	if info.HostNameMap != nil {
+		for i, h := range hl {
+			if _, ok := info.HostNameMap[h.Server]; ok {
+				if hl[i].Name == "" {
+					hl[i].Name = info.HostNameMap[h.Server]
+					blog.Infof("resource: init pod name %s for host %s", h.Name, h.Server)
+				}
+			}
+		}
+	}
 	m.resource.Reset(hl)
 	if hl != nil && len(hl) > 0 {
 		m.setLastApplied(uint64(time.Now().Local().Unix()))
@@ -703,19 +715,20 @@ func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
 
 		switch i {
 		case 0: //POD_NAME check, if not match , disable it right now
-			if h.Name != "" && h.Name != msg {
-				blog.Errorf("remote: host(%s) pod name %s not match before %s", h.Server, msg, h.Name)
-				m.resource.DisableWorker(h)
+			if !m.resource.IsWorkerDisabled(h) {
+				if h.Name != "" && h.Name != msg {
+					blog.Errorf("remote: host(%s) pod name %s not match before %s, going to disable host", h.Server, msg, h.Name)
+					m.resource.DisableWorker(h)
+				}
 			}
 		case 1: //TOKEN check, if not match , clean terminated file status in send cache
 			blog.Debugf("remote: last host token %s", h.Token)
 			if h.Token != msg {
-				blog.Errorf("remote: host(%s) token %s not match before %s", h.Server, msg, h.Token)
-				m.cleanWorkerCache(h)
 				if h.Token == "" {
-					blog.Info("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
+					blog.Infof("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
 				} else {
-					blog.Info("remote: change host(%s) token to %s", h.Server, msg)
+					blog.Errorf("remote: host(%s) token %s not match before %s, change token to %s , and clean worker terminated status cache", h.Server, msg, h.Token, msg)
+					m.cleanWorkerCache(h)
 				}
 				h.Token = msg
 			}
@@ -2190,6 +2203,31 @@ func (m *Mgr) clearOldFileCollectionFromCache(server string, fcs []*types.FileCo
 	return
 }
 
+func (m *Mgr) clearTerminatedFileCollection(server string) {
+	m.fileCollectionSendMutex.Lock()
+	defer m.fileCollectionSendMutex.Unlock()
+
+	target, ok := m.fileCollectionSendMap[server]
+	if !ok {
+		return
+	}
+
+	resultfiles := make([]*types.FileCollectionInfo, 0, len(*target))
+	removedTotal := 0
+
+	for _, ci := range *target {
+		if ci.SendStatus == types.FileSendFailed || ci.SendStatus == types.FileSendSucceed {
+			blog.Warnf("remote: clean fileCollection terminated status: %s for %s", ci.SendStatus.String(), ci.UniqID)
+		} else {
+			resultfiles = append(resultfiles, ci)
+		}
+	}
+	*target = resultfiles
+	removedTotal += len(*target) - len(resultfiles)
+
+	blog.Warnf("remote: cleaned %d fileCollection terminated entries for host %s", removedTotal, server)
+}
+
 func (m *Mgr) getCachedToolChainTimestamp(server string, toolChainKey string) (int64, error) {
 	m.fileCollectionSendMutex.RLock()
 	defer m.fileCollectionSendMutex.RUnlock()
@@ -2228,6 +2266,9 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 
 func (m *Mgr) cleanWorkerCache(h *dcProtocol.Host) error {
 	blog.Warnf("remote: begin to clean worker cache for server %s", h.Server)
+
+	m.clearTerminatedFileCollection(h.Server)
+
 	m.fileSendMutex.Lock()
 	if m.fileSendMap != nil {
 		if target, ok := m.fileSendMap[h.Server]; ok {

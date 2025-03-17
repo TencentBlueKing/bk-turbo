@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -405,7 +404,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	return nil
 }
 
-func (cc *TaskCC) getPumpDir(env *env.Sandbox) (string, error) {
+func (cc *TaskCC) getPumpDir(env *dcEnv.Sandbox) (string, error) {
 	pumpdir := dcPump.PumpCacheDir(env)
 	if pumpdir == "" {
 		pumpdir = dcUtil.GetPumpCacheDir()
@@ -809,7 +808,7 @@ func (cc *TaskCC) isPumpActionNumSatisfied() (bool, error) {
 }
 
 func (cc *TaskCC) workerSupportAbsPath() bool {
-	v := cc.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	v := cc.sandbox.Env.GetEnv(dcEnv.KeyWorkerSupportAbsPath)
 	if v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
@@ -864,10 +863,10 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	cc.ensuredArgs = args
 
 	// obtain force key set by booster
-	forcekeystr := cc.sandbox.Env.GetEnv(env.KeyExecutorForceLocalKeys)
+	forcekeystr := cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorForceLocalKeys)
 	if forcekeystr != "" {
 		blog.Infof("cc: [%s] got force local key string: %s", cc.tag, forcekeystr)
-		forcekeylist := strings.Split(forcekeystr, env.CommonBKEnvSepKey)
+		forcekeylist := strings.Split(forcekeystr, dcEnv.CommonBKEnvSepKey)
 		if len(forcekeylist) > 0 {
 			cc.ForceLocalCppFileKeys = append(cc.ForceLocalCppFileKeys, forcekeylist...)
 			blog.Infof("cc: [%s] ForceLocalCppFileKeys: %v", cc.tag, cc.ForceLocalCppFileKeys)
@@ -1208,27 +1207,27 @@ func (cc *TaskCC) saveTemp() bool {
 }
 
 func (cc *TaskCC) isPump() bool {
-	return cc.sandbox.Env.GetEnv(env.KeyExecutorPump) != ""
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorPump) != ""
 }
 
 func (cc *TaskCC) isPumpDisableMacro() bool {
-	return cc.sandbox.Env.GetEnv(env.KeyExecutorPumpDisableMacro) != ""
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorPumpDisableMacro) != ""
 }
 
 func (cc *TaskCC) isPumpCheck() bool {
-	return cc.sandbox.Env.GetEnv(env.KeyExecutorPumpCheck) != ""
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorPumpCheck) != ""
 }
 
 func (cc *TaskCC) isPumpIncludeSystemHeader() bool {
-	return cc.sandbox.Env.GetEnv(env.KeyExecutorPumpIncludeSysHeader) != ""
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorPumpIncludeSysHeader) != ""
 }
 
 func (cc *TaskCC) isUseDirectives() bool {
-	return cc.sandbox.Env.GetEnv(env.KeyExecutorSupportDirectives) != ""
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorSupportDirectives) != ""
 }
 
 func (cc *TaskCC) getWorkID() string {
-	return cc.sandbox.Env.GetEnv(env.KeyExecutorControllerWorkID)
+	return cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorControllerWorkID)
 }
 
 func (cc *TaskCC) preBuild(args []string) error {
@@ -1766,7 +1765,7 @@ func (cc *TaskCC) GetResultCacheKey(command []string) string {
 	// cc_mtime cc_name from compile tool
 	cchash, err := dcUtil.HashFile(command[0])
 	if err != nil {
-		blog.Warnf("cc: hash file %s with error: %v", err)
+		blog.Warnf("cc: hash file %s with error: %v", cc.preprocessedFile, err)
 		return ""
 	}
 
@@ -1780,7 +1779,7 @@ func (cc *TaskCC) GetResultCacheKey(command []string) string {
 	// cpp content from cl.preprocessedFile
 	cpphash, err := dcUtil.HashFile(cc.preprocessedFile)
 	if err != nil {
-		blog.Warnf("cc: hash file %s with error: %v", err)
+		blog.Warnf("cc: hash file %s with error: %v", cc.preprocessedFile, err)
 		return ""
 	}
 
