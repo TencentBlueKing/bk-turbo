@@ -1603,7 +1603,7 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	// cc_mtime cc_name from compile tool
 	cchash, err := dcUtil.HashFile(command[0])
 	if err != nil {
-		blog.Warnf("cl: hash file %s with error: %v", cl.preprocessedFile, err)
+		blog.Warnf("cl: hash file %s with error: %v", command[0], err)
 		return ""
 	}
 
