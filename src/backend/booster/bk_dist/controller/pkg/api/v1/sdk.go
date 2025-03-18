@@ -428,7 +428,9 @@ func (s *sdk) launchServer() error {
 		" %s %s"+
 		" %s %s"+
 		" %s"+
-		" %s",
+		" %s"+
+		" --result_cache_index_num=%d"+
+		" --result_cache_file_num=%d",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -456,6 +458,8 @@ func (s *sdk) launchServer() error {
 		useDefaultWorker,
 		dynamicPort,
 		workerOfferSlot,
+		s.config.ResultCacheIndexNum,
+		s.config.ResultCacheFileNum,
 	))
 }
 
@@ -464,11 +468,13 @@ func (s *sdk) register(config dcSDK.ControllerRegisterConfig) (dcSDK.ControllerW
 	_ = codec.EncJSON(&WorkRegisterParam{
 		BatchMode:        config.BatchMode,
 		ServerHost:       config.ServerHost,
+		ResultCacheList:  config.ResultCacheList,
 		SpecificHostList: config.SpecificHostList,
 		NeedApply:        config.NeedApply,
 		Apply:            config.Apply,
 	}, &data)
 
+	blog.Infof("sdk: ready register with data:[%s]", string(data))
 	tmp, _, err := s.request("POST", registerURI, data, config.BatchMode)
 	if err != nil {
 		retry := 0

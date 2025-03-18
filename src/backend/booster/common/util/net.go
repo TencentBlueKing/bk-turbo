@@ -11,15 +11,25 @@ package util
 
 import (
 	"net"
+
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static"
 )
 
 var (
-	_, classA, _  = net.ParseCIDR("10.0.0.0/8")
-	_, classA1, _ = net.ParseCIDR("9.0.0.0/8")
-	_, classAa, _ = net.ParseCIDR("100.64.0.0/10")
-	_, classB, _  = net.ParseCIDR("172.16.0.0/12")
-	_, classC, _  = net.ParseCIDR("192.168.0.0/16")
+	_, classA, _  = wrapParse(static.InnerIPClassA, static.InnerIPClassDefault)
+	_, classA1, _ = wrapParse(static.InnerIPClassA1, static.InnerIPClassDefault)
+	_, classAa, _ = wrapParse(static.InnerIPClassAa, static.InnerIPClassDefault)
+	_, classB, _  = wrapParse(static.InnerIPClassB, static.InnerIPClassDefault)
+	_, classC, _  = wrapParse(static.InnerIPClassC, static.InnerIPClassDefault)
 )
+
+func wrapParse(expectip, defaultip string) (net.IP, *net.IPNet, error) {
+	if expectip != "" {
+		return net.ParseCIDR(expectip)
+	}
+
+	return net.ParseCIDR(defaultip)
+}
 
 // GetIPAddress get local usable inner ip address
 func GetIPAddress() (addrList []string) {
@@ -52,4 +62,25 @@ func GetIPAddress() (addrList []string) {
 		}
 	}
 	return addrList
+}
+
+// IsLocalIP check whether ip is local
+func IsLocalIP(ip net.IP) bool {
+	if classA.Contains(ip) {
+		return true
+	}
+	if classA1.Contains(ip) {
+		return true
+	}
+	if classAa.Contains(ip) {
+		return true
+	}
+	if classB.Contains(ip) {
+		return true
+	}
+	if classC.Contains(ip) {
+		return true
+	}
+
+	return false
 }

@@ -426,7 +426,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 	blog.Infof("UBTTool: raw cmd:[%s %s]", action.Cmd, action.Arg)
 
 	fullargs := []string{action.Cmd}
-	if strings.HasSuffix(action.Cmd, "cmd.exe") || strings.HasSuffix(action.Cmd, "Cmd.exe") {
+	if strings.HasSuffix(action.Cmd, "cmd.exe") || strings.HasSuffix(action.Cmd, "Cmd.exe") || strings.HasSuffix(action.Cmd, "ispc.exe") || strings.HasSuffix(action.Cmd, "Ispc.exe") {
 		fullargs = append(fullargs, action.Arg)
 	} else {
 		args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
@@ -710,6 +710,7 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 			MaxLocalPreJobs:   h.settings.MaxLocalPreJobs,
 			MaxLocalExeJobs:   h.settings.MaxLocalExeJobs,
 			MaxLocalPostJobs:  h.settings.MaxLocalPostJobs,
+			ResultCacheList:   h.settings.ResultCacheList,
 		},
 
 		Transport: dcType.BoosterTransport{

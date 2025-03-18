@@ -559,6 +559,7 @@ var serviceStatusMap = map[ServiceStatus]string{
 type Endpoint struct {
 	IP    string
 	Ports map[string]int
+	Name  string
 }
 
 func getInstanceKey(attributes map[string]string) (string, string) {

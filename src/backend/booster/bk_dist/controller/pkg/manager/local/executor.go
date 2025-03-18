@@ -27,14 +27,16 @@ import (
 )
 
 const (
-	ioTimeoutBuffer      = 50
-	retryAndSuccessLimit = 3
+	ioTimeoutBuffer         = 50
+	retryAndSuccessLimit    = 3
+	MaxWindowsCommandLength = 30000
 )
 
 func newExecutor(mgr *Mgr,
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
-	supportAbsPath bool) (*executor, error) {
+	supportAbsPath bool,
+	resultdata *data4resultcache) (*executor, error) {
 	environ := env.NewSandbox(req.Environments)
 	bt := dcType.GetBoosterType(environ.GetEnv(env.BoosterType))
 	hdl, err := handlermap.GetHandler(bt)
@@ -42,12 +44,15 @@ func newExecutor(mgr *Mgr,
 		return nil, err
 	}
 	e := &executor{
-		mgr:        mgr,
-		req:        req,
-		stats:      req.Stats,
-		resource:   mgr.resource,
-		handler:    hdl,
-		globalWork: globalWork,
+		mgr:           mgr,
+		req:           req,
+		stats:         req.Stats,
+		resource:      mgr.resource,
+		handler:       hdl,
+		globalWork:    globalWork,
+		resultdata:    resultdata,
+		localIndexNum: resultdata.localResultCacheIndexNum,
+		localFileNum:  resultdata.localResultCacheFileNum,
 	}
 
 	// TODO: 临时代码, 临时去除CCACHE_PREFIX, 防止其循环调用, 但还是要考虑一个周全办法
@@ -88,6 +93,14 @@ func newExecutor(mgr *Mgr,
 
 	blog.Infof("executor: success to new an executor with boosterType(%s)", bt.String())
 	e.handler.InitSandbox(e.sandbox)
+
+	// TODO : 通过修改e.sandbox来影响e.handler，因为e.sandbox是个指针
+	//        这个方法目前是可用的，因为handler直接保存了该指针
+	e.initResultCacheInfo(resultdata.groupKey, resultdata.remoteTriggleSecs)
+	if e.hitLocalIndex || e.hitRemoteIndex {
+		e.sandbox.Env.AppendEnv(env.KeyExecutorHasResultIndex, "true")
+	}
+
 	return e, nil
 }
 
@@ -105,6 +118,19 @@ type executor struct {
 
 	ioTimeout           int
 	ioTimeoutBySettings int
+
+	// for result cache
+	cacheType           int
+	remoteTriggleSecs   int
+	cacheGroupKey       string
+	commandKey          string
+	preprocessResultKey string
+	remoteExecuteSecs   int
+	hitLocalIndex       bool
+	hitRemoteIndex      bool
+	localIndexNum       int
+	localFileNum        int
+	resultdata          *data4resultcache
 }
 
 // Stdout return the execution stdout
@@ -134,7 +160,7 @@ func (e *executor) skipLocalRetry() bool {
 }
 
 func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
-	// blog.Infof("executor: try to execute pre-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor: try to execute pre-task from pid(%d)", e.req.Pid)
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.PreWorkEnterTime)
@@ -323,9 +349,16 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		sandbox.Stderr = &errBuf
 		blog.Infof("executor: ready from pid(%d) run cmd:%v", e.req.Pid, e.req.Commands)
 		cmd := e.req.Commands[0]
-		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") {
+		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") || strings.HasSuffix(cmd, "ispc.exe") || strings.HasSuffix(cmd, "Ispc.exe") {
 			arg := strings.Join(e.req.Commands, " ")
-			code, err = sandbox.ExecScriptsRaw(arg)
+			if len(arg) > MaxWindowsCommandLength {
+				code, err = sandbox.ExecRawByFile(e.req.Commands[0], e.req.Commands[1:]...)
+			} else {
+				if !(strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe")) {
+					arg = "C:\\Windows\\system32\\cmd.exe /C \"" + arg + "\""
+				}
+				code, err = sandbox.ExecScriptsRaw(arg)
+			}
 		} else {
 			code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
 		}

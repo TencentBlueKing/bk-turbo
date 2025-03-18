@@ -68,6 +68,7 @@ const (
 	inspectDistributeTaskURI      = "v2/build/task?task_id=%s"
 	heartbeatURI                  = "v2/build/heartbeat"
 	messageURI                    = "v2/build/message"
+	cacheListURI                  = "v2/build/cachelist?project_id=%s"
 )
 
 // Mgr describe the resource manager
@@ -251,7 +252,6 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					Compresstype: dcProtocol.CompressLZ4,
 					Protocol:     "tcp",
 				}
-
 				hosts = append(hosts, host)
 			}
 		}
@@ -1030,4 +1030,25 @@ func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, er
 	}
 
 	return by, true, nil
+}
+
+// GetCacheList will get cache list from tbs-server
+func (m *Mgr) GetCacheList(projectid string) (*v2.CacheConfigList, error) {
+	blog.Infof("resource: try to get cache list for projectid(%s)", projectid)
+
+	data, _, err := m.request("GET", m.serverHost,
+		fmt.Sprintf(cacheListURI, projectid), nil)
+	if err != nil {
+		blog.Errorf("resource: get cache list with projectid(%s) with error: %v", projectid, err)
+		return nil, err
+	}
+
+	var info v2.CacheConfigList
+	if err = codec.DecJSON(data, &info); err != nil {
+		blog.Errorf("resource: get cache list with projectid(%s) with error: %v", projectid, err)
+		return nil, err
+	}
+
+	blog.Infof("resource: got cache list:%v for projectid(%s)", info, projectid)
+	return &info, nil
 }

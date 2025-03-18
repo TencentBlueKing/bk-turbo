@@ -40,6 +40,15 @@ const (
 	corkMaxSize = 1024 * 1024 * 10
 	// corkMaxSize   = 1024 * 1024 * 1024
 	largeFileSize = 1024 * 1024 * 100 // 100MB
+
+	osWindows = "windows"
+	osLinux   = "linux"
+	osDarwin  = "darwin"
+)
+
+var (
+	windowsTokenParam = []string{"(Get-Process bk-dist-worker).Id"}
+	linuxTokenParam   = []string{"-c", "head -n 1 /proc/self/cgroup | grep kubepods| sed 's|.*/||'"}
 )
 
 // NewMgr get a new Remote Mgr
@@ -446,6 +455,34 @@ func (fsm *fileSendMap) getFailFiles() []dcSDK.FileDesc {
 	return failFiles
 }
 
+func (fsm *fileSendMap) cleanTerminatedStatus() {
+	fsm.Lock()
+	defer fsm.Unlock()
+
+	if fsm.cache == nil {
+		return
+	}
+	blog.Debugf("remote: before clean terminated status: %v", fsm.cache)
+	removedTotal := 0
+	for _, v := range fsm.cache {
+		if v == nil {
+			continue
+		}
+		original := *v
+		resultfiles := make([]*types.FileInfo, 0, len(original))
+		for _, ci := range original {
+			if !ci.IsTerminated() {
+				resultfiles = append(resultfiles, ci)
+			} else {
+				blog.Warnf("remote: clean terminated status: %s for %s", ci.SendStatus.String(), ci.FullPath)
+			}
+		}
+		*v = resultfiles
+		removedTotal += len(original) - len(resultfiles)
+	}
+	blog.Warnf("remote: cleaned %d terminated entries", removedTotal)
+}
+
 // Init do the initialization for remote manager
 // !! only call once !!
 func (m *Mgr) Init() {
@@ -493,10 +530,23 @@ func (m *Mgr) callback4ResChanged() error {
 	// TODO : deal with p2p resource
 
 	hl := m.work.Resource().GetHosts()
+	// init pod name for hosts
+	info := m.work.Resource().GetStatus()
+	if info.HostNameMap != nil {
+		for i, h := range hl {
+			if _, ok := info.HostNameMap[h.Server]; ok {
+				if hl[i].Name == "" {
+					hl[i].Name = info.HostNameMap[h.Server]
+					blog.Infof("resource: init pod name %s for host %s", h.Name, h.Server)
+				}
+			}
+		}
+	}
 	m.resource.Reset(hl)
 	if hl != nil && len(hl) > 0 {
 		m.setLastApplied(uint64(time.Now().Local().Unix()))
 		m.syncHostTimeNoWait(hl)
+		m.syncHostToken(hl) //get token to check if host not restarted
 	}
 
 	// if all workers released, we shoud clean the cache now
@@ -514,6 +564,10 @@ func (m *Mgr) cleanFileCache() {
 	m.fileSendMutex.Lock()
 	m.fileSendMap = make(map[string]*fileSendMap)
 	m.fileSendMutex.Unlock()
+
+	m.failFileSendMutex.Lock()
+	m.failFileSendMap = make(map[string]*fileSendMap)
+	m.failFileSendMutex.Unlock()
 
 	m.fileCollectionSendMutex.Lock()
 	m.fileCollectionSendMap = make(map[string]*[]*types.FileCollectionInfo)
@@ -614,12 +668,84 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 	}
 }
 
+// confirmWorker confirm one host is valid
+func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
+	handler := m.remoteWorker.Handler(0, nil, nil, nil)
+	var c dcSDK.BKDistCommand
+	if runtime.GOOS == osLinux {
+		c = dcSDK.BKDistCommand{
+			Commands: []dcSDK.BKCommand{
+				{
+					ExeName: "sh",
+					Params:  []string{"-c", "printenv POD_NAME"},
+				},
+				{
+					ExeName: "sh",
+					Params:  linuxTokenParam,
+				},
+			},
+		}
+	} else if runtime.GOOS == osWindows {
+		c = dcSDK.BKDistCommand{
+			Commands: []dcSDK.BKCommand{
+				{
+					ExeName: "powershell",
+					Params:  []string{"$Env:POD_NAME"},
+				}, {
+					ExeName: "powershell",
+					Params:  windowsTokenParam,
+				},
+			},
+		}
+	} else {
+		blog.Warnf("remote: unsupported os: %s", runtime.GOOS)
+		return
+	}
+	result, err := handler.ExecuteTask(h, &c)
+	if err != nil {
+		blog.Errorf("remote: execute task failed for host %s : %v", h.Server, err)
+		return
+	}
+	for i, r := range result.Results {
+		msg := strings.TrimRight(string(r.OutputMessage), " \n\r\t")
+		blog.Debugf("remote: execute task result: %s now", msg)
+		if msg == "" {
+			continue
+		}
+
+		switch i {
+		case 0: //POD_NAME check, if not match , disable it right now
+			if !m.resource.IsWorkerDisabled(h) {
+				if h.Name != "" && h.Name != msg {
+					blog.Errorf("remote: host(%s) pod name %s not match before %s, going to disable host", h.Server, msg, h.Name)
+					m.resource.DisableWorker(h)
+				}
+			}
+		case 1: //TOKEN check, if not match , clean terminated file status in send cache
+			blog.Debugf("remote: last host token %s", h.Token)
+			if h.Token != msg {
+				if h.Token == "" {
+					blog.Infof("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
+				} else {
+					blog.Errorf("remote: host(%s) token %s not match before %s, change token to %s , and clean worker terminated status cache", h.Server, msg, h.Token, msg)
+					m.cleanWorkerCache(h)
+				}
+				h.Token = msg
+			}
+		default:
+			blog.Errorf("remote: execute task result for host(%s): %s unknown", msg, h.Server)
+		}
+	}
+}
+
 // workerCheck check disconnected worker and recover it when it's available
 func (m *Mgr) workerCheck(ctx context.Context) {
 	blog.Infof("remote: run worker check tick for work: %s", m.work.ID())
 	ticker := time.NewTicker(m.workerCheckTick)
+	confirmTicker := time.NewTicker(time.Second * 8)
 
 	defer ticker.Stop()
+	defer confirmTicker.Stop()
 
 	for {
 		select {
@@ -640,6 +766,15 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 					m.resource.RecoverDeadWorker(w)
 				}(w)
 
+			}
+		case <-confirmTicker.C:
+			//only support on windows and linux
+			if runtime.GOOS != osWindows && runtime.GOOS != osLinux {
+				continue
+			}
+			blog.Debugf("remote: run verify worker for work(%d)", len(m.resource.GetWorkers()))
+			for _, h := range m.resource.GetWorkers() {
+				go m.confirmWorker(h.host)
 			}
 		}
 	}
@@ -962,7 +1097,7 @@ func (m *Mgr) ensureFilesWithPriority(
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
 	// 刷新优先级，windows的先不实现
-	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != osWindows && runtime.GOOS != osDarwin {
 		freshPriority(fileDetails)
 		for _, v := range fileDetails {
 			blog.Debugf("remote: after fresh Priority, file:%+v", *v)
@@ -1305,7 +1440,7 @@ func (m *Mgr) ensureSingleFile(
 				if desc.Retry {
 					status, _, _ = m.checkOrLockSendFailFile(host.Server, desc, true)
 				} else {
-					status, _ = m.checkOrLockSendFile(host.Server, desc)
+					status = m.querySendFile(host.Server, desc)
 				}
 			}
 		}
@@ -1406,7 +1541,7 @@ func (m *Mgr) ensureSingleCorkFile(c *corkFile, r matchResult) (err error) {
 				if desc.Retry {
 					status, _, _ = m.checkOrLockSendFailFile(host.Server, *desc, true)
 				} else {
-					status, _ = m.checkOrLockSendFile(host.Server, *desc)
+					status = m.querySendFile(host.Server, *desc)
 				}
 			}
 		}
@@ -1531,7 +1666,9 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 			// blog.Debugf("check cache process wait too long server(%s): %s", server, d2.String())
 		}
 	}()
-
+	if m.fileSendMap == nil {
+		m.fileSendMap = make(map[string]*fileSendMap)
+	}
 	target, ok := m.fileSendMap[server]
 	if !ok {
 		target = &fileSendMap{}
@@ -1543,8 +1680,47 @@ func (m *Mgr) checkOrLockSendFile(server string, desc dcSDK.FileDesc) (types.Fil
 	return info.SendStatus, match
 }
 
+// querySendFile 检查目标file的sendStatus, 如果找不到对应file，直接返回failed状态，不做修改
+func (m *Mgr) querySendFile(server string, desc dcSDK.FileDesc) types.FileSendStatus {
+	m.fileSendMutex.RLock()
+	if m.fileSendMap == nil {
+		blog.Errorf("remote: fileSendMap not initialized for server(%s)", server)
+		return types.FileSendFailed
+	}
+	fsm, ok := m.fileSendMap[server]
+	if !ok {
+		blog.Errorf("remote: query send file failed: server(%s) is not exist in cache map", server)
+		m.fileSendMutex.RUnlock()
+		return types.FileSendFailed
+	}
+	m.fileSendMutex.RUnlock()
+
+	fsm.RLock()
+	defer fsm.RUnlock()
+
+	if fsm.cache == nil {
+		blog.Errorf("remote: query send file failed: server(%s) cache is not exist", server)
+		return types.FileSendFailed
+	}
+	c, ok := fsm.cache[desc.FilePath]
+	if !ok || c == nil || len(*c) == 0 {
+		blog.Errorf("remote: query send file failed: server(%s) cache is nil", server)
+		return types.FileSendFailed
+	}
+
+	for _, ci := range *c {
+		if ci.Match(desc) {
+			return ci.SendStatus
+		}
+	}
+	return types.FileSendFailed
+}
+
 func (m *Mgr) checkOrLockSendFailFile(server string, desc dcSDK.FileDesc, query bool) (types.FileSendStatus, bool, error) {
 	m.failFileSendMutex.Lock()
+	if m.failFileSendMap == nil {
+		m.failFileSendMap = make(map[string]*fileSendMap)
+	}
 	target, ok := m.failFileSendMap[server]
 	if !ok {
 		target = &fileSendMap{}
@@ -1575,6 +1751,9 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry
 	if !retry {
 		//blog.Debugf("remote: execute remote task to server(%s) for descs(%d)", server, len(newDescs))
 		m.fileSendMutex.Lock()
+		if m.fileSendMap == nil {
+			m.fileSendMap = make(map[string]*fileSendMap)
+		}
 		target, ok := m.fileSendMap[server]
 		if !ok {
 			target = &fileSendMap{}
@@ -1585,6 +1764,9 @@ func (m *Mgr) checkOrLockCorkFiles(server string, descs []*dcSDK.FileDesc, retry
 	} else { //批量检查重试文件
 		//blog.Debugf("remote: execute remote task to server(%s) for retry descs(%d)", server, len(retryDescs))
 		m.failFileSendMutex.Lock()
+		if m.failFileSendMap == nil {
+			m.failFileSendMap = make(map[string]*fileSendMap)
+		}
 		target, ok := m.failFileSendMap[server]
 		if !ok {
 			target = &fileSendMap{}
@@ -1611,6 +1793,9 @@ func (m *Mgr) needToUpdateFail(desc dcSDK.FileDesc, status types.FileSendStatus)
 func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.FileSendStatus) {
 	if status == types.FileSendSucceed || !desc.Retry {
 		m.fileSendMutex.Lock()
+		if m.fileSendMap == nil {
+			m.fileSendMap = make(map[string]*fileSendMap)
+		}
 		target, ok := m.fileSendMap[server]
 		if !ok {
 			target = &fileSendMap{}
@@ -1622,6 +1807,9 @@ func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.Fi
 
 	if m.needToUpdateFail(desc, status) {
 		m.failFileSendMutex.Lock()
+		if m.failFileSendMap == nil {
+			m.failFileSendMap = make(map[string]*fileSendMap)
+		}
 		failTarget, ok := m.failFileSendMap[server]
 		if !ok {
 			failTarget = &fileSendMap{}
@@ -2015,6 +2203,31 @@ func (m *Mgr) clearOldFileCollectionFromCache(server string, fcs []*types.FileCo
 	return
 }
 
+func (m *Mgr) clearTerminatedFileCollection(server string) {
+	m.fileCollectionSendMutex.Lock()
+	defer m.fileCollectionSendMutex.Unlock()
+
+	target, ok := m.fileCollectionSendMap[server]
+	if !ok {
+		return
+	}
+
+	resultfiles := make([]*types.FileCollectionInfo, 0, len(*target))
+	removedTotal := 0
+
+	for _, ci := range *target {
+		if ci.SendStatus == types.FileSendFailed || ci.SendStatus == types.FileSendSucceed {
+			blog.Warnf("remote: clean fileCollection terminated status: %s for %s", ci.SendStatus.String(), ci.UniqID)
+		} else {
+			resultfiles = append(resultfiles, ci)
+		}
+	}
+	*target = resultfiles
+	removedTotal += len(*target) - len(resultfiles)
+
+	blog.Warnf("remote: cleaned %d fileCollection terminated entries for host %s", removedTotal, server)
+}
+
 func (m *Mgr) getCachedToolChainTimestamp(server string, toolChainKey string) (int64, error) {
 	m.fileCollectionSendMutex.RLock()
 	defer m.fileCollectionSendMutex.RUnlock()
@@ -2051,6 +2264,30 @@ func (m *Mgr) getCachedToolChainStatus(server string, toolChainKey string) (type
 	return types.FileSendUnknown, nil
 }
 
+func (m *Mgr) cleanWorkerCache(h *dcProtocol.Host) error {
+	blog.Warnf("remote: begin to clean worker cache for server %s", h.Server)
+
+	m.clearTerminatedFileCollection(h.Server)
+
+	m.fileSendMutex.Lock()
+	if m.fileSendMap != nil {
+		if target, ok := m.fileSendMap[h.Server]; ok {
+			target.cleanTerminatedStatus()
+		}
+	}
+	m.fileSendMutex.Unlock()
+
+	m.failFileSendMutex.Lock()
+	if m.failFileSendMap != nil {
+		if target, ok := m.failFileSendMap[h.Server]; ok {
+			target.cleanTerminatedStatus()
+		}
+	}
+	m.failFileSendMutex.Unlock()
+	blog.Warnf("remote: end to clean worker cache for server %s", h.Server)
+	return nil
+}
+
 func (m *Mgr) lockSlots(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host {
 	return m.resource.Lock(usage, f, banWorkerList)
 }
@@ -2066,6 +2303,44 @@ func (m *Mgr) TotalSlots() int {
 
 func (m *Mgr) getRemoteFileBaseDir() string {
 	return fmt.Sprintf("common_%s", m.work.ID())
+}
+
+func (m *Mgr) syncHostToken(hostList []*dcProtocol.Host) {
+	for _, h := range hostList {
+		go func(h *dcProtocol.Host) {
+			handler := m.remoteWorker.Handler(0, nil, nil, nil)
+			var c dcSDK.BKDistCommand
+			if runtime.GOOS == osLinux {
+				c = dcSDK.BKDistCommand{
+					Commands: []dcSDK.BKCommand{
+						{
+							ExeName: "sh",
+							Params:  linuxTokenParam,
+						},
+					},
+				}
+			} else if runtime.GOOS == osWindows {
+				c = dcSDK.BKDistCommand{
+					Commands: []dcSDK.BKCommand{
+						{
+							ExeName: "powershell",
+							Params:  windowsTokenParam,
+						},
+					},
+				}
+			}
+			result, err := handler.ExecuteTask(h, &c)
+			if err != nil {
+				blog.Errorf("remote: execute task failed: %v", err)
+				return
+			}
+			msg := strings.TrimRight(string(result.Results[0].OutputMessage), " \n\r\t")
+			if msg != "" {
+				h.Token = msg
+				blog.Infof("remote: success to sync token for host(%s), get token: %s", h.Server, msg)
+			}
+		}(h)
+	}
 }
 
 func (m *Mgr) syncHostTimeNoWait(hostList []*dcProtocol.Host) []*dcProtocol.Host {

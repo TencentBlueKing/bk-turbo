@@ -24,11 +24,11 @@ import (
 	"time"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
@@ -36,6 +36,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
 	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/cespare/xxhash/v2"
 )
 
 const (
@@ -95,6 +96,7 @@ type TaskCL struct {
 	rewriteCrossArgs []string
 	preProcessArgs   []string
 	serverSideArgs   []string
+	resultCacheArgs  []string
 	pumpArgs         []string
 
 	// file names
@@ -225,7 +227,7 @@ func (cl *TaskCL) getPreLoadConfigPath(config dcType.BoosterConfig) string {
 }
 
 func (cl *TaskCL) CanExecuteWithLocalIdleResource(command []string) bool {
-	if cl.sandbox.Env.GetEnv(env.KeyExecutorUECLNotUseLocal) == "true" {
+	if cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorUECLNotUseLocal) == "true" {
 		return false
 	}
 
@@ -289,7 +291,7 @@ func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.B
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (cl *TaskCL) LocalLockWeight(command []string) int32 {
-	envvalue := cl.sandbox.Env.GetEnv(env.KeyExecutorUECLLocalCPUWeight)
+	envvalue := cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorUECLLocalCPUWeight)
 	if envvalue != "" {
 		w, err := strconv.Atoi(envvalue)
 		if err == nil && w > 0 && w <= runtime.NumCPU() {
@@ -302,7 +304,12 @@ func (cl *TaskCL) LocalLockWeight(command []string) int32 {
 
 // PostExecute 后置处理
 func (cl *TaskCL) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
-	return cl.postExecute(r)
+	return cl.postExecute(r, false)
+}
+
+// PostExecuteByCLFilter 后置处理，由clfilter调用
+func (cl *TaskCL) PostExecuteByCLFilter(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+	return cl.postExecute(r, true)
 }
 
 // LocalExecuteNeed no need
@@ -790,7 +797,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			if strings.HasPrefix(v, appendEnvKey) {
 				envs = append(envs, v)
 				// set flag we hope append env, not overwrite
-				flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(env.KeyRemoteEnvAppend))
+				flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(dcEnv.KeyRemoteEnvAppend))
 				envs = append(envs, flag)
 				break
 			}
@@ -849,7 +856,7 @@ func (cl *TaskCL) isPumpActionNumSatisfied() (bool, error) {
 }
 
 func (cl *TaskCL) workerSupportAbsPath() bool {
-	v := cl.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	v := cl.sandbox.Env.GetEnv(dcEnv.KeyWorkerSupportAbsPath)
 	if v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
@@ -866,20 +873,22 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	cl.originArgs = command
 
 	// ++ try with pump,only support windows now
-	if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) && cl.workerSupportAbsPath() {
-		if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
-			req, err, notifyerr := cl.trypump(command)
-			if err != nil {
-				if notifyerr == ErrorNotSupportRemote {
-					blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
-					return nil, dcType.BKDistCommonError{
-						Code:  dcType.UnknowCode,
-						Error: err,
+	if !cl.hasResultIndex() {
+		if !cl.pumpremotefailed && dcPump.SupportPump(cl.sandbox.Env) && cl.workerSupportAbsPath() {
+			if satisfied, _ := cl.isPumpActionNumSatisfied(); satisfied {
+				req, err, notifyerr := cl.trypump(command)
+				if err != nil {
+					if notifyerr == ErrorNotSupportRemote {
+						blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
+						return nil, dcType.BKDistCommonError{
+							Code:  dcType.UnknowCode,
+							Error: err,
+						}
 					}
+				} else {
+					cl.pumpremote = true
+					return req, dcType.ErrorNone
 				}
-			} else {
-				cl.pumpremote = true
-				return req, dcType.ErrorNone
 			}
 		}
 	}
@@ -1046,17 +1055,22 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}, dcType.ErrorNone
 }
 
-func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult, byclfilter bool) dcType.BKDistCommonError {
 	blog.Infof("cl: start post execute for: %v", cl.originArgs)
-	if r == nil || len(r.Results) == 0 {
-		blog.Warnf("cl: parameter is invalid")
-		return dcType.BKDistCommonError{
-			Code:  dcType.UnknowCode,
-			Error: fmt.Errorf("parameter is invalid"),
-		}
-	}
 
 	resultfilenum := 0
+	var dealError error
+
+	if r == nil || len(r.Results) == 0 {
+		// blog.Warnf("cl: parameter is invalid")
+		// return dcType.BKDistCommonError{
+		// 	Code:  dcType.UnknowCode,
+		// 	Error: fmt.Errorf("parameter is invalid"),
+		// }
+		goto ERROREND
+	}
+
+	// resultfilenum := 0
 	// by tomtian 20201224,to ensure existed result file
 	if len(r.Results[0].ResultFiles) == 0 {
 		blog.Warnf("cl: not found result file for: %v", cl.originArgs)
@@ -1070,10 +1084,12 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cl.sandbox.Dir); err != nil {
 					blog.Errorf("cl: failed to save file [%s]", f.FilePath)
-					return dcType.BKDistCommonError{
-						Code:  dcType.UnknowCode,
-						Error: err,
-					}
+					// return dcType.BKDistCommonError{
+					// 	Code:  dcType.UnknowCode,
+					// 	Error: err,
+					// }
+					dealError = err
+					goto ERROREND
 				}
 				resultfilenum++
 			}
@@ -1100,9 +1116,11 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 			if cl.preprocessedErrorBuf != "" {
 				cl.parseOutput(cl.preprocessedErrorBuf)
 			}
-		} else {
-			// simulate output with inputFile
-			// r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
+		}
+
+		// simulate output with inputFile
+		if !byclfilter {
+			r.Results[0].OutputMessage = []byte(filepath.Base(cl.inputFile))
 		}
 
 		// if remote succeed with pump,do not need copy head file
@@ -1114,6 +1132,32 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	}
 
 ERROREND:
+	// 如果预处理模式下远程失败，则提前生成pump的依赖文件
+	// 因为默认本地命令生成的依赖文件不全
+	if !cl.pumpremote && cl.needcopypumpheadfile {
+		if cl.forcedepend && cl.preprocessedErrorBuf != "" {
+			cl.parseOutput(cl.preprocessedErrorBuf)
+		}
+
+		cl.copyPumpHeadFile(cl.sandbox.Dir)
+		cl.needcopypumpheadfile = false
+	}
+
+	if r == nil || len(r.Results) == 0 {
+		blog.Warnf("cl: parameter is invalid")
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
+	}
+
+	if dealError != nil {
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: dealError,
+		}
+	}
+
 	// write error message into
 	if cl.saveTemp() && len(r.Results[0].ErrorMessage) > 0 {
 		// make the tmp file for storing the stderr from server compiler.
@@ -1243,6 +1287,17 @@ func (cl *TaskCL) preBuild(args []string) error {
 
 	cl.serverSideArgs = serverSideArgs
 
+	if cl.SupportResultCache(args) != resultcache.CacheTypeNone {
+		cl.resultCacheArgs = make([]string, len(cl.serverSideArgs))
+		copy(cl.resultCacheArgs, cl.serverSideArgs)
+		for index := range cl.resultCacheArgs {
+			if cl.resultCacheArgs[index] == cl.preprocessedFile {
+				cl.resultCacheArgs[index] = cl.inputFile
+				break
+			}
+		}
+	}
+
 	blog.Infof("cl: pre-build success for enter args: %v", args)
 	return nil
 }
@@ -1285,7 +1340,7 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 
 	// to check whether need save to memroy
 	savetomemroy := false
-	if cl.sandbox.Env.IsSet(env.KeyExecutorWriteMemory) {
+	if cl.sandbox.Env.IsSet(dcEnv.KeyExecutorWriteMemory) {
 		savetomemroy = true
 		blog.Infof("cl: ready save processed file to memory")
 	}
@@ -1362,9 +1417,10 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 		return "", nil, err
 	}
 	blog.Infof("cl: success to execute pre-process and get %s: %s", outputFile, strings.Join(newArgs, " "))
-	if cl.showinclude || cl.forcedepend {
-		cl.preprocessedErrorBuf = errBuf.String()
-	}
+
+	// if cl.showinclude || cl.forcedepend {
+	cl.preprocessedErrorBuf = errBuf.String()
+	// }
 
 	if !savetomemroy {
 		return outputFile, nil, nil
@@ -1510,4 +1566,69 @@ func (cl *TaskCL) parseOutput(s string) (string, error) {
 	}
 
 	return strings.Join(output, ""), nil
+}
+
+// SupportResultCache check whether this command support result cache
+func (cl *TaskCL) SupportResultCache(command []string) int {
+	if cl.sandbox != nil {
+		if str := cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorResultCacheType); str != "" {
+			i, err := strconv.Atoi(str)
+			if err == nil {
+				return i
+			}
+		}
+	}
+
+	return 0
+}
+
+// hasResultIndex check whether the env of hasresultindex set
+func (cl *TaskCL) hasResultIndex() bool {
+	return cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorHasResultIndex) != ""
+}
+
+func (cl *TaskCL) GetResultCacheKey(command []string) string {
+	if cl.preprocessedFile == "" {
+		blog.Infof("cl: cl.preprocessedFile is null , no need to get result cache key")
+		return ""
+	}
+	if !dcFile.Stat(cl.preprocessedFile).Exist() {
+		blog.Warnf("cl: cl.preprocessedFile %s not existed when get result cache key", cl.preprocessedFile)
+		return ""
+	}
+
+	// ext from cl.preprocessedFile
+	ext := filepath.Ext(cl.preprocessedFile)
+
+	// cc_mtime cc_name from compile tool
+	cchash, err := dcUtil.HashFile(command[0])
+	if err != nil {
+		blog.Warnf("cl: hash file %s with error: %v", command[0], err)
+		return ""
+	}
+
+	// LANG and LC_ALL  from env , ignore in windows now
+	// cwd  from work dir , ignore now
+
+	// arg from cl.resultCacheArgs
+	argstring := strings.Join(cl.resultCacheArgs, " ")
+	arghash := xxhash.Sum64([]byte(argstring))
+
+	// cpp content from cl.preprocessedFile
+	cpphash, err := dcUtil.HashFile(cl.preprocessedFile)
+	if err != nil {
+		blog.Warnf("cl: hash file %s with error: %v", cl.preprocessedFile, err)
+		return ""
+	}
+
+	// cppstderr from cl.preprocessedErrorBuf
+	cppstderrhash := xxhash.Sum64([]byte(cl.preprocessedErrorBuf))
+
+	fullstring := fmt.Sprintf("%s_%x_%x_%x_%x", ext, cchash, arghash, cpphash, cppstderrhash)
+	fullstringhash := xxhash.Sum64([]byte(fullstring))
+
+	blog.Infof("cl: got hash key %x for string[%s] cmd:[%s]",
+		fullstringhash, fullstring, strings.Join(command, " "))
+
+	return fmt.Sprintf("%x", fullstringhash)
 }
