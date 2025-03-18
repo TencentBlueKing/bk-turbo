@@ -27,6 +27,7 @@ type RemoteSlotMgr interface {
 	GetDeadWorkers() []*worker
 	RecoverDeadWorker(w *worker)
 	DisableWorker(host *dcProtocol.Host)
+	IsWorkerDisabled(host *dcProtocol.Host) bool
 	EnableWorker(host *dcProtocol.Host)
 	SetWorkerStatus(host *dcProtocol.Host, status Status)
 	Lock(usage dcSDK.JobUsage, f string, banWorkerList []*dcProtocol.Host) *dcProtocol.Host
@@ -226,6 +227,23 @@ func (wr *resource) Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host) {
 
 func (wr *resource) TotalSlots() int {
 	return wr.totalSlots
+}
+
+func (wr *resource) IsWorkerDisabled(host *dcProtocol.Host) bool {
+	if host == nil {
+		return true
+	}
+
+	wr.workerLock.RLock()
+	defer wr.workerLock.RUnlock()
+
+	for _, w := range wr.worker {
+		if !host.Equal(w.host) {
+			continue
+		}
+		return w.disabled
+	}
+	return true
 }
 
 func (wr *resource) DisableWorker(host *dcProtocol.Host) {

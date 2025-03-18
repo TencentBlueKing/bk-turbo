@@ -215,6 +215,23 @@ func (wo *workerOffer) TotalSlots() int {
 	return wo.validWorkerNum
 }
 
+func (wo *workerOffer) IsWorkerDisabled(host *dcProtocol.Host) bool {
+	if host == nil {
+		return true
+	}
+
+	wo.workerLock.RLock()
+	defer wo.workerLock.RUnlock()
+
+	for _, w := range wo.worker {
+		if !host.Equal(w.host) {
+			continue
+		}
+		return w.disabled
+	}
+	return true
+}
+
 func (wo *workerOffer) DisableWorker(host *dcProtocol.Host) {
 	if host == nil {
 		return

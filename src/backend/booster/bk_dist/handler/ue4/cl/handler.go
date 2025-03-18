@@ -24,7 +24,6 @@ import (
 	"time"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcEnv "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
@@ -228,7 +227,7 @@ func (cl *TaskCL) getPreLoadConfigPath(config dcType.BoosterConfig) string {
 }
 
 func (cl *TaskCL) CanExecuteWithLocalIdleResource(command []string) bool {
-	if cl.sandbox.Env.GetEnv(env.KeyExecutorUECLNotUseLocal) == "true" {
+	if cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorUECLNotUseLocal) == "true" {
 		return false
 	}
 
@@ -292,7 +291,7 @@ func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.B
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (cl *TaskCL) LocalLockWeight(command []string) int32 {
-	envvalue := cl.sandbox.Env.GetEnv(env.KeyExecutorUECLLocalCPUWeight)
+	envvalue := cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorUECLLocalCPUWeight)
 	if envvalue != "" {
 		w, err := strconv.Atoi(envvalue)
 		if err == nil && w > 0 && w <= runtime.NumCPU() {
@@ -798,7 +797,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			if strings.HasPrefix(v, appendEnvKey) {
 				envs = append(envs, v)
 				// set flag we hope append env, not overwrite
-				flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(env.KeyRemoteEnvAppend))
+				flag := fmt.Sprintf("%s=true", dcEnv.GetEnvKey(dcEnv.KeyRemoteEnvAppend))
 				envs = append(envs, flag)
 				break
 			}
@@ -857,7 +856,7 @@ func (cl *TaskCL) isPumpActionNumSatisfied() (bool, error) {
 }
 
 func (cl *TaskCL) workerSupportAbsPath() bool {
-	v := cl.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	v := cl.sandbox.Env.GetEnv(dcEnv.KeyWorkerSupportAbsPath)
 	if v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
@@ -1341,7 +1340,7 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 
 	// to check whether need save to memroy
 	savetomemroy := false
-	if cl.sandbox.Env.IsSet(env.KeyExecutorWriteMemory) {
+	if cl.sandbox.Env.IsSet(dcEnv.KeyExecutorWriteMemory) {
 		savetomemroy = true
 		blog.Infof("cl: ready save processed file to memory")
 	}
@@ -1604,7 +1603,7 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	// cc_mtime cc_name from compile tool
 	cchash, err := dcUtil.HashFile(command[0])
 	if err != nil {
-		blog.Warnf("cl: hash file %s with error: %v", err)
+		blog.Warnf("cl: hash file %s with error: %v", command[0], err)
 		return ""
 	}
 
@@ -1618,7 +1617,7 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	// cpp content from cl.preprocessedFile
 	cpphash, err := dcUtil.HashFile(cl.preprocessedFile)
 	if err != nil {
-		blog.Warnf("cl: hash file %s with error: %v", err)
+		blog.Warnf("cl: hash file %s with error: %v", cl.preprocessedFile, err)
 		return ""
 	}
 
