@@ -17,5 +17,5 @@ const val EXCHANGE_METRICS_STATISTIC_TURBO_DAILY = "metrics.statistic.turbo.dail
 /**
  * 蓝盾项目停用广播通知
  */
-const val EXCHANGE_PROJECT_ENABLE_FANOUT = "e.project.enable.exchange.fanout"
+const val EXCHANGE_PROJECT_ENABLE_FANOUT = "project.enable.exchange.fanout"
 const val QUEUE_PROJECT_STATUS_UPDATE = "queue.turbo.project.status.update"
