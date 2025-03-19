@@ -20,11 +20,10 @@ class ProjectStatusUpdateConsumer @Autowired constructor(
         private val logger = LoggerFactory.getLogger(this::class.java)
     }
 
-    fun consumer(eventMap: LinkedHashMap<Any, Any>) {
+    fun consumer(eventStr: String) {
         try {
-            val json = JsonUtil.toJson(eventMap)
-            logger.info("ProjectStatusUpdateConsumer received: $json")
-            val event = JsonUtil.to(json, object : TypeReference<ProjectEnableStatusBroadCastEvent>(){})
+            logger.info("ProjectStatusUpdateConsumer received: $eventStr")
+            val event = JsonUtil.to(eventStr, object : TypeReference<ProjectEnableStatusBroadCastEvent>(){})
 
             with(event) {
                 turboPlanService.updatePlanStatusByBkProjectStatus(
