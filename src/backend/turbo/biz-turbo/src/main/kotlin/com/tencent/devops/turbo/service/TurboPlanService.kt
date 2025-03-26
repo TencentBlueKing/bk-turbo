@@ -1,16 +1,28 @@
 package com.tencent.devops.turbo.service
 
+import com.tencent.bk.sdk.iam.constants.CallbackMethodEnum
+import com.tencent.bk.sdk.iam.dto.callback.request.CallbackRequestDTO
+import com.tencent.bk.sdk.iam.dto.callback.response.CallbackBaseResponseDTO
+import com.tencent.bk.sdk.iam.dto.callback.response.FetchInstanceInfoResponseDTO
+import com.tencent.bk.sdk.iam.dto.callback.response.InstanceInfoDTO
+import com.tencent.bk.sdk.iam.dto.callback.response.ListInstanceResponseDTO
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_NO_DATA_FOUND
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.api.util.OkhttpUtil
+import com.tencent.devops.common.auth.api.AuthRegisterApi
+import com.tencent.devops.common.auth.callback.FetchInstanceInfo
+import com.tencent.devops.common.auth.callback.ListInstanceInfo
 import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.service.prometheus.BkTimed
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
+import com.tencent.devops.common.util.constants.COMMON_NUM_0L
+import com.tencent.devops.common.util.constants.COMMON_NUM_10L
+import com.tencent.devops.common.util.constants.COMMON_NUM_1L
 import com.tencent.devops.common.util.constants.SYSTEM_ADMIN
 import com.tencent.devops.project.api.service.ServiceProjectResource
 import com.tencent.devops.turbo.dao.mongotemplate.TurboPlanDao
@@ -32,6 +44,7 @@ import com.tencent.devops.turbo.vo.TurboPlanStatusBatchUpdateReqVO
 import org.slf4j.LoggerFactory
 import org.springframework.beans.BeanUtils
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.domain.Sort
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.time.LocalDate
@@ -40,6 +53,7 @@ import java.time.LocalDateTime
 @Suppress("MaxLineLength", "ComplexMethod", "NestedBlockDepth", "SpringJavaInjectionPointsAutowiringInspection")
 @Service
 class TurboPlanService @Autowired constructor(
+    private val authRegisterApi: AuthRegisterApi,
     private val turboPlanDao: TurboPlanDao,
     private val turboPlanRepository: TurboPlanRepository,
     private val turboPlanInstanceService: TurboPlanInstanceService,
@@ -176,6 +190,21 @@ class TurboPlanService @Autowired constructor(
                 createdDate = LocalDateTime.now()
             )
             turboPlanEntity = turboPlanRepository.save(turboPlanEntity!!)
+
+            // 2.1 注册到权限中心
+            try {
+                val registerTurboPlan = authRegisterApi.registerTurboPlan(
+                    user = user,
+                    turboPlanId = turboPlanEntity!!.id!!,
+                    turboPlanName = turboPlanEntity!!.planName,
+                    projectId = turboPlanEntity!!.projectId
+                )
+                if (!registerTurboPlan) {
+                    rollbackTurboPlan(turboPlanEntity!!, "Failed to register plan to permission center", null)
+                }
+            } catch (e: Exception) {
+                rollbackTurboPlan(turboPlanEntity!!, "Failed to register plan to permission center", e)
+            }
             // 3. 调用api,同步信息
             updateConfigParamByApi(
                 turboEngineConfigEntity = turboEngineConfigEntity,
@@ -187,6 +216,12 @@ class TurboPlanService @Autowired constructor(
         }
         logger.info("add turbo plan successfully!")
         return turboPlanEntity?.id
+    }
+
+    fun rollbackTurboPlan(turboPlanEntity: TTurboPlanEntity, errorMsg: String, e: Exception?) {
+        logger.error("$errorMsg user: ${turboPlanEntity.createdBy} turbo name: {}", turboPlanEntity.planName, e)
+        turboPlanRepository.delete(turboPlanEntity)
+        throw TurboException(TURBO_THIRDPARTY_SYSTEM_FAIL, errorMsg)
     }
 
     /**
@@ -725,6 +760,84 @@ class TurboPlanService @Autowired constructor(
             "update failed project id: ${failedProjectIds.joinToString()}"
         } else {
             "all project id turbo plan status updated successfully!"
+        }
+    }
+
+    /**
+     * iam（蓝盾）回调实现方法
+     */
+    fun getInstanceByResource(callBackInfo: CallbackRequestDTO): String {
+        logger.info("CallbackRequestDTO: {}", callBackInfo)
+        val result: CallbackBaseResponseDTO = when (callBackInfo.method) {
+            CallbackMethodEnum.LIST_INSTANCE -> handleListInstance(callBackInfo)
+            CallbackMethodEnum.FETCH_INSTANCE_INFO -> handleFetchInstanceInfo(callBackInfo)
+            else -> CallbackBaseResponseDTO()
+        }
+        return JsonUtil.toJson(result)
+    }
+
+    /**
+     * 按项目id分页获取方案清单
+     */
+    private fun handleListInstance(callBackInfo: CallbackRequestDTO): CallbackBaseResponseDTO {
+        return callBackInfo.filter.parent?.id?.let { parentId ->
+            listInstance(parentId, callBackInfo.page.offset, callBackInfo.page.limit)
+        } ?: ListInstanceInfo().buildListInstanceFailResult()
+    }
+
+    /**
+     * 按方案id批量获取方案清单
+     */
+    private fun handleFetchInstanceInfo(callBackInfo: CallbackRequestDTO): CallbackBaseResponseDTO {
+        val idList = callBackInfo.filter.idList
+        return if (idList.isNullOrEmpty()) {
+            FetchInstanceInfo().buildFetchInstanceFailResult()
+        } else {
+            val turboPlanIdSet = idList.mapNotNull { it.toString() }.toSet()
+            fetchInstance(turboPlanIdSet)
+        }
+    }
+
+    /**
+     * 按项目id
+     */
+    private fun listInstance(projectId: String, offset: Long?, limit: Long?): ListInstanceResponseDTO {
+        val safeOffset = (offset ?: COMMON_NUM_0L).coerceAtLeast(COMMON_NUM_0L)
+        val safeLimit = (limit ?: COMMON_NUM_10L).coerceAtLeast(COMMON_NUM_1L)
+        val pageNum = safeOffset / safeLimit + COMMON_NUM_1L
+        val pageable =
+            PageUtils.convertPageSizeToPageable(pageNum.toInt(), safeLimit.toInt(), "_id", Sort.Direction.ASC.name)
+
+        val turboPlanEntityList = turboPlanDao.getAllTurboPlanList(null, null, projectId, pageable).records
+        val instanceInfoList = turboPlanEntityList.map { it.toDTO() }
+        val result = ListInstanceInfo()
+        return if (instanceInfoList.isEmpty()) result.buildListInstanceFailResult() else result.buildListInstanceResult(
+            instanceInfoList,
+            instanceInfoList.size.toLong()
+        )
+    }
+
+    /**
+     * 按方案id
+     */
+    private fun fetchInstance(turboPlanIdSet: Set<String>): FetchInstanceInfoResponseDTO {
+        val turboPlanEntityList = turboPlanRepository.findByIdIn(turboPlanIdSet.toList())
+        val instanceInfos = turboPlanEntityList.map { it.toDTO() }
+        val result = FetchInstanceInfo()
+        return if (instanceInfos.isEmpty()) result.buildFetchInstanceFailResult() else result.buildFetchInstanceResult(
+            instanceInfos
+        )
+    }
+
+    /**
+     * entity转DTO
+     */
+    private fun TTurboPlanEntity.toDTO(): InstanceInfoDTO {
+        return InstanceInfoDTO().apply {
+            id = this@toDTO.id
+            displayName = this@toDTO.planName
+            iamApprover =
+                listOf(if (this@toDTO.createdBy.isNullOrBlank()) this@toDTO.createdBy else this@toDTO.updatedBy)
         }
     }
 }
