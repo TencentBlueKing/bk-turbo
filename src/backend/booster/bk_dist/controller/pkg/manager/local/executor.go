@@ -29,7 +29,7 @@ import (
 const (
 	ioTimeoutBuffer         = 50
 	retryAndSuccessLimit    = 3
-	MaxWindowsCommandLength = 30000
+	MaxWindowsCommandLength = 8000
 )
 
 func newExecutor(mgr *Mgr,
@@ -352,8 +352,15 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") || strings.HasSuffix(cmd, "ispc.exe") || strings.HasSuffix(cmd, "Ispc.exe") {
 			arg := strings.Join(e.req.Commands, " ")
 			if len(arg) > MaxWindowsCommandLength {
-				code, err = sandbox.ExecRawByFile(e.req.Commands[0], e.req.Commands[1:]...)
+				var bt string
+				if sandbox == nil {
+					bt = env.GetEnv(env.BoosterType)
+				} else {
+					bt = sandbox.Env.GetEnv(env.BoosterType)
+				}
+				code, err = sandbox.ExecRawByFile(dcType.GetBoosterType(bt).String(), e.req.Commands[0], e.req.Commands[1:]...)
 			} else {
+				blog.Infof("executor: ready from pid(%d) run cmd in raw script with arg len %d", e.req.Pid, len(arg))
 				if !(strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe")) {
 					arg = "C:\\Windows\\system32\\cmd.exe /C \"" + arg + "\""
 				}
