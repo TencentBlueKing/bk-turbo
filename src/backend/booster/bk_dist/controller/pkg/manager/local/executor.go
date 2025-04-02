@@ -349,7 +349,10 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		sandbox.Stderr = &errBuf
 		blog.Infof("executor: ready from pid(%d) run cmd:%v", e.req.Pid, e.req.Commands)
 		cmd := e.req.Commands[0]
-		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") || strings.HasSuffix(cmd, "ispc.exe") || strings.HasSuffix(cmd, "Ispc.exe") {
+		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") {
+			arg := strings.Join(e.req.Commands, " ")
+			code, err = sandbox.ExecScriptsRaw(arg)
+		} else if strings.HasSuffix(cmd, "ispc.exe") || strings.HasSuffix(cmd, "Ispc.exe") {
 			arg := strings.Join(e.req.Commands, " ")
 			if len(arg) > MaxWindowsCommandLength {
 				var bt string
@@ -361,9 +364,7 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 				code, err = sandbox.ExecRawByFile(dcType.GetBoosterType(bt).String(), e.req.Commands[0], e.req.Commands[1:]...)
 			} else {
 				blog.Infof("executor: ready from pid(%d) run cmd in raw script with arg len %d", e.req.Pid, len(arg))
-				if !(strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe")) {
-					arg = "C:\\Windows\\system32\\cmd.exe /C \"" + arg + "\""
-				}
+				arg = "C:\\Windows\\system32\\cmd.exe /C \"" + arg + "\""
 				code, err = sandbox.ExecScriptsRaw(arg)
 			}
 		} else {
