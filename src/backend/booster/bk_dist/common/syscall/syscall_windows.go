@@ -178,20 +178,20 @@ func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
 	fullArgs := strings.Join(arg, " ")
 	argsFile, err := os.CreateTemp(GetHandlerTmpDir(s, bt), "args-*.txt")
 	if err != nil {
-		blog.Errorf("sanbox: cmd too long and failed to create tmp file")
+		blog.Errorf("sanbox: exec raw script in file failed to create tmp file, error:%s", err.Error())
 		return -1, err
 	}
-	blog.Infof("sanbox:ready exec raw script in file %s with arg len %d", argsFile.Name(), len(fullArgs))
+	blog.Infof("sanbox:ready exec raw script in file %s with arg len %d", argsFile.Name(), len(arg))
 	err = os.WriteFile(argsFile.Name(), []byte(fullArgs), os.ModePerm)
 	if err != nil {
 		argsFile.Close() // 关闭文件
-		blog.Errorf("sanbox: cmd too long and failed to write tmp file %s", argsFile.Name())
+		blog.Errorf("sasanbox: exec raw script in file failed to write tmp file %s, error:%s", argsFile.Name(), err.Error())
 		return -1, err
 	}
 	argsFile.Close() // 关闭文件
 	code, err := s.execCommand(name, "@"+argsFile.Name())
 	if err != nil {
-		blog.Errorf("sanbox: cmd too long and failed to exec command [%s] %s in file (%s) ", name, fullArgs, argsFile.Name())
+		blog.Errorf("sanbox: exec raw script in file failed to exec command [%s] %s in file (%s) , error:%s", name, fullArgs, argsFile.Name(), err.Error())
 		return code, err
 	}
 	blog.Infof("sanbox: success to exec raw script in file %s, delete the arg file now", argsFile.Name())
