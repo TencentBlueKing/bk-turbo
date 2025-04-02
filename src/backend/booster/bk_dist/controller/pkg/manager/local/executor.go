@@ -346,11 +346,11 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		blog.Infof("executor: ready from pid(%d) run cmd:%v", e.req.Pid, e.req.Commands)
+		blog.Infof("executor: ready from pid(%d) run cmd:%v with command type:%d", e.req.Pid, e.req.Commands, e.req.CommandType)
 		cmd := e.req.Commands[0]
 		switch e.req.CommandType {
 		case dcType.CommandInFile: //try to run cmd in file
-			blog.Infof("executor: ready from pid(%d) run cmd in file ", e.req.Pid)
+			blog.Infof("executor: ready from pid(%d) run cmd in file with command type:%d", e.req.Pid, e.req.CommandType)
 			var bt string
 			if sandbox == nil {
 				bt = env.GetEnv(env.BoosterType)

@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
@@ -177,13 +176,13 @@ func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
 // ExecCommand run the origin commands by file
 func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
 	fullArgs := strings.Join(arg, " ")
-	argsFile, err := ioutil.TempFile(GetHandlerTmpDir(s), "args-*.txt")
+	argsFile, err := os.CreateTemp(GetHandlerTmpDir(s, bt), "args-*.txt")
 	if err != nil {
 		blog.Errorf("sanbox: cmd too long and failed to create tmp file")
 		return -1, err
 	}
-
-	err = ioutil.WriteFile(argsFile.Name(), []byte(fullArgs), os.ModePerm)
+	blog.Infof("sanbox:ready exec raw script in file %s with arg len %d", argsFile.Name(), len(fullArgs))
+	err = os.WriteFile(argsFile.Name(), []byte(fullArgs), os.ModePerm)
 	if err != nil {
 		argsFile.Close() // 关闭文件
 		blog.Errorf("sanbox: cmd too long and failed to write tmp file %s", argsFile.Name())
@@ -193,12 +192,15 @@ func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
 	code, err := s.execCommand(name, "@"+argsFile.Name())
 	if err != nil {
 		blog.Errorf("sanbox: cmd too long and failed to exec command [%s] %s in file (%s) ", name, fullArgs, argsFile.Name())
+		return code, err
 	}
+	blog.Infof("sanbox: success to exec raw script in file %s, delete the arg file now", argsFile.Name())
+	os.Remove(argsFile.Name())
 	return code, err
 }
 
 // GetHandlerTmpDir get temp dir by booster type
-func GetHandlerTmpDir(sandBox *Sandbox) string {
+func GetHandlerTmpDir(sandBox *Sandbox, bt string) string {
 	var baseTmpDir string
 	if sandBox == nil {
 		baseTmpDir = os.TempDir()
@@ -209,7 +211,7 @@ func GetHandlerTmpDir(sandBox *Sandbox) string {
 	}
 
 	if baseTmpDir != "" {
-		fullTmpDir := path.Join(baseTmpDir, protocol.BKDistDir)
+		fullTmpDir := path.Join(baseTmpDir, protocol.BKDistDir, bt)
 		if !dcFile.Stat(fullTmpDir).Exist() {
 			if err := os.MkdirAll(fullTmpDir, os.ModePerm); err != nil {
 				blog.Warnf("common util: create tmp dir failed with error:%v", err)
