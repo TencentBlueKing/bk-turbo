@@ -73,7 +73,7 @@ func (d *Executor) Update() {
 
 // Run main function entry
 func (d *Executor) Run(fullargs []string, workdir string, commandType int) (int, string, error) {
-	blog.Infof("ubtexecutor: command [%s] begins", strings.Join(fullargs, " "))
+	blog.Infof("ubtexecutor: command [%s] begins with command type:%d", strings.Join(fullargs, " "), commandType)
 	for i, v := range fullargs {
 		blog.Debugf("ubtexecutor: arg[%d] : [%s]", i, v)
 	}
