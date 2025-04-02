@@ -125,7 +125,7 @@ func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
 	return 1, fmt.Errorf("not support")
 }
 
-func (s *Sandbox) ExecRawByFile(name string, arg ...string) (int, error) {
+func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
 	return 1, fmt.Errorf("not support")
 }
 

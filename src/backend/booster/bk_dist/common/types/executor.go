@@ -12,6 +12,12 @@ package types
 // BoosterType string
 type BoosterType string
 
+const (
+	MaxWindowsCommandLength = 30000
+	CommandDefault          = 0
+	CommandInFile           = 1
+)
+
 // define task types
 var (
 	BoosterCC      BoosterType = "cc"
@@ -24,7 +30,6 @@ var (
 	BoosterEcho    BoosterType = "echo"
 	BoosterCustom  BoosterType = "custom"
 	BoosterUnknown BoosterType = "unknown"
-
 )
 
 // String return the string of BoosterType
@@ -34,15 +39,15 @@ func (t BoosterType) String() string {
 
 var (
 	str2taskType = map[string]BoosterType{
-		BoosterCC.String():     BoosterCC,
-		BoosterFind.String():   BoosterFind,
-		BoosterTC.String():     BoosterTC,
-		BoosterCL.String():     BoosterCL,
-		BoosterShader.String(): BoosterShader,
-		BoosterUE4.String():    BoosterUE4,
-		BoosterClangCl.String() : BoosterClangCl,
-		BoosterEcho.String():   BoosterEcho,
-		BoosterCustom.String(): BoosterCustom,
+		BoosterCC.String():      BoosterCC,
+		BoosterFind.String():    BoosterFind,
+		BoosterTC.String():      BoosterTC,
+		BoosterCL.String():      BoosterCL,
+		BoosterShader.String():  BoosterShader,
+		BoosterUE4.String():     BoosterUE4,
+		BoosterClangCl.String(): BoosterClangCl,
+		BoosterEcho.String():    BoosterEcho,
+		BoosterCustom.String():  BoosterCustom,
 	}
 )
 

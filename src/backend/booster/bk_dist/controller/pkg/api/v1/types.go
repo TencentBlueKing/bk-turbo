@@ -188,6 +188,7 @@ type LocalTaskExecuteParam struct {
 	Environments []string                  `json:"environment"`
 	Stats        *dcSDK.ControllerJobStats `json:"stats"`
 	User         user.User                 `json:"user"`
+	CommandType  int                       `json:"command_type"`
 }
 
 // LocalTaskExecuteResp describe the response of doing local task execute to controller

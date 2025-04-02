@@ -175,7 +175,7 @@ func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
 }
 
 // ExecCommand run the origin commands by file
-func (s *Sandbox) ExecRawByFile(name string, arg ...string) (int, error) {
+func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
 	fullArgs := strings.Join(arg, " ")
 	argsFile, err := ioutil.TempFile(GetHandlerTmpDir(s), "args-*.txt")
 	if err != nil {
