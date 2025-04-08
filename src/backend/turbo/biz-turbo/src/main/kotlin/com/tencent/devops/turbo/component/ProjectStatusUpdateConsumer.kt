@@ -1,7 +1,5 @@
 package com.tencent.devops.turbo.component
 
-import com.tencent.devops.common.api.util.JsonUtil
-import com.tencent.devops.project.pojo.mq.ProjectEnableStatusBroadCastEvent
 import com.tencent.devops.turbo.service.TurboPlanService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
@@ -19,16 +17,15 @@ class ProjectStatusUpdateConsumer @Autowired constructor(
         private val logger = LoggerFactory.getLogger(this::class.java)
     }
 
-    fun consumer(event: ProjectEnableStatusBroadCastEvent) {
-        logger.info("ProjectStatusUpdateConsumer received: ${JsonUtil.toJson(event)}")
+    fun consumer(event: LinkedHashMap<Any, Any>) {
         try {
-            with(event) {
-                turboPlanService.updatePlanStatusByBkProjectStatus(
-                    userId = userId,
-                    projectId = projectId,
-                    enabled = enabled
-                )
-            }
+            logger.info("ProjectStatusUpdateConsumer received: $event")
+            turboPlanService.updatePlanStatusByBkProjectStatus(
+                userId = event["userId"] as String,
+                projectId = event["projectId"] as String,
+                enabled = event["enabled"] as Boolean
+            )
+
         } catch (e: Exception) {
             logger.error("batch update turbo plan status failed: ${e.message}", e)
         }

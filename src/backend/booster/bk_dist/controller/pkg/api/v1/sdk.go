@@ -935,7 +935,7 @@ func (wj *workJob) ExecuteRemoteTask(req *dcSDK.BKDistCommand) (*dcSDK.BKDistRes
 }
 
 // ExecuteLocalTask do the task in local controller
-func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
+func (wj *workJob) ExecuteLocalTask(commands []string, workdir string, commandType int) (int, string, *dcSDK.LocalTaskResult, error) {
 	var data []byte
 
 	dir := ""
@@ -964,6 +964,7 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 		Environments: os.Environ(),
 		Stats:        wj.stats,
 		User:         *u,
+		CommandType:  commandType,
 	}, &data)
 
 	servercode := int(api.ServerErrOK)
@@ -988,7 +989,7 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 }
 
 // ExecuteLocalTaskWithWebSocket do the task in local controller with websocket
-func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
+func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string, commandType int) (int, string, *dcSDK.LocalTaskResult, error) {
 	// 获取session
 	url := fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id)
 	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10, nil)
@@ -1029,6 +1030,7 @@ func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir stri
 		Environments: os.Environ(),
 		Stats:        wj.stats,
 		User:         *u,
+		CommandType:  commandType,
 	}, &data)
 
 	// 发送和接收结果

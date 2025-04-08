@@ -546,7 +546,9 @@ func (m *Mgr) callback4ResChanged() error {
 	if hl != nil && len(hl) > 0 {
 		m.setLastApplied(uint64(time.Now().Local().Unix()))
 		m.syncHostTimeNoWait(hl)
-		m.syncHostToken(hl) //get token to check if host not restarted
+		if runtime.GOOS != osDarwin { //mac not support
+			m.syncHostToken(hl) //get token to check if host not restarted
+		}
 	}
 
 	// if all workers released, we shoud clean the cache now

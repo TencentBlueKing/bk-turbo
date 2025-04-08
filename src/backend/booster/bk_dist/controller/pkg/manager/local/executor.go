@@ -27,9 +27,8 @@ import (
 )
 
 const (
-	ioTimeoutBuffer         = 50
-	retryAndSuccessLimit    = 3
-	MaxWindowsCommandLength = 30000
+	ioTimeoutBuffer      = 50
+	retryAndSuccessLimit = 3
 )
 
 func newExecutor(mgr *Mgr,
@@ -347,20 +346,25 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		blog.Infof("executor: ready from pid(%d) run cmd:%v", e.req.Pid, e.req.Commands)
+		blog.Infof("executor: ready from pid(%d) run cmd:%v with command type:%d", e.req.Pid, e.req.Commands, e.req.CommandType)
 		cmd := e.req.Commands[0]
-		if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") || strings.HasSuffix(cmd, "ispc.exe") || strings.HasSuffix(cmd, "Ispc.exe") {
-			arg := strings.Join(e.req.Commands, " ")
-			if len(arg) > MaxWindowsCommandLength {
-				code, err = sandbox.ExecRawByFile(e.req.Commands[0], e.req.Commands[1:]...)
+		switch e.req.CommandType {
+		case dcType.CommandInFile: //try to run cmd in file
+			blog.Infof("executor: ready from pid(%d) run cmd in file with command type:%d", e.req.Pid, e.req.CommandType)
+			var bt string
+			if sandbox == nil {
+				bt = env.GetEnv(env.BoosterType)
 			} else {
-				if !(strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe")) {
-					arg = "C:\\Windows\\system32\\cmd.exe /C \"" + arg + "\""
-				}
-				code, err = sandbox.ExecScriptsRaw(arg)
+				bt = sandbox.Env.GetEnv(env.BoosterType)
 			}
-		} else {
-			code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
+			code, err = sandbox.ExecRawByFile(dcType.GetBoosterType(bt).String(), e.req.Commands[0], e.req.Commands[1:]...)
+		default:
+			if strings.HasSuffix(cmd, "cmd.exe") || strings.HasSuffix(cmd, "Cmd.exe") {
+				arg := strings.Join(e.req.Commands, " ")
+				code, err = sandbox.ExecScriptsRaw(arg)
+			} else {
+				code, err = sandbox.ExecCommand(e.req.Commands[0], e.req.Commands[1:]...)
+			}
 		}
 		stdout, stderr = outBuf.Bytes(), errBuf.Bytes()
 	}

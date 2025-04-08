@@ -907,6 +907,7 @@ func getLocalTaskExecuteRequest(req *restful.Request) (*types.LocalTaskExecuteRe
 		Commands:     param.Commands,
 		Environments: param.Environments,
 		Stats:        param.Stats,
+		CommandType:  param.CommandType,
 	}
 
 	if config.Stats == nil {

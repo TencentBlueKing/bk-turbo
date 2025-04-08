@@ -86,9 +86,9 @@ func (d *Executor) runWork(fullargs []string, workdir string) (int, string, erro
 	var r *dcSDK.LocalTaskResult
 	var err error
 	if d.usewebsocket {
-		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir)
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir, dcTypes.CommandDefault)
 	} else {
-		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir)
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir, dcTypes.CommandDefault)
 	}
 
 	if err != nil || retcode != 0 {

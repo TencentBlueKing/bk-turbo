@@ -328,6 +328,7 @@ type LocalTaskExecuteRequest struct {
 	Commands     []string
 	Environments []string
 	Stats        *dcSDK.ControllerJobStats
+	CommandType  int
 
 	// 该请求的执行是否依赖http连接状态，默认依赖，即ignoreHttpStatus为false;
 	// 如果依赖连接状态，当连接断开时，该请求直接返回失败
