@@ -54,10 +54,10 @@ type ControllerWorkSDK interface {
 type WorkJob interface {
 	ExecuteRemoteTask(req *BKDistCommand) (*BKDistResult, error)
 	// return http code / http message / execute result / execute error
-	ExecuteLocalTask(commands []string, workdir string) (int, string, *LocalTaskResult, error)
+	ExecuteLocalTask(commands []string, workdir string, commandType int) (int, string, *LocalTaskResult, error)
 	SendRemoteFile2All(req []FileDesc) error
 
-	ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *LocalTaskResult, error)
+	ExecuteLocalTaskWithWebSocket(commands []string, workdir string, commandType int) (int, string, *LocalTaskResult, error)
 }
 
 const (
