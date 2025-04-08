@@ -224,7 +224,7 @@ func (d *DistExecutor) runWork() (int, string, error) {
 		os.Args[1] = getAbsPath(os.Args[1])
 	}
 
-	retcode, retmsg, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "")
+	retcode, retmsg, r, err := d.work.Job(d.stats).ExecuteLocalTask(os.Args[1:], "", dcTypes.CommandDefault)
 	if err != nil || retcode != 0 {
 		if r != nil {
 			blog.Errorf("executor: execute failed, error: %v, ret code: %d,retmsg:%s,outmsg:%s,errmsg:%s,cmd:%v",
