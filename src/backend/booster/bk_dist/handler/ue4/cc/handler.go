@@ -273,19 +273,6 @@ func (cc *TaskCC) getIncludeExe() (string, error) {
 	return includePath, nil
 }
 
-// func uniqArr(arr []string) []string {
-// 	newarr := make([]string, 0)
-// 	tempMap := make(map[string]bool, len(newarr))
-// 	for _, v := range arr {
-// 		if tempMap[v] == false {
-// 			tempMap[v] = true
-// 			newarr = append(newarr, v)
-// 		}
-// 	}
-
-// 	return newarr
-// }
-
 func (cc *TaskCC) analyzeIncludes(dependf string, workdir string) ([]*dcFile.Info, error) {
 	data, err := ioutil.ReadFile(dependf)
 	if err != nil {
@@ -315,27 +302,40 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	return nil, nil
 }
 
-// func formatFilePath(f string) string {
-// 	f = strings.Replace(f, "\\", "/", -1)
-// 	f = strings.Replace(f, "//", "/", -1)
+// 改进解析的策略：
+// 遍历字符串，如果是转义空格，替换为空格；如果是其它空格，则切割
+func parsePaths(input string) []string {
+	var paths []string
+	var currentPath strings.Builder
 
-// 	// 去掉路径中的..
-// 	if strings.Contains(f, "..") {
-// 		p := strings.Split(f, "/")
+	for i := 0; i < len(input); i++ {
+		char := input[i]
+		if char == '\\' {
+			// 如果是转义空格，则替换为空格
+			if i+1 <= len(input)-1 && input[i+1] == ' ' {
+				currentPath.WriteByte(input[i+1])
+				i++
+			} else {
+				currentPath.WriteByte(char)
+			}
+		} else if char == ' ' { // 其它空格，切割
+			if currentPath.Len() > 0 {
+				paths = append(paths, currentPath.String())
+				currentPath.Reset()
+			}
+		} else {
+			// 其他字符
+			currentPath.WriteByte(char)
+		}
+	}
 
-// 		var newPath []string
-// 		for _, v := range p {
-// 			if v == ".." {
-// 				newPath = newPath[:len(newPath)-1]
-// 			} else {
-// 				newPath = append(newPath, v)
-// 			}
-// 		}
-// 		f = strings.Join(newPath, "/")
-// 	}
+	// 添加最后一个路径
+	if currentPath.Len() > 0 {
+		paths = append(paths, currentPath.String())
+	}
 
-// 	return f
-// }
+	return paths
+}
 
 func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) error {
 	data, err := os.ReadFile(cc.sourcedependfile)
@@ -344,57 +344,40 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 		return err
 	}
 
-	// sep := "\n"
-	// if runtime.GOOS == osWindows {
-	// 	sep = "\r\n"
-	// }
 	lines := strings.Split(string(data), sep)
-	// includes := []string{}
 	for _, l := range lines {
 		l = strings.Trim(l, " \r\n\\")
-		// TODO : the file path maybe contains space, should support this condition
-		fields := strings.Split(l, " ")
-		if len(fields) >= 1 {
-			// for i, f := range fields {
-			for index := len(fields) - 1; index >= 0; index-- {
-				var targetf string
-				// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
-				// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
-				// 向前依附到不为空的字符串为止
-				if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
-					for targetindex := index - 1; targetindex >= 0; targetindex-- {
-						if len(fields[targetindex]) > 0 {
-							fields[targetindex] = strings.Trim(fields[targetindex], "\\")
-							targetf = strings.Join(fields[targetindex:index+1], " ")
-							index = targetindex
-							break
-						}
-					}
-				} else if len(fields[index]) > 0 {
-					targetf = fields[index]
-				} else {
-					continue
-				}
+		paths := parsePaths(l)
+		for _, v := range paths {
+			if strings.HasSuffix(v, ":") {
+				continue
+			}
+			if !filepath.IsAbs(v) {
+				v, _ = filepath.Abs(filepath.Join(workdir, v))
+			}
 
-				if strings.HasSuffix(targetf, ":") {
-					continue
-				}
-				if !filepath.IsAbs(targetf) {
-					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
-				}
+			*includes = append(*includes, dcUtil.FormatFilePath(v))
 
-				*includes = append(*includes, dcUtil.FormatFilePath(targetf))
-
-				// 如果是链接，则将相关指向的文件都包含进来
-				fs := dcUtil.GetAllLinkFiles(targetf)
-				if len(fs) > 0 {
-					*includes = append(*includes, fs...)
-				}
+			// 如果是链接，则将相关指向的文件都包含进来
+			fs := dcUtil.GetAllLinkFiles(v)
+			if len(fs) > 0 {
+				*includes = append(*includes, fs...)
 			}
 		}
 	}
 
 	return nil
+}
+
+func (cc *TaskCC) getPS5SystemHeaderDir() string {
+	if strings.HasSuffix(cc.originArgs[0], "prospero-clang.exe") {
+		bindir := filepath.Dir(cc.originArgs[0])
+		headerdir := filepath.Join(bindir, "../../target/include")
+		blog.Infof("cc: got ps5 system header dir:%s", headerdir)
+		return headerdir
+	}
+
+	return ""
 }
 
 func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
@@ -410,52 +393,6 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	if err != nil {
 		return err
 	}
-
-	// data, err := ioutil.ReadFile(cc.sourcedependfile)
-	// if err != nil {
-	// 	blog.Warnf("cc: copy pump head failed to read depned file: %s with err:%v", cc.sourcedependfile, err)
-	// 	return err
-	// }
-
-	// lines := strings.Split(string(data), sep)
-	// // includes := []string{}
-	// for _, l := range lines {
-	// 	l = strings.Trim(l, " \r\n\\")
-	// 	// TODO : the file path maybe contains space, should support this condition
-	// 	fields := strings.Split(l, " ")
-	// 	if len(fields) >= 1 {
-	// 		// for i, f := range fields {
-	// 		for index := len(fields) - 1; index >= 0; index-- {
-	// 			var targetf string
-	// 			// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
-	// 			// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
-	// 			// 向前依附到不为空的字符串为止
-	// 			if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
-	// 				for targetindex := index - 1; targetindex >= 0; targetindex-- {
-	// 					if len(fields[targetindex]) > 0 {
-	// 						fields[targetindex] = strings.Trim(fields[targetindex], "\\")
-	// 						targetf = strings.Join(fields[targetindex:index+1], " ")
-	// 						index = targetindex
-	// 						break
-	// 					}
-	// 				}
-	// 			} else if len(fields[index]) > 0 {
-	// 				targetf = fields[index]
-	// 			} else {
-	// 				continue
-	// 			}
-
-	// 			if strings.HasSuffix(targetf, ".o:") {
-	// 				continue
-	// 			}
-	// 			if !filepath.IsAbs(targetf) {
-	// 				targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
-	// 			}
-
-	// 			includes = append(includes, dcUtil.FormatFilePath(targetf))
-	// 		}
-	// 	}
-	// }
 
 	// copy includeRspFiles
 	if len(cc.includeRspFiles) > 0 {
@@ -497,9 +434,12 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		return ErrorInvalidDependFile
 	}
 
-	// for i := range includes {
-	// 	includes[i] = strings.Replace(includes[i], "\\", "/", -1)
-	// }
+	// TODO : get system header dir for prospero-clang.exe
+	headerdir := cc.getPS5SystemHeaderDir()
+	if headerdir != "" {
+		includes = append(includes, headerdir)
+	}
+
 	uniqlines := dcUtil.UniqArr(includes)
 
 	// TODO : append symlink or symlinked if need
@@ -544,17 +484,6 @@ func (cc *TaskCC) getPumpDir(env *dcEnv.Sandbox) (string, error) {
 
 // search all include files for this compile command
 func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, forcefresh bool) ([]*dcFile.Info, error) {
-	// pumpdir := dcPump.PumpCacheDir(cc.sandbox.Env)
-	// if pumpdir == "" {
-	// 	pumpdir = dcUtil.GetPumpCacheDir()
-	// }
-
-	// if !dcFile.Stat(pumpdir).Exist() {
-	// 	if err := os.MkdirAll(pumpdir, os.ModePerm); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
 	pumpdir, err := cc.getPumpDir(cc.sandbox.Env)
 	if err != nil {
 		return nil, err
@@ -986,7 +915,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 	// --
 
-	responseFile, args, err := ensureCompiler(command, cc.sandbox.Dir)
+	responseFile, args, allrspfiles, err := ensureCompiler(command, cc.sandbox.Dir)
 	if err != nil {
 		blog.Warnf("cc: pre execute ensure compiler %v: %v", args, err)
 		return nil, dcType.BKDistCommonError{
@@ -1033,6 +962,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	cc.responseFile = responseFile
+	cc.includeRspFiles = allrspfiles
 	cc.ensuredArgs = args
 
 	// debugRecordFileName("preBuild begin")
@@ -1316,18 +1246,18 @@ func (cc *TaskCC) preBuild(args []string) error {
 	cc.firstIncludeFile = getFirstIncludeFile(scannedData.args)
 	cc.inputFile = scannedData.inputFile
 	cc.outputFile = scannedData.outputFile
-	cc.includeRspFiles = scannedData.includeRspFiles
+	// cc.includeRspFiles = scannedData.includeRspFiles
 	cc.includePaths = scannedData.includePaths
 	cc.includeFiles = scannedData.includeFiles
 
 	// TODO : resolve rsp files recursively
-	if len(cc.includeRspFiles) > 0 {
-		checkedRspFiles := []string{}
-		for _, f := range cc.includeRspFiles {
-			scanRspFilesRecursively(f, cc.sandbox.Dir, &cc.includePaths, &cc.includeFiles, &checkedRspFiles)
-		}
-		cc.includeRspFiles = append(cc.includeRspFiles, checkedRspFiles...)
-	}
+	// if len(cc.includeRspFiles) > 0 {
+	// 	checkedRspFiles := []string{}
+	// 	for _, f := range cc.includeRspFiles {
+	// 		scanRspFilesRecursively(f, cc.sandbox.Dir, &cc.includePaths, &cc.includeFiles, &checkedRspFiles)
+	// 	}
+	// 	cc.includeRspFiles = append(cc.includeRspFiles, checkedRspFiles...)
+	// }
 
 	// handle the cross-compile issues.
 	targetArgs := cc.scannedArgs

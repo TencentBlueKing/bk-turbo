@@ -12,7 +12,7 @@ package ue4
 import (
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -46,6 +46,8 @@ const (
 	defaultLinkFilterCompiler         = "link-filter.exe"
 	defaultAstcsse2Compiler           = "astcenc-sse2.exe"
 	defaultAstcCompiler               = "astcenc.exe"
+	defaultClangPS5Compiler           = "prospero-clang.exe" // regard as clang
+	defaultClangCLCompiler            = "clang-cl.exe"       // regard as clang
 
 	hookConfigPathDefault  = "bk_default_rules.json"
 	hookConfigPathCCCommon = "bk_cl_rules.json"
@@ -224,38 +226,56 @@ func (u *UE4) initInnerHandle(command []string) {
 	}
 
 	if u.innerhandler == nil {
-		if strings.HasSuffix(command[0], defaultCLCompiler) {
-			u.innerhandler = cl.NewTaskCL()
-			blog.Debugf("ue4: innerhandle with cl for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultCLFilterCompiler) {
-			u.innerhandler = clfilter.NewTaskCLFilter()
-			blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultShaderCompiler) ||
-			strings.HasSuffix(command[0], defaultShaderCompilerMac) {
-			u.innerhandler = shader.NewUE4Shader()
-			blog.Debugf("ue4: innerhandle with shader for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultClangCompiler) ||
-			strings.HasSuffix(command[0], defaultClangPlusPlusCompiler) ||
-			strings.HasSuffix(command[0], defaultClangLinuxCompiler) ||
-			strings.HasSuffix(command[0], defaultClangPlusPlusLinuxCompiler) {
-			u.innerhandler = cc.NewTaskCC()
-			blog.Debugf("ue4: innerhandle with cc for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultAstcsse2Compiler) ||
-			strings.HasSuffix(command[0], defaultAstcCompiler) {
-			u.innerhandler = astc.NewTextureCompressor()
-			blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultLinkFilterCompiler) &&
-			env.GetEnv(env.KeyExecutorEnableLink) == "true" {
-			u.innerhandler = linkfilter.NewTaskLinkFilter()
-			blog.Debugf("ue4: innerhandle with linkfilter for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultLibCompiler) &&
-			env.GetEnv(env.KeyExecutorEnableLib) == "true" {
-			u.innerhandler = lib.NewTaskLib()
-			blog.Debugf("ue4: innerhandle with lib for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultLinkCompiler) &&
-			env.GetEnv(env.KeyExecutorEnableLink) == "true" {
-			u.innerhandler = link.NewTaskLink()
-			blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
+		exe := filepath.Base(command[0])
+		switch exe {
+		case defaultCLCompiler:
+			{
+				u.innerhandler = cl.NewTaskCL()
+				blog.Debugf("ue4: innerhandle with cl for command[%s]", command[0])
+			}
+		case defaultCLFilterCompiler:
+			{
+				u.innerhandler = clfilter.NewTaskCLFilter()
+				blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
+			}
+		case defaultShaderCompiler, defaultShaderCompilerMac:
+			{
+				u.innerhandler = shader.NewUE4Shader()
+				blog.Debugf("ue4: innerhandle with shader for command[%s]", command[0])
+			}
+		case defaultClangCompiler, defaultClangPlusPlusCompiler,
+			defaultClangLinuxCompiler, defaultClangPlusPlusLinuxCompiler,
+			defaultClangPS5Compiler, defaultClangCLCompiler:
+			{
+				u.innerhandler = cc.NewTaskCC()
+				blog.Debugf("ue4: innerhandle with cc for command[%s]", command[0])
+			}
+		case defaultAstcsse2Compiler, defaultAstcCompiler:
+			{
+				u.innerhandler = astc.NewTextureCompressor()
+				blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
+			}
+		case defaultLinkFilterCompiler:
+			{
+				if env.GetEnv(env.KeyExecutorEnableLink) == "true" {
+					u.innerhandler = linkfilter.NewTaskLinkFilter()
+					blog.Debugf("ue4: innerhandle with linkfilter for command[%s]", command[0])
+				}
+			}
+		case defaultLibCompiler:
+			{
+				if env.GetEnv(env.KeyExecutorEnableLib) == "true" {
+					u.innerhandler = lib.NewTaskLib()
+					blog.Debugf("ue4: innerhandle with lib for command[%s]", command[0])
+				}
+			}
+		case defaultLinkCompiler:
+			{
+				if env.GetEnv(env.KeyExecutorEnableLink) == "true" {
+					u.innerhandler = link.NewTaskLink()
+					blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
+				}
+			}
 		}
 	}
 }
