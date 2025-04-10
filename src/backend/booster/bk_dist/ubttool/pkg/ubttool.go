@@ -296,7 +296,9 @@ func (h *UBTTool) analyzeActions(actions []common.Action) error {
 		targetsuffix := []string{}
 		needAnalyzeArg := true
 		switch exe {
-		case "cl.exe", "cl-filter.exe", "clang.exe", "clang++.exe", "clang", "clang++":
+		case "cl.exe", "cl-filter.exe", "clang.exe",
+			"clang++.exe", "clang", "clang++",
+			"prospero-clang.exe", "clang-cl.exe":
 			targetsuffix = []string{".cpp", ".c", ".response\"", ".response"}
 			actions[i].IsCompile = true
 			break
