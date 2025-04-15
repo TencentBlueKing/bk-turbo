@@ -255,10 +255,11 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 			try++
 
 			if !i.Exist() {
+				blog.Warnf("common util: depend file:%s not existed ", tempf)
 				if mustexisted {
 					// TODO : return fail if not existed
 					// continue
-					blog.Warnf("common util: depend file:%s not existed ", tempf)
+					// blog.Warnf("common util: depend file:%s not existed ", tempf)
 					return nil, fmt.Errorf("%s not existed", tempf)
 				} else {
 					// continue
