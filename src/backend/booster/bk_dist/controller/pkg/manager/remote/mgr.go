@@ -1365,9 +1365,13 @@ func (m *Mgr) ensureFiles(
 					}
 				}
 				//批量发送重试文件
-				m.checkAndSendCorkFiles(fsRetry, server, wg, true)
+				if len(fsRetry) > 0 {
+					m.checkAndSendCorkFiles(fsRetry, server, wg, true)
+				}
 				//批量发送新文件
-				m.checkAndSendCorkFiles(fsNew, server, wg, false)
+				if len(fsNew) > 0 {
+					m.checkAndSendCorkFiles(fsNew, server, wg, false)
+				}
 			}
 		} else {
 			// 单个文件发送模式
@@ -1871,16 +1875,19 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) []*types.FileCollecti
 	m.fileCollectionSendMutex.RLock()
 	defer m.fileCollectionSendMutex.RUnlock()
 
+	blog.Infof("remote: retry to get failed file collection by host(%s)")
 	target, ok := m.fileCollectionSendMap[server]
 	if !ok {
-		blog.Debugf("remote: no found host(%s) in file send cache", server)
+		blog.Infof("remote: no found host(%s) in file send cache", server)
 		return nil
 	}
 	fcs := make([]*types.FileCollectionInfo, 0)
 
 	for _, re := range *target {
-		re.Retry = true
 		if re.SendStatus == types.FileSendFailed {
+			blog.Infof("remote: found failed file collection %s for work(%s) to server(%s)",
+				re.UniqID, m.work.ID(), server)
+			re.Retry = true
 			fcs = append(fcs, re)
 		}
 	}
