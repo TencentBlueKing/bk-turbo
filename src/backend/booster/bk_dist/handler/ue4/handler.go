@@ -235,8 +235,20 @@ func (u *UE4) initInnerHandle(command []string) {
 			}
 		case defaultCLFilterCompiler:
 			{
-				u.innerhandler = clfilter.NewTaskCLFilter()
-				blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
+				for _, v := range command {
+					tempbase := filepath.Base(v)
+					if tempbase == defaultCLCompiler {
+						compiler := clfilter.CompilerCL
+						u.innerhandler = clfilter.NewTaskCLFilter(compiler)
+						blog.Infof("ue4: innerhandle with clfilter(%d) for command[%s]", compiler, command[0])
+						break
+					} else if tempbase == defaultClangCLCompiler {
+						compiler := clfilter.CompilerClangCl
+						u.innerhandler = clfilter.NewTaskCLFilter(compiler)
+						blog.Infof("ue4: innerhandle with clfilter(%d) for command[%s]", compiler, command[0])
+						break
+					}
+				}
 			}
 		case defaultShaderCompiler, defaultShaderCompilerMac:
 			{
