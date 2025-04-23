@@ -1,28 +1,23 @@
 package com.tencent.devops.turbo.job
 
+import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.util.DateTimeUtils
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
-import com.tencent.devops.common.util.constants.EXCHANGE_METRICS_STATISTIC_TURBO_DAILY
-import com.tencent.devops.common.web.mq.EXTEND_RABBIT_TEMPLATE_NAME
+import com.tencent.devops.metrics.api.ServiceMetricsDataReportResource
+import com.tencent.devops.metrics.pojo.dto.TurboDataReportDTO
 import com.tencent.devops.turbo.dao.mongotemplate.TurboSummaryDao
-import com.tencent.devops.turbo.pojo.BkMetricsMessage
 import com.tencent.devops.turbo.pojo.TurboDaySummaryOverviewModel
 import org.quartz.Job
 import org.quartz.JobExecutionContext
 import org.slf4j.LoggerFactory
-import org.springframework.amqp.core.Message
-import org.springframework.amqp.core.MessageDeliveryMode
-import org.springframework.amqp.rabbit.core.RabbitTemplate
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.beans.factory.annotation.Qualifier
 import java.time.LocalDate
 
 @Suppress("SpringJavaAutowiredMembersInspection")
 class BkMetricsDailyJob @Autowired constructor(
-    @Qualifier(EXTEND_RABBIT_TEMPLATE_NAME)
-    private val bkMetricsRabbitTemplate: RabbitTemplate,
     private val turboSummaryDao: TurboSummaryDao,
+    private val client: Client
 ): Job {
     companion object {
         private val logger = LoggerFactory.getLogger(BkMetricsDailyJob::class.java)
@@ -72,6 +67,7 @@ class BkMetricsDailyJob @Autowired constructor(
 
     /**
      * 计算节省时间及推送数据
+     * 2025-4-23：取消队列推送，改为接口调用
      */
     private fun processAndSend(statisticsDate: String, overviewModel: TurboDaySummaryOverviewModel) {
         val estimateTime = overviewModel.estimateTime ?: 0.0
@@ -79,12 +75,12 @@ class BkMetricsDailyJob @Autowired constructor(
         // 单位：秒
         val saveTime = MathUtil.roundToTwoDigits(((estimateTime - executeTime) * 3600)).toDouble()
 
-        val bkMetricsMessage = BkMetricsMessage(
+        val turboDataReportDTO = TurboDataReportDTO(
             statisticsTime = statisticsDate,
             projectId = overviewModel.projectId!!,
             turboSaveTime = saveTime
         )
 
-        bkMetricsRabbitTemplate.convertAndSend(EXCHANGE_METRICS_STATISTIC_TURBO_DAILY, "", bkMetricsMessage)
+        client.getDevopsService(ServiceMetricsDataReportResource::class.java).metricsTurboDataReport(turboDataReportDTO)
     }
 }
