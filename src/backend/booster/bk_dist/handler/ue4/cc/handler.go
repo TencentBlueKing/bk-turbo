@@ -302,39 +302,53 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	return nil, nil
 }
 
-// 改进解析的策略：
-// 遍历字符串，如果是转义空格，替换为空格；如果是其它空格，则切割
-func parsePaths(input string) []string {
-	var paths []string
-	var currentPath strings.Builder
+// 改进分割算法：
+// 如果一行中包含空格，且不止一个文件路径，则用贪婪的方法，匹配最长文件路径
+func parsePaths(input string, workdir string) []string {
+	input = strings.ReplaceAll(input, "\\ ", " ")
+	tokens := strings.Fields(input)
 
-	for i := 0; i < len(input); i++ {
-		char := input[i]
-		if char == '\\' {
-			// 如果是转义空格，则替换为空格
-			if i+1 <= len(input)-1 && input[i+1] == ' ' {
-				currentPath.WriteByte(input[i+1])
-				i++
-			} else {
-				currentPath.WriteByte(char)
+	// 没有包含空格，直接返回
+	if len(tokens) == 1 {
+		return tokens
+	}
+
+	// 有空格，但整行是一个文件的完整路径，则直接返回
+	existed, newpath := checkFile(input, workdir)
+	if existed {
+		return []string{newpath}
+	}
+
+	var paths []string
+	i := 0
+	for i < len(tokens) {
+		found := false
+		// 从最长的可能合并开始尝试
+		for j := len(tokens); j > i; j-- {
+			current := strings.Join(tokens[i:j], " ")
+			existed, newpath := checkFile(current, workdir)
+			if existed {
+				paths = append(paths, newpath)
+				i = j
+				found = true
+				break
 			}
-		} else if char == ' ' { // 其它空格，切割
-			if currentPath.Len() > 0 {
-				paths = append(paths, currentPath.String())
-				currentPath.Reset()
-			}
-		} else {
-			// 其他字符
-			currentPath.WriteByte(char)
+		}
+		if !found {
+			// 无法解析，跳过当前token
+			i++
 		}
 	}
-
-	// 添加最后一个路径
-	if currentPath.Len() > 0 {
-		paths = append(paths, currentPath.String())
-	}
-
 	return paths
+}
+
+func checkFile(input string, workdir string) (bool, string) {
+	if !filepath.IsAbs(input) {
+		input = filepath.Join(workdir, input)
+	}
+	info, err := os.Lstat(input)
+
+	return info != nil && (err == nil || os.IsExist(err)), input
 }
 
 func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) error {
@@ -347,7 +361,7 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 	lines := strings.Split(string(data), sep)
 	for _, l := range lines {
 		l = strings.Trim(l, " \r\n\\")
-		paths := parsePaths(l)
+		paths := parsePaths(l, workdir)
 		for _, v := range paths {
 			if strings.HasSuffix(v, ":") {
 				continue
@@ -392,6 +406,15 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	err := cc.resolveDependFile(sep, workdir, &includes)
 	if err != nil {
 		return err
+	}
+
+	// copy input file
+	if cc.inputFile != "" {
+		l := cc.inputFile
+		if !filepath.IsAbs(l) {
+			l, _ = filepath.Abs(filepath.Join(workdir, l))
+		}
+		includes = append(includes, dcUtil.FormatFilePath(l))
 	}
 
 	// copy includeRspFiles
@@ -1580,4 +1603,8 @@ func (cc *TaskCC) GetResultCacheKey(command []string) string {
 		fullstringhash, fullstring, strings.Join(command, " "))
 
 	return fmt.Sprintf("%x", fullstringhash)
+}
+
+func (cc *TaskCC) SetDepend(f string) {
+	cc.sourcedependfile = f
 }

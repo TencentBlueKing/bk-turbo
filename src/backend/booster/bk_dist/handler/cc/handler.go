@@ -269,6 +269,55 @@ func (cc *TaskCC) checkFstat(f string, workdir string) (*dcFile.Info, error) {
 	return nil, nil
 }
 
+// 改进分割算法：
+// 如果一行中包含空格，且不止一个文件路径，则用贪婪的方法，匹配最长文件路径
+func parsePaths(input string, workdir string) []string {
+	input = strings.ReplaceAll(input, "\\ ", " ")
+	tokens := strings.Fields(input)
+
+	// 没有包含空格，直接返回
+	if len(tokens) == 1 {
+		return tokens
+	}
+
+	// 有空格，但整行是一个文件的完整路径，则直接返回
+	existed, newpath := checkFile(input, workdir)
+	if existed {
+		return []string{newpath}
+	}
+
+	var paths []string
+	i := 0
+	for i < len(tokens) {
+		found := false
+		// 从最长的可能合并开始尝试
+		for j := len(tokens); j > i; j-- {
+			current := strings.Join(tokens[i:j], " ")
+			existed, newpath := checkFile(current, workdir)
+			if existed {
+				paths = append(paths, newpath)
+				i = j
+				found = true
+				break
+			}
+		}
+		if !found {
+			// 无法解析，跳过当前token
+			i++
+		}
+	}
+	return paths
+}
+
+func checkFile(input string, workdir string) (bool, string) {
+	if !filepath.IsAbs(input) {
+		input = filepath.Join(workdir, input)
+	}
+	info, err := os.Lstat(input)
+
+	return info != nil && (err == nil || os.IsExist(err)), input
+}
+
 func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) error {
 	data, err := os.ReadFile(cc.sourcedependfile)
 	if err != nil {
@@ -277,47 +326,23 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 	}
 
 	lines := strings.Split(string(data), sep)
-	// includes := []string{}
 	for _, l := range lines {
 		l = strings.Trim(l, " \r\n\\")
-		// TODO : the file path maybe contains space, should support this condition
-		fields := strings.Split(l, " ")
-		if len(fields) >= 1 {
-			// for i, f := range fields {
-			for index := len(fields) - 1; index >= 0; index-- {
-				var targetf string
-				// /xx/xx/aa .cpp /xx/xx/aa .h  /xx/xx/aa .o
-				// 支持文件名后缀前有空格的情况，但没有支持路径中间有空格的，比如 /xx /xx /aa.cpp
-				// 向前依附到不为空的字符串为止
-				if fields[index] == ".cpp" || fields[index] == ".h" || fields[index] == ".o" {
-					for targetindex := index - 1; targetindex >= 0; targetindex-- {
-						if len(fields[targetindex]) > 0 {
-							fields[targetindex] = strings.Trim(fields[targetindex], "\\")
-							targetf = strings.Join(fields[targetindex:index+1], " ")
-							index = targetindex
-							break
-						}
-					}
-				} else if len(fields[index]) > 0 {
-					targetf = fields[index]
-				} else {
-					continue
-				}
+		paths := parsePaths(l, workdir)
+		for _, v := range paths {
+			if strings.HasSuffix(v, ":") {
+				continue
+			}
+			if !filepath.IsAbs(v) {
+				v, _ = filepath.Abs(filepath.Join(workdir, v))
+			}
 
-				if strings.HasSuffix(targetf, ":") {
-					continue
-				}
-				if !filepath.IsAbs(targetf) {
-					targetf, _ = filepath.Abs(filepath.Join(workdir, targetf))
-				}
+			*includes = append(*includes, dcUtil.FormatFilePath(v))
 
-				*includes = append(*includes, dcUtil.FormatFilePath(targetf))
-
-				// 如果是链接，则将相关指向的文件都包含进来
-				fs := dcUtil.GetAllLinkFiles(targetf)
-				if len(fs) > 0 {
-					*includes = append(*includes, fs...)
-				}
+			// 如果是链接，则将相关指向的文件都包含进来
+			fs := dcUtil.GetAllLinkFiles(v)
+			if len(fs) > 0 {
+				*includes = append(*includes, fs...)
 			}
 		}
 	}

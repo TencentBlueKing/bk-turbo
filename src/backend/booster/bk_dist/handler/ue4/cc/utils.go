@@ -216,6 +216,10 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 		}
 	}
 
+	if showinclude {
+		args = append(args, "/showIncludes")
+	}
+
 	firstinclude := true
 	for i := range args {
 		if strings.HasPrefix(args[i], "-MF") {
@@ -368,6 +372,7 @@ func ensureCompiler(args []string, workdir string) (string, []string, []string, 
 	}
 
 	allrspfile := []string{}
+	showinclude := false
 	for _, v := range args {
 		if strings.HasPrefix(v, "@") {
 			responseFile = strings.Trim(v[1:], "\"")
@@ -385,7 +390,13 @@ func ensureCompiler(args []string, workdir string) (string, []string, []string, 
 
 			args = []string{args[0]}
 			args = append(args, options...)
+		} else if v == "/showIncludes" {
+			showinclude = true
 		}
+	}
+
+	if showinclude {
+		args = append(args, "/showIncludes")
 	}
 
 	return responseFile, args, allrspfile, nil
