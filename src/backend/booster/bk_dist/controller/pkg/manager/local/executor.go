@@ -298,6 +298,15 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	blog.Infof("executor: success to execute post-task from pid(%d)", e.req.Pid)
 	return nil
 }
+func needRetryLocal(code int) bool {
+	localRetryCode := []int{-1073741502, -1073741819}
+	for _, s := range localRetryCode {
+		if s == code {
+			return true
+		}
+	}
+	return false
+}
 
 func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 	blog.Infof("executor: try to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
@@ -324,15 +333,15 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 	}
 
 	result := e.realExecuteLocalTask(locallockweight)
-	LocalRetryCode := -1073741502
-	if runtime.GOOS == "windows" && result.Result.ExitCode == LocalRetryCode {
+
+	if runtime.GOOS == "windows" && needRetryLocal(result.Result.ExitCode) {
 		for i := 0; i < localRetryTimes; i++ {
 			retryInterval := localRetryInterval * (i + 1)
 			blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, sleep %d seconds", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1, retryInterval)
 			time.Sleep(time.Duration(retryInterval) * time.Second)
 			e.realExecuteLocalTask(locallockweight)
-			if result.Result.ExitCode != LocalRetryCode {
-				blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, not retry again", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
+			if !needRetryLocal(result.Result.ExitCode) {
+				blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, no need retry again", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
 				return result
 			}
 		}
