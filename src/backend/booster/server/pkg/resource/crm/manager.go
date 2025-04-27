@@ -485,6 +485,9 @@ func (rm *resourceManager) trace(resourceID, user string) {
 				blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
 				return
 			}
+		case <-time.After(24 * time.Hour):
+			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
+			return
 		}
 	}
 }
@@ -915,9 +918,13 @@ func (rm *resourceManager) launch(
 	// 在启动协程前，将resource刷新到内存，其它协程依赖该数据
 	// r.status = resourceStatusDeploying
 	rm.updateResourcesCache(r)
-
+	newRes, err := rm.getResources(resourceID)
+	if err != nil {
+		blog.Errorf("crm: try get resource copy for resource(%s) user(%s) failed: %v",
+			resourceID, user, err)
+	}
 	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
-	go rm.realLaunch(hasBroker, resourceID, user, r, condition, instance, originCity)
+	go rm.realLaunch(hasBroker, resourceID, user, newRes, condition, instance, originCity)
 
 	return nil
 }
