@@ -922,6 +922,7 @@ func (rm *resourceManager) launch(
 	if err != nil {
 		blog.Errorf("crm: try get resource copy for resource(%s) user(%s) failed: %v",
 			resourceID, user, err)
+		return err
 	}
 	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
 	go rm.realLaunch(hasBroker, resourceID, user, newRes, condition, instance, originCity)
