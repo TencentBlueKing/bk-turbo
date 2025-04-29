@@ -50,7 +50,7 @@ const (
 
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
 
-	UbaAgentTemplate      = "bk_uba_action_template.json"
+	UbaAgentTemplate      = "bk_uba_action_template_ubt.json"
 	UbaTemplateToolKey    = "${tool_key}"
 	UbaTemplateToolKeyDir = "${tool_key_dir}"
 	UbaTemplateHostIP     = "${host_ip}"
