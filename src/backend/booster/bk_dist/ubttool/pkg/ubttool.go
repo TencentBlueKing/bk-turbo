@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	shaderToolComm "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
 
@@ -48,6 +49,11 @@ const (
 	ActionDescMaxSize = 50
 
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
+
+	UbaAgentTemplate      = "bk_uba_action_template.json"
+	UbaTemplateToolKey    = "${tool_key}"
+	UbaTemplateToolKeyDir = "${tool_key_dir}"
+	UbaTemplateHostIP     = "${host_ip}"
 )
 
 // NewUBTTool get a new UBTTool
@@ -149,6 +155,66 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 	return 0, nil
 }
 
+// 过滤ip，客户端判断不保险，最好是能够从server拿到ip
+func isIPValid(ip string) bool {
+	if strings.HasPrefix(ip, "192.") ||
+		strings.HasPrefix(ip, "172.") ||
+		strings.HasPrefix(ip, "127.") {
+		return false
+	}
+
+	return true
+}
+
+func (h *UBTTool) adjustActions4UBAAgent(all *common.UE4Action) {
+	if strings.HasSuffix(h.flags.ActionChainFile, UbaAgentTemplate) {
+		blog.Debugf("UBTTool: ready adjust for %s", UbaAgentTemplate)
+
+		data, err := os.ReadFile(h.flags.ToolChainFile)
+		if err != nil {
+			blog.Errorf("failed to read tool chain json file %s with error %v", h.flags.ToolChainFile, err)
+			return
+		}
+
+		var t dcSDK.Toolchain
+		if err = codec.DecJSON(data, &t); err != nil {
+			blog.Errorf("failed to decode json content[%s] failed: %v", string(data), err)
+			return
+		}
+
+		if len(t.Toolchains) == 0 {
+			blog.Errorf("tool chain is empty")
+			return
+		}
+
+		for i := range all.Actions {
+			if all.Actions[i].Cmd == UbaTemplateToolKey {
+				all.Actions[i].Cmd = t.Toolchains[0].ToolKey
+			}
+
+			if all.Actions[i].Workdir == UbaTemplateToolKeyDir {
+				all.Actions[i].Workdir = filepath.Dir(t.Toolchains[0].ToolKey)
+			}
+
+			ips := util.GetIPAddress()
+			if len(ips) > 0 {
+				ip := ips[0]
+				for _, ipstr := range ips {
+					if isIPValid(ipstr) {
+						ip = ipstr
+						break
+					}
+				}
+				if strings.ContainsAny(all.Actions[i].Arg, UbaTemplateHostIP) {
+					all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateHostIP, ip, -1)
+				}
+			}
+		}
+
+		blog.Infof("after adjust,actions: %v", *all)
+	}
+}
+
 func (h *UBTTool) runActions() error {
 	blog.Infof("UBTTool: try to run actions")
 
@@ -164,6 +230,9 @@ func (h *UBTTool) runActions() error {
 	}
 	// for debug
 	blog.Debugf("UBTTool: all actions:%+v", all)
+
+	// support uba agent template
+	h.adjustActions4UBAAgent(all)
 
 	// execute actions here
 	h.allactions = all.Actions
@@ -447,7 +516,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 	waitsecs := 5
 	var err error
 	for try := 0; try < 3; try++ {
-		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir, commandType)
+		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir, commandType, action.Attributes)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("UBTTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
