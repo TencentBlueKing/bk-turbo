@@ -359,11 +359,11 @@ type LocalTaskExecuteRequest struct {
 func (r *LocalTaskExecuteRequest) NeedLocalExecute() bool {
 	for _, v := range r.Attributes {
 		if v == AttributeNoLocalExecute {
-			return true
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 // 这个正常只有一个协程调用，无需加锁
