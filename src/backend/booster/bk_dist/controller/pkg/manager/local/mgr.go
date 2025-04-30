@@ -374,8 +374,8 @@ func (m *Mgr) ExecuteTask(
 
 	c, err := e.executePreTask()
 	if err != nil {
-		m.work.Basic().Info().DecPrepared()
-		m.work.Remote().DecRemoteJobs()
+		// m.work.Basic().Info().DecPrepared()
+		// m.work.Remote().DecRemoteJobs()
 		blog.Warnf("local: execute pre-task for work(%s) from pid(%d) : %v", m.work.ID(), req.Pid, err)
 		return e.executeLocalTask(), nil
 	}
@@ -404,6 +404,7 @@ func (m *Mgr) ExecuteTask(
 		BanWorkerList: []*protocol.Host{},
 		HttpConnCache: req.HttpConnCache,
 		HttpConnKey:   req.HttpConnKey,
+		Attributes:    req.Attributes,
 	}
 
 	for i := 0; i < m.getTryTimes(e); i++ {
@@ -449,6 +450,19 @@ func (m *Mgr) ExecuteTask(
 			break
 		}
 	}
+
+	if e.isUbaCommand {
+		blog.Infof("local: return for ubaagent now")
+		return &types.LocalTaskExecuteResult{
+			Result: &dcSDK.LocalTaskResult{
+				ExitCode: 0,
+				Stdout:   nil,
+				Stderr:   nil,
+				Message:  "",
+			},
+		}, nil
+	}
+
 	// m.work.Basic().Info().DecPrepared()
 	// m.work.Remote().DecRemoteJobs()
 	if err != nil {
@@ -470,6 +484,11 @@ func (m *Mgr) ExecuteTask(
 
 		blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d), turn it local",
 			m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
+
+		if !req.NeedLocalExecute() {
+			blog.Infof("local: command[%s] do not need local execute", strings.Join(req.Commands, " "))
+			return nil, err
+		}
 
 		return e.executeLocalTask(), nil
 	}

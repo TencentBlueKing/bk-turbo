@@ -38,6 +38,8 @@ type Action struct {
 	Arg         string   `json:"arg"`
 	Dep         []string `json:"dep"`
 	FollowIndex []string `json:"followindex"` // follower index which depend on this
+	Attributes  []string `json:"attributes"`
+	Adjust      bool     `json:"adjust"`
 	Running     bool     `json:"running"`
 	Finished    bool     `json:"finished"`
 	//其它详细信息
