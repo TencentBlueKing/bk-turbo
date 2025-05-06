@@ -33,6 +33,8 @@ const (
 	retryAndSuccessLimit = 3
 	localRetryTimes      = 2
 	localRetryInterval   = 5
+
+	defaultIOTimeout4Uba = 20
 )
 
 func newExecutor(mgr *Mgr,
@@ -84,6 +86,17 @@ func newExecutor(mgr *Mgr,
 	e.ioTimeoutBySettings = e.ioTimeout
 	e.stats.RemoteWorkTimeoutSetting = e.ioTimeout
 
+	e.ioTimeout4Uba, _ = strconv.Atoi(e.sandbox.Env.GetEnv(env.KeyExecutorIOTimeout4UBA))
+	if e.ioTimeout4Uba <= 0 {
+		e.ioTimeout4Uba = defaultIOTimeout4Uba
+	}
+	blog.Infof("executor: set ioTimeout4Uba to %d", e.ioTimeout4Uba)
+	if strings.Contains(req.Commands[0], types.UbaAgent) {
+		e.isUbaCommand = true
+		e.ioTimeout = e.ioTimeout4Uba
+		blog.Infof("executor: set ioTimeout to %d for ubaagent", e.ioTimeout)
+	}
+
 	if e.sandbox.Env.IsSet(env.KeyExecutorLocalRecord) && mgr.recorder != nil {
 		e.record = mgr.recorder.Inspect(recorder.RecordKey(req.Commands))
 		if e.record.SuggestTimeout > e.ioTimeout {
@@ -121,6 +134,9 @@ type executor struct {
 
 	ioTimeout           int
 	ioTimeoutBySettings int
+
+	ioTimeout4Uba int
+	isUbaCommand  bool
 
 	// for result cache
 	cacheType           int

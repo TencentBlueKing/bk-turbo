@@ -200,9 +200,20 @@ type RemoteTaskExecuteRequest struct {
 	Sandbox       *dcSyscall.Sandbox
 	IOTimeout     int
 	BanWorkerList []*dcProtocol.Host
+	Attributes    []string
 
 	HttpConnKey   string
 	HttpConnCache *HttpConnCache
+}
+
+func (r *RemoteTaskExecuteRequest) NeedAllWorkerOnce() bool {
+	for _, v := range r.Attributes {
+		if v == AttributeAllWorkerOnce {
+			return true
+		}
+	}
+
+	return false
 }
 
 // RemoteTaskExecuteResult describe the remote task execution result
@@ -319,6 +330,12 @@ func (c *HttpConnCache) Check() {
 }
 
 // ----------------
+const (
+	AttributeAllWorkerOnce  = "all_worker_once"
+	AttributeNoLocalExecute = "no_local_execute"
+
+	UbaAgent = "UbaAgent.exe"
+)
 
 // LocalTaskExecuteRequest describe the local task execution param
 type LocalTaskExecuteRequest struct {
@@ -329,6 +346,7 @@ type LocalTaskExecuteRequest struct {
 	Environments []string
 	Stats        *dcSDK.ControllerJobStats
 	CommandType  int
+	Attributes   []string
 
 	// 该请求的执行是否依赖http连接状态，默认依赖，即ignoreHttpStatus为false;
 	// 如果依赖连接状态，当连接断开时，该请求直接返回失败
@@ -336,6 +354,16 @@ type LocalTaskExecuteRequest struct {
 	checkedHttpStatus bool
 	HttpConnKey       string
 	HttpConnCache     *HttpConnCache
+}
+
+func (r *LocalTaskExecuteRequest) NeedLocalExecute() bool {
+	for _, v := range r.Attributes {
+		if v == AttributeNoLocalExecute {
+			return false
+		}
+	}
+
+	return true
 }
 
 // 这个正常只有一个协程调用，无需加锁

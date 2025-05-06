@@ -88,7 +88,8 @@ func NewMgr(pCtx context.Context, work *types.Work) types.RemoteMgr {
 		corkMaxSize:           corkMaxSize,
 		corkFiles:             make(map[string]*[]*corkFile, 0),
 		// memSlot:               newMemorySlot(work.Config().SendFileMemoryLimit),
-		largeFileSize: largeFileSize,
+		largeFileSize:     largeFileSize,
+		needResourceCheck: true,
 	}
 }
 
@@ -140,6 +141,9 @@ type Mgr struct {
 	corkFiles    map[string]*[]*corkFile
 
 	largeFileSize int64
+
+	// 如果发现有 ubaagent.exe，则取消资源空闲释放机制
+	needResourceCheck bool
 }
 
 type fileSendMap struct {
@@ -622,6 +626,11 @@ func (m *Mgr) resourceCheck(ctx context.Context) {
 			return
 
 		case <-ticker.C:
+			if !m.needResourceCheck {
+				blog.Infof("remote: cancel resource check now for work: %s", m.work.ID())
+				return
+			}
+
 			if m.getRemoteJobs() <= 0 { // no remote worker in use
 				needfree := false
 				// 从最近一次使用后的时间开始计算空闲时间
@@ -938,10 +947,71 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		return nil, errors.New("no available worker, all worker are banned")
 	}
 
+	// TODO : 每个worker上执行一次
+	if req.NeedAllWorkerOnce() {
+		availableHost := make([]*dcProtocol.Host, 0)
+		for _, s := range hosts {
+			inbanlist := false
+			for _, v := range req.BanWorkerList {
+				if v.Equal(s) {
+					inbanlist = true
+					break
+				}
+			}
+			if !inbanlist {
+				availableHost = append(availableHost, s)
+			}
+		}
+
+		if len(availableHost) > 0 {
+			if strings.Contains(req.Req.Commands[0].ExeToolChainKey, types.UbaAgent) {
+				blog.Infof("remote: work(%s) pid(%d) found ubaagent, cancel resource check",
+					m.work.ID(), req.Pid)
+				m.needResourceCheck = false
+			}
+
+			var wg sync.WaitGroup
+			for _, host := range availableHost {
+				wg.Add(1)
+				tempremoteReq := &types.RemoteTaskExecuteRequest{
+					Pid:           req.Pid,
+					Req:           req.Req,
+					Stats:         req.Stats,
+					Sandbox:       req.Sandbox,
+					IOTimeout:     req.IOTimeout,
+					BanWorkerList: req.BanWorkerList,
+					HttpConnCache: req.HttpConnCache,
+					HttpConnKey:   req.HttpConnKey,
+					Attributes:    req.Attributes,
+				}
+				go func(tempreq *types.RemoteTaskExecuteRequest, h *dcProtocol.Host) {
+					defer wg.Done()
+					m.realExecuteRequest(tempreq, h, false)
+				}(tempremoteReq, host)
+			}
+
+			wg.Wait()
+		}
+		return nil, nil
+	}
+
+	return m.realExecuteRequest(req, nil, true)
+}
+
+func (m *Mgr) realExecuteRequest(
+	req *types.RemoteTaskExecuteRequest,
+	host *dcProtocol.Host,
+	needAdjustInputStatus bool) (*types.RemoteTaskExecuteResult, error) {
 	blog.Debugf("remote: try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v", m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
-	// 如果有超过100MB的大文件，则在选择host时，作为选择条件
-	fpath, _ := getMaxSizeFile(req, m.largeFileSize)
-	req.Server = m.lockSlots(dcSDK.JobUsageRemoteExe, fpath, req.BanWorkerList)
+	var fpath string
+	if host == nil {
+		// 如果有超过100MB的大文件，则在选择host时，作为选择条件
+		fpath, _ = getMaxSizeFile(req, m.largeFileSize)
+		req.Server = m.lockSlots(dcSDK.JobUsageRemoteExe, fpath, req.BanWorkerList)
+	} else {
+		req.Server = host
+	}
+
 	if req.Server == nil {
 		blog.Infof("remote: no available worker for work(%s) from pid(%d) with(%d) ban worker",
 			m.work.ID(), req.Pid, len(req.BanWorkerList))
@@ -1006,10 +1076,13 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 			"ensure files failed: %v, after add failed server, banworkerlist is %s", m.work.ID(), req.Pid, req.Server.Server, err, banlistStr)
 		return nil, err
 	}
-	if err = updateTaskRequestInputFilesReady(req, remoteDirs); err != nil {
-		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-			"update task input files ready failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
-		return nil, err
+
+	if needAdjustInputStatus {
+		if err = updateTaskRequestInputFilesReady(req, remoteDirs); err != nil {
+			blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
+				"update task input files ready failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+			return nil, err
+		}
 	}
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkStartTime)
@@ -2559,7 +2632,7 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 
 func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 	for i, c := range req.Req.Commands {
-		if c.ExeToolChainKey != "" {
+		if c.ExeToolChainKey != "" && !strings.HasSuffix(c.ExeToolChainKey, types.UbaAgent) {
 			remotepath := ""
 			var err error
 			if !m.work.Resource().SupportAbsPath() {
