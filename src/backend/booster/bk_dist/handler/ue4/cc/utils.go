@@ -216,6 +216,10 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 		}
 	}
 
+	if showinclude {
+		args = append(args, "/showIncludes")
+	}
+
 	firstinclude := true
 	for i := range args {
 		if strings.HasPrefix(args[i], "-MF") {
@@ -368,6 +372,7 @@ func ensureCompiler(args []string, workdir string) (string, []string, []string, 
 	}
 
 	allrspfile := []string{}
+	showinclude := false
 	for _, v := range args {
 		if strings.HasPrefix(v, "@") {
 			responseFile = strings.Trim(v[1:], "\"")
@@ -385,7 +390,13 @@ func ensureCompiler(args []string, workdir string) (string, []string, []string, 
 
 			args = []string{args[0]}
 			args = append(args, options...)
+		} else if v == "/showIncludes" {
+			showinclude = true
 		}
+	}
+
+	if showinclude {
+		args = append(args, "/showIncludes")
 	}
 
 	return responseFile, args, allrspfile, nil
@@ -680,6 +691,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 		return nil, ErrorUnrecognizedOption
 	}
 
+	isClangCL := strings.HasSuffix(args[0], "clang-cl.exe")
+
 	r := new(ccArgs)
 	seenOptionS := false
 	seenOptionC := false
@@ -879,7 +892,7 @@ func scanArgs(args []string) (*ccArgs, error) {
 			continue
 		} else if strings.HasPrefix(arg, "@") {
 			r.includeRspFiles = append(r.includeRspFiles, arg[1:])
-		} else if strings.HasPrefix(arg, "/") { // support clang-cl.exe
+		} else if isClangCL && strings.HasPrefix(arg, "/") { // support clang-cl.exe
 			switch arg {
 			case "/c":
 				seenOptionC = true

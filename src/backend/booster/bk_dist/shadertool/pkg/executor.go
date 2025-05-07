@@ -65,7 +65,7 @@ func (d *Executor) Update() {
 }
 
 // Run main function entry
-func (d *Executor) Run(fullargs []string, workdir string) (int, string, error) {
+func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (int, string, error) {
 	blog.Infof("shaderexecutor: command [%s] begins", strings.Join(fullargs, " "))
 	// for i, v := range fullargs {
 	// 	blog.Infof("shaderexecutor: arg[%d] : [%s]", i, v)
@@ -73,10 +73,10 @@ func (d *Executor) Run(fullargs []string, workdir string) (int, string, error) {
 	defer blog.Infof("shaderexecutor: command [%s] finished", strings.Join(fullargs, " "))
 
 	// work available, run work with executor-progress
-	return d.runWork(fullargs, workdir)
+	return d.runWork(fullargs, workdir, attributes)
 }
 
-func (d *Executor) runWork(fullargs []string, workdir string) (int, string, error) {
+func (d *Executor) runWork(fullargs []string, workdir string, attributes []string) (int, string, error) {
 	// d.initStats()
 
 	// TODO : add controller parameter to decide whether use websocket
@@ -86,9 +86,9 @@ func (d *Executor) runWork(fullargs []string, workdir string) (int, string, erro
 	var r *dcSDK.LocalTaskResult
 	var err error
 	if d.usewebsocket {
-		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir, dcTypes.CommandDefault)
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir, dcTypes.CommandDefault, attributes)
 	} else {
-		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir, dcTypes.CommandDefault)
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir, dcTypes.CommandDefault, attributes)
 	}
 
 	if err != nil || retcode != 0 {

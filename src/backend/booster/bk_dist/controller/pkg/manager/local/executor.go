@@ -12,8 +12,10 @@ package local
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -29,6 +31,10 @@ import (
 const (
 	ioTimeoutBuffer      = 50
 	retryAndSuccessLimit = 3
+	localRetryTimes      = 2
+	localRetryInterval   = 5
+
+	defaultIOTimeout4Uba = 20
 )
 
 func newExecutor(mgr *Mgr,
@@ -80,6 +86,17 @@ func newExecutor(mgr *Mgr,
 	e.ioTimeoutBySettings = e.ioTimeout
 	e.stats.RemoteWorkTimeoutSetting = e.ioTimeout
 
+	e.ioTimeout4Uba, _ = strconv.Atoi(e.sandbox.Env.GetEnv(env.KeyExecutorIOTimeout4UBA))
+	if e.ioTimeout4Uba <= 0 {
+		e.ioTimeout4Uba = defaultIOTimeout4Uba
+	}
+	blog.Infof("executor: set ioTimeout4Uba to %d", e.ioTimeout4Uba)
+	if strings.Contains(req.Commands[0], types.UbaAgent) {
+		e.isUbaCommand = true
+		e.ioTimeout = e.ioTimeout4Uba
+		blog.Infof("executor: set ioTimeout to %d for ubaagent", e.ioTimeout)
+	}
+
 	if e.sandbox.Env.IsSet(env.KeyExecutorLocalRecord) && mgr.recorder != nil {
 		e.record = mgr.recorder.Inspect(recorder.RecordKey(req.Commands))
 		if e.record.SuggestTimeout > e.ioTimeout {
@@ -117,6 +134,9 @@ type executor struct {
 
 	ioTimeout           int
 	ioTimeoutBySettings int
+
+	ioTimeout4Uba int
+	isUbaCommand  bool
 
 	// for result cache
 	cacheType           int
@@ -294,6 +314,15 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	blog.Infof("executor: success to execute post-task from pid(%d)", e.req.Pid)
 	return nil
 }
+func needRetryLocal(code int) bool {
+	localRetryCode := []int{-1073741502, -1073741819}
+	for _, s := range localRetryCode {
+		if s == code {
+			return true
+		}
+	}
+	return false
+}
 
 func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 	blog.Infof("executor: try to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
@@ -319,7 +348,21 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		}
 	}
 
-	return e.realExecuteLocalTask(locallockweight)
+	result := e.realExecuteLocalTask(locallockweight)
+
+	if runtime.GOOS == "windows" && needRetryLocal(result.Result.ExitCode) {
+		for i := 0; i < localRetryTimes; i++ {
+			retryInterval := localRetryInterval * (i + 1)
+			blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, sleep %d seconds", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1, retryInterval)
+			time.Sleep(time.Duration(retryInterval) * time.Second)
+			e.realExecuteLocalTask(locallockweight)
+			if !needRetryLocal(result.Result.ExitCode) {
+				blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, no need retry again", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
+				return result
+			}
+		}
+	}
+	return result
 }
 
 func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskExecuteResult {

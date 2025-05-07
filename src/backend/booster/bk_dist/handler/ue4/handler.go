@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/link"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/linkfilter"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/shader"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/ubaagent"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
@@ -48,9 +49,9 @@ const (
 	defaultAstcCompiler               = "astcenc.exe"
 	defaultClangPS5Compiler           = "prospero-clang.exe" // regard as clang
 	defaultClangCLCompiler            = "clang-cl.exe"       // regard as clang
-
-	hookConfigPathDefault  = "bk_default_rules.json"
-	hookConfigPathCCCommon = "bk_cl_rules.json"
+	defaultUbaAgent                   = "UbaAgent.exe"
+	hookConfigPathDefault             = "bk_default_rules.json"
+	hookConfigPathCCCommon            = "bk_cl_rules.json"
 )
 
 // NewUE4 get ue4 scene handler
@@ -235,8 +236,20 @@ func (u *UE4) initInnerHandle(command []string) {
 			}
 		case defaultCLFilterCompiler:
 			{
-				u.innerhandler = clfilter.NewTaskCLFilter()
-				blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
+				for _, v := range command {
+					tempbase := filepath.Base(v)
+					if tempbase == defaultCLCompiler {
+						compiler := clfilter.CompilerCL
+						u.innerhandler = clfilter.NewTaskCLFilter(compiler)
+						blog.Infof("ue4: innerhandle with clfilter(%d) for command[%s]", compiler, command[0])
+						break
+					} else if tempbase == defaultClangCLCompiler {
+						compiler := clfilter.CompilerClangCl
+						u.innerhandler = clfilter.NewTaskCLFilter(compiler)
+						blog.Infof("ue4: innerhandle with clfilter(%d) for command[%s]", compiler, command[0])
+						break
+					}
+				}
 			}
 		case defaultShaderCompiler, defaultShaderCompilerMac:
 			{
@@ -275,6 +288,11 @@ func (u *UE4) initInnerHandle(command []string) {
 					u.innerhandler = link.NewTaskLink()
 					blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
 				}
+			}
+		case defaultUbaAgent:
+			{
+				u.innerhandler = ubaagent.NewUbaAgent()
+				blog.Debugf("ue4: innerhandle with ubaagent for command[%s]", command[0])
 			}
 		}
 	}

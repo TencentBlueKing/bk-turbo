@@ -21,6 +21,7 @@ import (
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/cc"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/cl"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -40,17 +41,38 @@ type TaskCLFilter struct {
 	// file names
 	dependentFile string
 
-	clhandle *cl.TaskCL
+	clhandle  handler.Handler
+	innertype Compiler
 }
 
-// NewTaskCLFilter get a new cl-filter handler
-func NewTaskCLFilter() handler.Handler {
+type Compiler int
 
-	return &TaskCLFilter{
-		sandbox:     &dcSyscall.Sandbox{},
-		tmpFileList: make([]string, 0, 10),
-		clhandle:    cl.NewCL(),
+const (
+	CompilerCL Compiler = iota
+	CompilerClangCl
+)
+
+// NewTaskCLFilter get a new cl-filter handler
+func NewTaskCLFilter(c Compiler) handler.Handler {
+	if c == CompilerCL {
+		return &TaskCLFilter{
+			sandbox:     &dcSyscall.Sandbox{},
+			tmpFileList: make([]string, 0, 10),
+			clhandle:    cl.NewCL(),
+			innertype:   c,
+		}
 	}
+
+	if c == CompilerClangCl {
+		return &TaskCLFilter{
+			sandbox:     &dcSyscall.Sandbox{},
+			tmpFileList: make([]string, 0, 10),
+			clhandle:    cc.NewTaskCC(),
+			innertype:   c,
+		}
+	}
+
+	return nil
 }
 
 // InitSandbox set sandbox to task-cl-filter
@@ -214,7 +236,17 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcTy
 	blog.Infof("cf: after pre execute, got depend file: [%s], cl cmd:[%s]", cf.dependentFile, cf.cldArgs)
 
 	cf.clhandle.InitSandbox(cf.sandbox)
-	cf.clhandle.SetDepend(cf.dependentFile)
+	if cf.innertype == CompilerCL {
+		realhandle, ok := cf.clhandle.(*cl.TaskCL)
+		if ok {
+			realhandle.SetDepend(cf.dependentFile)
+		}
+	} else if cf.innertype == CompilerClangCl {
+		realhandle, ok := cf.clhandle.(*cc.TaskCC)
+		if ok {
+			realhandle.SetDepend(cf.dependentFile)
+		}
+	}
 
 	return cf.clhandle.PreExecute(args)
 }
@@ -222,9 +254,23 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcTy
 func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cf: start post execute for: %v", cf.originArgs)
 
-	bkerr := cf.clhandle.PostExecuteByCLFilter(r)
-	if bkerr.Error != nil {
-		return bkerr
+	var bkerr dcType.BKDistCommonError
+	if cf.innertype == CompilerCL {
+		realhandle, ok := cf.clhandle.(*cl.TaskCL)
+		if ok {
+			bkerr = realhandle.PostExecuteByCLFilter(r)
+			if bkerr.Error != nil {
+				return bkerr
+			}
+		}
+	} else if cf.innertype == CompilerClangCl {
+		realhandle, ok := cf.clhandle.(*cc.TaskCC)
+		if ok {
+			bkerr = realhandle.PostExecute(r)
+			if bkerr.Error != nil {
+				return bkerr
+			}
+		}
 	}
 
 	// save include to txt file

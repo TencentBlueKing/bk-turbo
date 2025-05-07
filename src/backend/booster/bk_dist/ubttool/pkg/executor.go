@@ -72,7 +72,7 @@ func (d *Executor) Update() {
 }
 
 // Run main function entry
-func (d *Executor) Run(fullargs []string, workdir string, commandType int) (int, string, error) {
+func (d *Executor) Run(fullargs []string, workdir string, commandType int, attributes []string) (int, string, error) {
 	blog.Infof("ubtexecutor: command [%s] begins with command type:%d", strings.Join(fullargs, " "), commandType)
 	for i, v := range fullargs {
 		blog.Debugf("ubtexecutor: arg[%d] : [%s]", i, v)
@@ -80,10 +80,10 @@ func (d *Executor) Run(fullargs []string, workdir string, commandType int) (int,
 	defer blog.Infof("ubtexecutor: command [%s] finished", strings.Join(fullargs, " "))
 
 	// work available, run work with executor-progress
-	return d.runWork(fullargs, workdir, commandType)
+	return d.runWork(fullargs, workdir, commandType, attributes)
 }
 
-func (d *Executor) runWork(fullargs []string, workdir string, commandType int) (int, string, error) {
+func (d *Executor) runWork(fullargs []string, workdir string, commandType int, attributes []string) (int, string, error) {
 	// d.initStats()
 
 	// ignore argv[0], it's itself
@@ -92,9 +92,9 @@ func (d *Executor) runWork(fullargs []string, workdir string, commandType int) (
 	var r *dcSDK.LocalTaskResult
 	var err error
 	if d.usewebsocket {
-		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir, commandType)
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTaskWithWebSocket(fullargs, workdir, commandType, attributes)
 	} else {
-		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir, commandType)
+		retcode, retmsg, r, err = d.work.Job(d.getStats(fullargs)).ExecuteLocalTask(fullargs, workdir, commandType, attributes)
 	}
 
 	if err != nil || retcode != 0 {

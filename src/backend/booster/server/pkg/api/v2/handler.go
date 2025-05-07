@@ -44,7 +44,7 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 
 	tb, err := defaultManager.CreateTask(param)
 	if err != nil {
-		if err == engine.ErrorProjectNoFound || err == types.ErrorConcurrencyLimit {
+		if err == engine.ErrorProjectNoFound || strings.Contains(err.Error(), types.ErrorConcurrencyLimit.Error()) {
 			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
 		} else {
 			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
