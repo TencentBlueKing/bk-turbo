@@ -475,6 +475,8 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
+	// 设置24小时超时时间
+	timeout := time.After(24 * time.Hour)
 	for {
 		select {
 		case <-rm.ctx.Done():
@@ -485,7 +487,7 @@ func (rm *resourceManager) trace(resourceID, user string) {
 				blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
 				return
 			}
-		case <-time.After(24 * time.Hour):
+		case <-timeout:
 			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
 			return
 		}
