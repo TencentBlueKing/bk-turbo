@@ -81,6 +81,6 @@ class BkMetricsDailyJob @Autowired constructor(
             turboSaveTime = saveTime
         )
 
-        client.getDevopsService(ServiceMetricsDataReportResource::class.java).metricsTurboDataReport(turboDataReportDTO)
+        client.get(ServiceMetricsDataReportResource::class.java).metricsTurboDataReport(turboDataReportDTO)
     }
 }
