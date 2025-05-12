@@ -1,4 +1,5 @@
 dependencies {
+    api(project(":common-turbo:common-turbo-util"))
     api("com.squareup.okhttp3:okhttp")
     api("com.tencent.devops:devops-boot-starter-api")
     compileOnly("org.springframework.boot:spring-boot-starter-web")
