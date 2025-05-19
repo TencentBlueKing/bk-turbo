@@ -565,13 +565,7 @@ func (de *disttaskEngine) partialUpdateTask(task *distTask) error {
 	// 加到缓存里面，后续可以直接从缓存取，避免读数据库
 	putTask2Cache(task.ID, task)
 
-	data, err := engine.GetMapExcludeTableTaskBasic(partialTask2Table(task))
-	if err != nil {
-		blog.Errorf("engine(%s) partial update task(%s), get exclude map failed: %v", EngineName, task.ID, err)
-		return err
-	}
-
-	if err = de.mysql.UpdateTask(task.ID, data); err != nil {
+	if err := de.mysql.UpdateTaskPart(task.ID, task2Table(task)); err != nil {
 		blog.Errorf("engine(%s) partial update task(%s), update failed: %v", EngineName, task.ID, err)
 		return err
 	}

@@ -290,10 +290,14 @@ func table2Task(tableTask *TableTask) *distTask {
 
 func task2Table(task *distTask) *TableTask {
 	var env []byte
-	_ = codec.EncJSON(task.Client.Env, &env)
+	if task.Client.Env != nil {
+		_ = codec.EncJSON(task.Client.Env, &env)
+	}
 
 	var workers []byte
-	_ = codec.EncJSON(task.Workers, &workers)
+	if len(task.Workers) > 0 {
+		_ = codec.EncJSON(task.Workers, &workers)
+	}
 
 	return &TableTask{
 		// task client
@@ -340,78 +344,6 @@ func task2Table(task *distTask) *TableTask {
 		ExtraProjectSetting: task.InheritSetting.ExtraProjectSetting,
 		ExtraWorkerSetting:  task.InheritSetting.ExtraWorkerSetting,
 	}
-}
-
-func partialTask2Table(task *distTask) *TableTask {
-	tTask := &TableTask{
-		// task client
-		SourceIP:  task.Client.SourceIP,
-		SourceCPU: task.Client.SourceCPU,
-		User:      task.Client.User,
-		Params:    task.Client.Params,
-		Cmd:       task.Client.Cmd,
-
-		RunDir:             task.Client.RunDir,
-		BoosterType:        task.Client.BoosterType,
-		ExtraClientSetting: task.Client.ExtraClientSetting,
-
-		// resource manager
-		ClusterID:             task.Operator.ClusterID,
-		AppName:               task.Operator.AppName,
-		Namespace:             task.Operator.Namespace,
-		Image:                 task.Operator.Image,
-		Instance:              task.Operator.Instance,
-		LeastInstance:         task.Operator.LeastInstance,
-		RequestInstance:       task.Operator.RequestInstance,
-		RequestCPUPerUnit:     task.Operator.RequestCPUPerUnit,
-		RequestMemPerUnit:     task.Operator.RequestMemPerUnit,
-		RequestProcessPerUnit: task.Operator.RequestProcessPerUnit,
-
-		// inherit setting
-		RequestCPU:          task.InheritSetting.RequestCPU,
-		LeastCPU:            task.InheritSetting.LeastCPU,
-		WorkerVersion:       task.InheritSetting.WorkerVersion,
-		Scene:               task.InheritSetting.Scene,
-		BanAllBooster:       task.InheritSetting.BanAllBooster,
-		ExtraProjectSetting: task.InheritSetting.ExtraProjectSetting,
-		ExtraWorkerSetting:  task.InheritSetting.ExtraWorkerSetting,
-	}
-
-	if task.Client.Env != nil {
-		var env []byte
-		_ = codec.EncJSON(task.Client.Env, &env)
-		tTask.Env = string(env)
-	}
-
-	if task.Workers != nil {
-		var workers []byte
-		_ = codec.EncJSON(task.Workers, &workers)
-		tTask.Workers = string(workers)
-	}
-	if task.Stats != (taskStats{}) {
-		if task.Stats.WorkerCount != 0 {
-			tTask.WorkerCount = task.Stats.WorkerCount
-		}
-		if task.Stats.CPUTotal != 0 {
-			tTask.CPUTotal = task.Stats.CPUTotal
-		}
-		if task.Stats.MemTotal != 0 {
-			tTask.MemTotal = task.Stats.MemTotal
-		}
-		if task.Stats.SucceedNum != 0 {
-			tTask.SucceedNum = task.Stats.SucceedNum
-		}
-		if task.Stats.FailedNum != 0 {
-			tTask.FailedNum = task.Stats.FailedNum
-		}
-		if task.Stats.StatDetail != "" {
-			tTask.StatDetail = task.Stats.StatDetail
-		}
-		if task.Stats.ExtraRecord != "" {
-			tTask.ExtraRecord = task.Stats.ExtraRecord
-		}
-	}
-	return tTask
 }
 
 // MessageRecordStats describe the message data of type record stats.

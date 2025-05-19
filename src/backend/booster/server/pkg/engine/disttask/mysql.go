@@ -30,6 +30,7 @@ type MySQL interface {
 	GetTask(taskID string) (*TableTask, error)
 	PutTask(task *TableTask) error
 	UpdateTask(taskID string, task map[string]interface{}) error
+	UpdateTaskPart(taskID string, task *TableTask) error
 	DeleteTask(taskID string) error
 
 	ListProject(opts commonMySQL.ListOptions) ([]*CombinedProject, int64, error)
@@ -213,6 +214,19 @@ func (m *mysql) UpdateTask(taskID string, task map[string]interface{}) error {
 	defer logSlowFunc(time.Now().Unix(), "UpdateTask", 2)
 
 	task["disabled"] = false
+
+	if err := m.db.Model(&TableTask{}).Where("task_id = ?", taskID).Updates(task).Error; err != nil {
+		blog.Errorf("engine(%s) mysql update task(%s)(%+v) failed: %v", EngineName, taskID, task, err)
+		return err
+	}
+
+	return nil
+}
+
+// UpdateTaskPart update task part with given fields.
+func (m *mysql) UpdateTaskPart(taskID string, task *TableTask) error {
+	defer timeMetricRecord("update_task")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateTask", 2)
 
 	if err := m.db.Model(&TableTask{}).Where("task_id = ?", taskID).Updates(task).Error; err != nil {
 		blog.Errorf("engine(%s) mysql update task(%s)(%+v) failed: %v", EngineName, taskID, task, err)
