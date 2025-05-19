@@ -561,6 +561,24 @@ func (de *disttaskEngine) updateTask(task *distTask) error {
 	return nil
 }
 
+func (de *disttaskEngine) partialUpdateTask(task *distTask) error {
+	// 加到缓存里面，后续可以直接从缓存取，避免读数据库
+	putTask2Cache(task.ID, task)
+
+	data, err := engine.GetMapExcludeTableTaskBasic(partialTask2Table(task))
+	if err != nil {
+		blog.Errorf("engine(%s) partial update task(%s), get exclude map failed: %v", EngineName, task.ID, err)
+		return err
+	}
+
+	if err = de.mysql.UpdateTask(task.ID, data); err != nil {
+		blog.Errorf("engine(%s) partial update task(%s), update failed: %v", EngineName, task.ID, err)
+		return err
+	}
+
+	return nil
+}
+
 func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) error {
 	task, err := de.getTask(tb.ID)
 	if err != nil {
@@ -819,7 +837,7 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		task.InheritSetting.QueueName = queueName
 		putTask2Cache(task.ID, task)
 	}
-	go de.updateTask(task)
+	go de.partialUpdateTask(task)
 
 	blog.Infof("engine(%s) success to launch crm task(%s)", EngineName, tb.ID)
 	return nil
