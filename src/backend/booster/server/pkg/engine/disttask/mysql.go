@@ -223,13 +223,13 @@ func (m *mysql) UpdateTask(taskID string, task map[string]interface{}) error {
 	return nil
 }
 
-// UpdateTaskPart update task part with given fields.
+// UpdateTaskPart update task part with given fields by struct , not update null fields
 func (m *mysql) UpdateTaskPart(taskID string, task *TableTask) error {
-	defer timeMetricRecord("update_task")()
-	defer logSlowFunc(time.Now().Unix(), "UpdateTask", 2)
+	defer timeMetricRecord("update_task_part")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateTaskPart", 2)
 
 	if err := m.db.Model(&TableTask{}).Where("task_id = ?", taskID).Updates(task).Error; err != nil {
-		blog.Errorf("engine(%s) mysql update task(%s)(%+v) failed: %v", EngineName, taskID, task, err)
+		blog.Errorf("engine(%s) mysql update task(%s)(%+v) part failed: %v", EngineName, taskID, task, err)
 		return err
 	}
 
