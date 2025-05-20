@@ -290,10 +290,14 @@ func table2Task(tableTask *TableTask) *distTask {
 
 func task2Table(task *distTask) *TableTask {
 	var env []byte
-	_ = codec.EncJSON(task.Client.Env, &env)
+	if task.Client.Env != nil {
+		_ = codec.EncJSON(task.Client.Env, &env)
+	}
 
 	var workers []byte
-	_ = codec.EncJSON(task.Workers, &workers)
+	if len(task.Workers) > 0 {
+		_ = codec.EncJSON(task.Workers, &workers)
+	}
 
 	return &TableTask{
 		// task client
@@ -348,7 +352,7 @@ type MessageRecordStats struct {
 	CCacheStats CCacheStats `json:"ccache_stats"`
 }
 
-// dump the struct data into byte
+// Dump the struct data into byte
 func (mrd MessageRecordStats) Dump() []byte {
 	var data []byte
 	_ = codec.EncJSON(mrd, &data)
@@ -372,7 +376,7 @@ type CCacheStats struct {
 	MaxCacheSize              string `json:"max_cache_size"`
 }
 
-// dump the struct data into byte
+// Dump the struct data into byte
 func (cs CCacheStats) Dump() []byte {
 	var data []byte
 	_ = codec.EncJSON(cs, &data)
