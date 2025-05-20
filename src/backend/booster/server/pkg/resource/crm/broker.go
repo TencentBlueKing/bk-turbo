@@ -476,9 +476,10 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 			if err == nil && info != nil {
 				if len(info.AvailableEndpoints) > (b.param.Instance / 2) {
 					instanceok = true
+				} else {
+					blog.Warnf("crm broker: track %s from broker(%s), available endpoints(%d) less than half of required(%d)",
+						resourceID, b.name, len(info.AvailableEndpoints), b.param.Instance/2)
 				}
-				blog.Warnf("crm broker: track %s from broker(%s), available endpoints(%d) less than half of required(%d)",
-					resourceID, b.name, len(info.AvailableEndpoints), b.param.Instance/2)
 				break
 			} else {
 				blog.Warnf("crm broker: track %s retry times(%d/%d) from broker(%s), get serviceinfo failed: %v",
