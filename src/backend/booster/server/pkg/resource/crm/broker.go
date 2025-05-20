@@ -479,7 +479,7 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 				}
 			}
 			blog.Warnf("crm broker: track %s retry times(%d) from broker(%s), get serviceinfo failed: %v",
-				resourceID, i, b.name, b.user, err)
+				resourceID, i, b.name, err)
 			time.Sleep(5 * time.Second)
 		}
 
