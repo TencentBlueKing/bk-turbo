@@ -470,6 +470,7 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 		// so we need check resource's all instance status here
 		instanceok := false
 		retryTimes := 3
+		retryInterval := 5 * time.Second
 		for i := 1; i <= retryTimes; i++ {
 			info, err := b.mgr.getServiceInfo(resourceID, b.user)
 			if err == nil && info != nil {
@@ -477,10 +478,13 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 					instanceok = true
 					break
 				}
+				blog.Warnf("crm broker: track %s from broker(%s), available endpoints(%d) less than half of required(%d)",
+					resourceID, b.name, len(info.AvailableEndpoints), b.param.Instance/2)
+			} else {
+				blog.Warnf("crm broker: track %s retry times(%d/%d) from broker(%s), get serviceinfo failed: %v",
+					resourceID, i, retryTimes, b.name, err)
 			}
-			blog.Warnf("crm broker: track %s retry times(%d) from broker(%s), get serviceinfo failed: %v",
-				resourceID, i, b.name, err)
-			time.Sleep(5 * time.Second)
+			time.Sleep(retryInterval)
 		}
 
 		if !instanceok {
