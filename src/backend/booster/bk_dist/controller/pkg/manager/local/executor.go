@@ -315,7 +315,7 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	return nil
 }
 func needRetryLocal(code int) bool {
-	localRetryCode := []int{-1073741502, -1073741819}
+	localRetryCode := []int{-1073741502, -1073741819, 3221225794, 3221225477}
 	for _, s := range localRetryCode {
 		if s == code {
 			return true
@@ -325,7 +325,8 @@ func needRetryLocal(code int) bool {
 }
 
 func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
-	blog.Infof("executor: try to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
+	blog.Infof("executor: try to execute local-task from pid(%d) command:[%s]",
+		e.req.Pid, strings.Join(e.req.Commands, " "))
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
@@ -354,13 +355,17 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		for i := 0; i < localRetryTimes; i++ {
 			retryInterval := localRetryInterval * (i + 1)
 			blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, sleep %d seconds", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1, retryInterval)
+
 			time.Sleep(time.Duration(retryInterval) * time.Second)
-			e.realExecuteLocalTask(locallockweight)
+			result = e.realExecuteLocalTask(locallockweight)
+
 			if !needRetryLocal(result.Result.ExitCode) {
-				blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, no need retry again", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
+				blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , got result(code:%d, msg:%s) in retry round %d, no need retry again", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
 				return result
 			}
 		}
+		blog.Warnf("executor: local-task from pid(%d) command:[%s] failed after %d retries",
+			e.req.Pid, strings.Join(e.req.Commands, " "), localRetryTimes)
 	}
 	return result
 }
@@ -389,7 +394,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		blog.Infof("executor: ready from pid(%d) run cmd:%v with command type:%d", e.req.Pid, e.req.Commands, e.req.CommandType)
+		blog.Infof("executor: ready from pid(%d) run cmd:%v with command type:%d",
+			e.req.Pid, e.req.Commands, e.req.CommandType)
 		cmd := e.req.Commands[0]
 		switch e.req.CommandType {
 		case dcType.CommandInFile: //try to run cmd in file
@@ -413,8 +419,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 	}
 
 	if err != nil {
-		blog.Errorf("executor: failed to execute local-task from pid(%d): %v, %v",
-			e.req.Pid, err, string(stderr))
+		blog.Errorf("executor: failed to execute local-task from pid(%d): %v(%d), %v",
+			e.req.Pid, err, code, string(stderr))
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: code,
@@ -426,7 +432,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 	}
 
 	e.stats.LocalWorkSuccess = true
-	blog.Infof("executor: success to execute local-task from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
+	blog.Infof("executor: success to execute local-task from pid(%d) command:[%s]",
+		e.req.Pid, strings.Join(e.req.Commands, " "))
 	return &types.LocalTaskExecuteResult{
 		Result: &dcSDK.LocalTaskResult{
 			ExitCode: code,
@@ -437,7 +444,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 }
 
 func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
-	blog.Infof("executor: try to execute local-task with trylock from pid(%d) command:[%s]", e.req.Pid, strings.Join(e.req.Commands, " "))
+	blog.Infof("executor: try to execute local-task with trylock from pid(%d) command:[%s]",
+		e.req.Pid, strings.Join(e.req.Commands, " "))
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
