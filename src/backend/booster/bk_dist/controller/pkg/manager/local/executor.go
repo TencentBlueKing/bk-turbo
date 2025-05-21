@@ -37,6 +37,10 @@ const (
 	defaultIOTimeout4Uba = 20
 )
 
+var (
+	LocalRetryCodes = [4]int{-1073741502, -1073741819, 3221225794, 3221225477}
+)
+
 func newExecutor(mgr *Mgr,
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
@@ -314,9 +318,9 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	blog.Infof("executor: success to execute post-task from pid(%d)", e.req.Pid)
 	return nil
 }
+
 func needRetryLocal(code int) bool {
-	localRetryCode := []int{-1073741502, -1073741819, 3221225794, 3221225477}
-	for _, s := range localRetryCode {
+	for _, s := range LocalRetryCodes {
 		if s == code {
 			return true
 		}
