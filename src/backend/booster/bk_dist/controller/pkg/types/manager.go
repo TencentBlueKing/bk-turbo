@@ -334,7 +334,7 @@ const (
 	AttributeAllWorkerOnce  = "all_worker_once"
 	AttributeNoLocalExecute = "no_local_execute"
 
-	UbaAgent = "UbaAgent.exe"
+	UbaAgent = "UbaAgent"
 )
 
 // LocalTaskExecuteRequest describe the local task execution param
