@@ -50,11 +50,14 @@ type Flags struct {
 
 // Action define shader action
 type Action struct {
-	Index    uint64 `json:"index"`
-	Cmd      string `json:"cmd"`
-	Arg      string `json:"arg"`
-	Running  bool   `json:"running"`
-	Finished bool   `json:"finished"`
+	Index      uint64   `json:"index"`
+	Cmd        string   `json:"cmd"`
+	Arg        string   `json:"arg"`
+	Workdir    string   `json:"workdir"`
+	Attributes []string `json:"attributes"`
+	Adjust     bool     `json:"adjust"`
+	Running    bool     `json:"running"`
+	Finished   bool     `json:"finished"`
 }
 
 // UE4Action define ue4 action

@@ -36,6 +36,7 @@ const (
 	KeyExecutorSkipSeparating          = "SKIP_SEPARATING"
 	KeyExecutorSkipLocalRetry          = "SKIP_LOCAL_RETRY"
 	KeyExecutorIOTimeout               = "IO_TIMEOUT"
+	KeyExecutorIOTimeout4UBA           = "IO_TIMEOUT_4_UBA"
 	KeyExecutorToolchainPathMap        = "TOOLCHAIN_PATH_MAP"
 	KeyExecutorEnableLib               = "ENABLE_LIB"
 	KeyExecutorEnableLink              = "ENABLE_LINK"

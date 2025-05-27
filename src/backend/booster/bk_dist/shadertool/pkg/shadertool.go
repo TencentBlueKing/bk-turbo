@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	"github.com/google/shlex"
 	"github.com/shirou/gopsutil/process"
@@ -56,6 +57,10 @@ const (
 	CheckQuitTicksecs                = 1
 
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
+
+	UbaTemplateToolKey    = "${tool_key}"
+	UbaTemplateToolKeyDir = "${tool_key_dir}"
+	UbaTemplateHostIP     = "${host_ip}"
 )
 
 // vars
@@ -491,7 +496,7 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 	waitsecs := 5
 	var err error
 	for try := 0; try < 3; try++ {
-		retcode, retmsg, err = h.executor.Run(fullargs, "")
+		retcode, retmsg, err = h.executor.Run(fullargs, "", action.Attributes)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("ShaderTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
@@ -828,6 +833,55 @@ func (h *ShaderTool) applyResource(pCtx context.Context) error {
 	}
 }
 
+// 过滤ip，客户端判断不保险，最好是能够从server拿到ip
+func isIPValid(ip string) bool {
+	if strings.HasPrefix(ip, "192.") ||
+		strings.HasPrefix(ip, "172.") ||
+		strings.HasPrefix(ip, "127.") {
+		return false
+	}
+
+	return true
+}
+
+func (h *ShaderTool) adjustActions4UBAAgent(all *common.UE4Action, t *dcSDK.Toolchain) {
+	if len(t.Toolchains) == 0 {
+		blog.Errorf("tool chain is empty")
+		return
+	}
+
+	if len(all.Actions) > 0 && all.Actions[0].Adjust {
+		for i := range all.Actions {
+			if all.Actions[i].Cmd == UbaTemplateToolKey {
+				all.Actions[i].Cmd = t.Toolchains[0].ToolKey
+			}
+
+			if all.Actions[i].Workdir == UbaTemplateToolKeyDir {
+				all.Actions[i].Workdir = filepath.Dir(t.Toolchains[0].ToolKey)
+			}
+
+			ips := util.GetIPAddress()
+			if len(ips) > 0 {
+				ip := ips[0]
+				for _, ipstr := range ips {
+					if isIPValid(ipstr) {
+						ip = ipstr
+						break
+					}
+				}
+				if strings.ContainsAny(all.Actions[i].Arg, UbaTemplateHostIP) {
+					all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateHostIP, ip, -1)
+				}
+			}
+		}
+
+		blog.Infof("after adjust,actions: %v", *all)
+		return
+	}
+
+	blog.Infof("do not need adjust action")
+}
+
 // apply resource
 func (h *ShaderTool) shaders(actions *common.UE4Action) error {
 	blog.Infof("ShaderTool: shaders...")
@@ -850,6 +904,8 @@ func (h *ShaderTool) shaders(actions *common.UE4Action) error {
 	h.actionlock.Lock()
 	defer h.actionlock.Unlock()
 	blog.Infof("ShaderTool: succeed to lock action lock")
+
+	h.adjustActions4UBAAgent(actions, &actions.ToolJSON)
 
 	for _, a := range actions.Actions {
 		temp := a

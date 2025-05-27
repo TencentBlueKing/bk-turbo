@@ -32,7 +32,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
-	"github.com/pierrec/lz4"
+	"github.com/pierrec/lz4/v4"
 	"github.com/shirou/gopsutil/process"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
