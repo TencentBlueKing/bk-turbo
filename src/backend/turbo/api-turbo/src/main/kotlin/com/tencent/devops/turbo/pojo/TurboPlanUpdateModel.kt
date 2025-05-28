@@ -11,6 +11,9 @@ data class TurboPlanUpdateModel(
     @ApiModelProperty("蓝盾项目ID")
     val projectId: String,
 
+    @ApiModelProperty("蓝盾项目名称")
+    val projectName: String,
+
     @ApiModelProperty("开启状态：true表示启用项目，false表示停用项目")
     val enabled: Boolean
 )

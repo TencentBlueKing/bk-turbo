@@ -2,6 +2,7 @@ package com.tencent.devops.turbo.api
 
 import com.tencent.devops.api.pojo.Response
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_PROJECT_ID
+import com.tencent.devops.turbo.pojo.ProjectCallbackEvent
 import com.tencent.devops.turbo.pojo.TurboPlanUpdateModel
 import io.swagger.annotations.Api
 import io.swagger.annotations.ApiOperation
@@ -42,6 +43,6 @@ interface IServiceTurboPlanController {
     fun updatePlanStatusByProjectStatus(
         @ApiParam(value = "加速方案状态更新请求体")
         @RequestBody(required = true)
-        turboPlanUpdateModel: TurboPlanUpdateModel
+        projectCallbackEvent: ProjectCallbackEvent
     ): Response<Boolean>
 }
