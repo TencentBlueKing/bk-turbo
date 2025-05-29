@@ -181,7 +181,6 @@ func addNoReadyInfo(blockkey, caller string, num int32) {
 			}
 			block.details[caller] = detail
 			block.total += num
-
 		}
 	} else {
 		// 如果block不存在且num为负数，记录错误并返回
