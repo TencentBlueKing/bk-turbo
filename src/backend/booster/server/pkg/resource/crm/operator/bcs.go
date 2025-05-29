@@ -104,6 +104,7 @@ type NodeInfo struct {
 	Disabled bool
 }
 
+// FigureAvailableInstanceFromFree 根据节点剩余资源计算可分配实例数
 func (ni *NodeInfo) FigureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
 	if cpuPerInstance == 0 || memPerInstance == 0 || diskPerInstance == 0 {
 		return 0
@@ -175,25 +176,28 @@ func addNoReadyInfo(blockkey, caller string, num int32) {
 			block.total += num
 		}
 	} else {
-		detail = &noReadyInfoDetail{
-			caller: caller,
-			start:  time.Now(),
-			num:    num,
+		if num > 0 { //if num less than 0 ,do nothing
+			detail = &noReadyInfoDetail{
+				caller: caller,
+				start:  time.Now(),
+				num:    num,
+			}
+			block = &noReadyInfoBlock{
+				blockkey: blockkey,
+				total:    0,
+				details:  make(map[string]*noReadyInfoDetail, 10),
+			}
+			block.details[caller] = detail
+			block.total += num
+			noReadyInfo[blockkey] = block
 		}
-		block = &noReadyInfoBlock{
-			blockkey: blockkey,
-			total:    0,
-			details:  make(map[string]*noReadyInfoDetail, 10),
-		}
-		block.details[caller] = detail
-		block.total += num
-		noReadyInfo[blockkey] = block
 	}
 
 	blog.Infof("bcs: block(%s) total noready:%d after add %d by caller(%s)",
 		blockkey, block.total, num, caller)
 }
 
+// PrintNoReadyInfo print all no ready info
 func PrintNoReadyInfo() {
 	noReadyInfoLock.RLock()
 	defer noReadyInfoLock.RUnlock()
@@ -387,7 +391,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		}
 
 		if !NodeInfo.valid() {
-			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f", NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
+			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f",
+				NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
 			continue
 		}
 

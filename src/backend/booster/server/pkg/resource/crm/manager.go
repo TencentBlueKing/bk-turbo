@@ -489,6 +489,15 @@ func (rm *resourceManager) trace(resourceID, user string) {
 			}
 		case <-timeout:
 			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
+			r, error := rm.getResources(resourceID)
+			if error == nil {
+				if r.noReadyInstance > 0 {
+					rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+				}
+			} else {
+				blog.Errorf("crm: resource(%s) user(%s) trace timeout, delete no-ready info failed: %v, exit",
+					resourceID, user, error)
+			}
 			return
 		}
 	}
