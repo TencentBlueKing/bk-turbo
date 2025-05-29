@@ -312,6 +312,19 @@ var soWhiteList = []string{
 	"libbfd",
 }
 
+var soBlackList = []string{
+	"linux-vdso",
+	"/lib64/ld-",
+	"libdl.so",
+	"libonion",
+	"libc.so",
+	"libpthread.so",
+	"libm.so",
+	"librt.so",
+	"libz.so",
+	"libtinfo.so",
+}
+
 var specialSOFiles = []string{
 	"/lib64/libstdc++.so.6",
 }
@@ -331,19 +344,21 @@ func getLddFiles(exe string) []string {
 	files := []string{}
 	for _, f := range fields {
 		// 这个好像会导致异常，先屏蔽
-		if strings.HasSuffix(f, "libc.so.6") {
-			continue
-		}
+		//if strings.HasSuffix(f, "libc.so.6") {
+		//      continue
+		//}
+
 		if filepath.IsAbs(f) && strings.Contains(f, ".so") {
-			inWhiteList := false
-			for _, w := range soWhiteList {
+			inBlackList := false
+
+			for _, w := range soBlackList {
 				if strings.Contains(f, w) {
-					inWhiteList = true
+					inBlackList = true
 					break
 				}
 			}
 
-			if inWhiteList && dcFile.Lstat(f).Exist() {
+			if !inBlackList && dcFile.Lstat(f).Exist() {
 				files = append(files, f)
 			}
 		}
