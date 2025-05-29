@@ -475,8 +475,8 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
-	// 设置24小时超时时间
-	timeout := time.After(24 * time.Hour)
+	// 设置3分钟超时，此处主要跟踪deploy是否已经成功创建，不关注任务是否跑完
+	timeout := time.After(3 * time.Minute)
 	for {
 		select {
 		case <-rm.ctx.Done():

@@ -23,6 +23,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/manager"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 
 	"github.com/emicklei/go-restful"
 )
@@ -73,7 +74,7 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 		Extra:         string(extraData),
 	})
 	if err != nil {
-		if err == engine.ErrorProjectNoFound {
+		if err == engine.ErrorProjectNoFound || strings.Contains(err.Error(), types.ErrorConcurrencyLimit.Error()) {
 			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
 		} else {
 			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
