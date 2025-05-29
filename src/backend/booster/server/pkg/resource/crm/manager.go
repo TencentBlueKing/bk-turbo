@@ -493,6 +493,10 @@ func (rm *resourceManager) trace(resourceID, user string) {
 			if error == nil {
 				if r.noReadyInstance > 0 {
 					rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+					if err := rm.saveResources(r); err != nil {
+						blog.Errorf("crm: resource(%s) user(%s) trace timeout, save resource failed: %v",
+							resourceID, user, err)
+					}
 				}
 			} else {
 				blog.Errorf("crm: resource(%s) user(%s) trace timeout, delete no-ready info failed: %v, exit",
