@@ -104,6 +104,7 @@ type NodeInfo struct {
 	Disabled bool
 }
 
+// FigureAvailableInstanceFromFree 根据节点剩余资源计算可分配实例数
 func (ni *NodeInfo) FigureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
 	if cpuPerInstance == 0 || memPerInstance == 0 || diskPerInstance == 0 {
 		return 0
@@ -157,6 +158,7 @@ func addNoReadyInfo(blockkey, caller string, num int32) {
 	var detail *noReadyInfoDetail
 	var ok1 bool
 	if ok {
+		// 如果block已存在，更新或删除detail信息
 		detail, ok1 = block.details[caller]
 		if ok1 {
 			detail.num += num
@@ -166,6 +168,12 @@ func addNoReadyInfo(blockkey, caller string, num int32) {
 				delete(block.details, caller)
 			}
 		} else {
+			// 如果num为负数且caller不存在，记录错误并返回
+			if num <= 0 {
+				blog.Errorf("bcs: block(%s) caller(%s) noready num(%d) less than 0, do nothing", blockkey, caller, num)
+				return
+			}
+			// 创建新的detail并添加到block中
 			detail = &noReadyInfoDetail{
 				caller: caller,
 				start:  time.Now(),
@@ -175,6 +183,13 @@ func addNoReadyInfo(blockkey, caller string, num int32) {
 			block.total += num
 		}
 	} else {
+		// 如果block不存在且num为负数，记录错误并返回
+		if num <= 0 {
+			blog.Errorf("bcs: block(%s) caller(%s) noready num(%d) less than 0, do nothing", blockkey, caller, num)
+			return
+		}
+
+		// 如果block不存在且num>0，创建新的block和detail
 		detail = &noReadyInfoDetail{
 			caller: caller,
 			start:  time.Now(),
@@ -194,6 +209,7 @@ func addNoReadyInfo(blockkey, caller string, num int32) {
 		blockkey, block.total, num, caller)
 }
 
+// PrintNoReadyInfo print all no ready info
 func PrintNoReadyInfo() {
 	noReadyInfoLock.RLock()
 	defer noReadyInfoLock.RUnlock()
@@ -387,7 +403,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		}
 
 		if !NodeInfo.valid() {
-			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f", NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
+			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f",
+				NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
 			continue
 		}
 
