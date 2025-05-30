@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RestController
 
-@Suppress("MaxLineLength")
 @RestController
 class ServiceTurboPlanController @Autowired constructor(
     private val turboPlanService: TurboPlanService
@@ -19,8 +18,18 @@ class ServiceTurboPlanController @Autowired constructor(
         private val logger = LoggerFactory.getLogger(this::class.java)
     }
 
-    override fun findTurboPlanIdByProjectIdAndPipelineInfo(projectId: String, pipelineId: String, pipelineElementId: String): Response<String?> {
-        return Response.success(turboPlanService.findMigratedTurboPlanByPipelineInfo(projectId, pipelineId, pipelineElementId)?.taskId)
+    override fun findTurboPlanIdByProjectIdAndPipelineInfo(
+        projectId: String,
+        pipelineId: String,
+        pipelineElementId: String
+    ): Response<String?> {
+        return Response.success(
+            turboPlanService.findMigratedTurboPlanByPipelineInfo(
+                projectId,
+                pipelineId,
+                pipelineElementId
+            )?.taskId
+        )
     }
 
     override fun updatePlanStatusByProjectStatus(projectCallbackEvent: ProjectCallbackEvent): Response<Boolean> {
