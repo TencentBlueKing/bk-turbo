@@ -3,6 +3,7 @@ rootProject.name = "turbo"
 include("api-turbo")
 include("common-turbo")
 include("common-turbo:common-turbo-api")
+include("common-turbo:common-turbo-auth")
 include("common-turbo:common-turbo-client")
 include("common-turbo:common-turbo-client:common-client-base")
 include("common-turbo:common-turbo-client:common-client-consul")

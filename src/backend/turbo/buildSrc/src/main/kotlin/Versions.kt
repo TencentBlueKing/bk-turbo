@@ -11,4 +11,5 @@ object Versions {
     const val okHttpVersion = "4.9.0"
     const val Kotlin = "1.6.0"
     const val coroutinesCore = "1.3.1"
+    const val iamSdkVersion = "1.0.21-SNAPSHOT"
 }

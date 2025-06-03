@@ -259,7 +259,12 @@ class TurboPlanDao @Autowired constructor(
     /**
      * 根据项目id和创建时间获取加速方案列表
      */
-    fun getTurboPlanByProjectIdAndCreatedDate(projectId: String, startTime: LocalDate?, endTime: LocalDate?, pageable: Pageable): Page<TTurboPlanEntity> {
+    fun getTurboPlanByProjectIdAndCreatedDate(
+        projectId: String,
+        startTime: LocalDate?,
+        endTime: LocalDate?,
+        pageable: Pageable
+    ): Page<TTurboPlanEntity> {
         val query = turboPlanParameter(projectId, startTime, endTime)
         //先算总数
         val totalCount = mongoTemplate.count(query, TTurboPlanEntity::class.java)
