@@ -24,7 +24,7 @@ class BkMetricsStatUpload(
         private const val DEFAULT_PAGE_SIZE = 2000
     }
 
-    fun entry(statisticsDate: String?, pageSizeParam: Int?) {
+    fun entry(statisticsDate: String?, pageSizeParam: Int?): Boolean {
         val pageSize = pageSizeParam ?: DEFAULT_PAGE_SIZE
 
         // 生成统计时间戳
@@ -52,6 +52,7 @@ class BkMetricsStatUpload(
 
             pageNum++
         } while (projectDaySummaryPage.size == pageSize)
+        return true
     }
 
     /**
