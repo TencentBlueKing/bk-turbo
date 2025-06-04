@@ -2273,8 +2273,8 @@ function CreateReporter() {
         data += getTD(simple_args.join("&nbsp;"))
         // 添加工作状态列，BasicCount中统计了相应的状态，如果修改请同步修改
         data += getTD(item.remote_work_success && item.post_work_success) // 远程执行成功
-        data += getTD((!item.remote_work_success && item.remote_work_leave_time.UnixNano() > 0) ||
-            (item.remote_work_success && item.post_work_leave_time.UnixNano() > 0 && !item.post_work_success)) // 远程执行失败
+        data += getTD((!item.remote_work_success && item.remote_work_leave_time > 0) ||
+            (item.remote_work_success && item.post_work_leave_time > 0 && !item.post_work_success)) // 远程执行失败
         data += getTD(item.remote_work_start_time > 0 && !item.remote_work_success) // 远程异常中断
         data += getTD(!item.pre_work_success && item.local_work_success) // 直接本地执行成功
         data += getTD(!item.pre_work_success && !item.local_work_success) // 直接本地执行失败
