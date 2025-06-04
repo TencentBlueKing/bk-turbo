@@ -2290,10 +2290,20 @@ function CreateReporter() {
         // 添加时间戳格式化列
         data += getTD(vue.date_format(item.enter_time))// 任务开始时间
         data += getTD(vue.date_format(item.leave_time))// 任务结束时间
-        data += getTD(vue.date_format(item.remote_work_start_time)) // 远程开始时间
-        data += getTD(vue.date_format(item.remote_work_end_time)) // 远程结束时间
-        data += getTD(vue.date_format(item.local_work_start_time))// 本地开始时间
-        data += getTD(vue.date_format(item.local_work_end_time))// 本地结束时间
+        if (item.remote_work_end_time - item.remote_work_start_time > 0) {
+            data += getTD(vue.date_format(item.remote_work_start_time)) // 远程开始时间
+            data += getTD(vue.date_format(item.remote_work_end_time)) // 远程结束时间
+        } else {
+            data += getTD(0)
+            data += getTD(0)
+        }
+        if (item.local_work_end_time - item.local_work_start_time > 0) {
+            data += getTD(vue.date_format(item.local_work_start_time))// 本地开始时间
+            data += getTD(vue.date_format(item.local_work_end_time))// 本地结束时间
+        } else {
+            data += getTD(0)
+            data += getTD(0)
+        }
 
         data += '</tr>'
     }
