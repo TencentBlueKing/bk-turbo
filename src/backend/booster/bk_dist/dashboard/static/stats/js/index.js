@@ -2245,6 +2245,8 @@ function CreateReporter() {
     data += getTD("远程结束时间")
     data += getTD("本地开始时间")
     data += getTD("本地结束时间")
+    data += getTD("预处理开始时间")
+    data += getTD("预处理结束时间")
     data += '</tr>'
 
     console.log("generate excel line " + vue.jobs_data.length)
@@ -2295,6 +2297,9 @@ function CreateReporter() {
     data += item.local_work_end_time - item.local_work_start_time > 0
         ? getTD(vue.date_format(item.local_work_start_time)) + getTD(vue.date_format(item.local_work_end_time))
         : getTD(0) + getTD(0) // 本地开始和结束时间
+        data += item.pre_work_end_time - item.pre_work_start_time > 0 
+        ? getTD(vue.date_format(item.pre_work_start_time)) + getTD(vue.date_format(item.pre_work_end_time))
+        : getTD(0) + getTD(0) // 预处理开始和结束时间
 
         data += '</tr>'
     }
