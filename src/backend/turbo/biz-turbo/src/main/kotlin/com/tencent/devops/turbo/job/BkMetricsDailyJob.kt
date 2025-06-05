@@ -12,12 +12,6 @@ class BkMetricsDailyJob @Autowired constructor(
     private val bkMetricsStatUpload: BkMetricsStatUpload
 ) : Job {
 
-    companion object {
-        private val logger = LoggerFactory.getLogger(BkMetricsDailyJob::class.java)
-        private const val PAGE_SIZE_KEY = "pageSize"
-        private const val STATISTICS_DATE_KEY = "statisticsDate"
-    }
-
     override fun execute(context: JobExecutionContext) {
         logger.info("BkMetricsDailyJob context: ${JsonUtil.toJson(context.jobDetail)}")
 
@@ -33,5 +27,11 @@ class BkMetricsDailyJob @Autowired constructor(
         }
 
         logger.info("BkMetricsDailyJob execute finish")
+    }
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(BkMetricsDailyJob::class.java)
+        private const val PAGE_SIZE_KEY = "pageSize"
+        private const val STATISTICS_DATE_KEY = "statisticsDate"
     }
 }

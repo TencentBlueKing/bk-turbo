@@ -19,11 +19,6 @@ class BkMetricsStatUpload(
     private val turboSummaryDao: TurboSummaryDao,
     private val client: Client
 ){
-    companion object{
-        private val logger = LoggerFactory.getLogger(this::class.java)
-        private const val DEFAULT_PAGE_SIZE = 2000
-    }
-
     fun entry(statisticsDate: String?, pageSizeParam: Int?): Boolean {
         val pageSize = pageSizeParam ?: DEFAULT_PAGE_SIZE
 
@@ -68,7 +63,7 @@ class BkMetricsStatUpload(
         val estimateTime = overviewModel.estimateTime ?: 0.0
         val executeTime = overviewModel.executeTime ?: 0.0
         // 单位：秒
-        val saveTime = MathUtil.roundToTwoDigits(((estimateTime - executeTime) * 3600)).toDouble()
+        val saveTime = MathUtil.roundToTwoDigits(((estimateTime - executeTime) * ONE_HOUR_SECONDS)).toDouble()
 
         val turboDataReportDTO = TurboDataReportDTO(
             statisticsTime = statisticsDate,
@@ -83,5 +78,11 @@ class BkMetricsStatUpload(
         } catch (e: Exception) {
             logger.error("Failed to upload metrics for project $projectId", e)
         }
+    }
+
+    companion object{
+        private val logger = LoggerFactory.getLogger(this::class.java)
+        private const val DEFAULT_PAGE_SIZE = 2000
+        private const val ONE_HOUR_SECONDS = 3600
     }
 }
