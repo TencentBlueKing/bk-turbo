@@ -2227,20 +2227,26 @@ function CreateReporter() {
     data += getTD("命令类型")
     data += getTD("完整命令")
     data += getTD("精简命令")
-    data += getTD("在远程执行成功")
-    data += getTD("在远程执行失败")
-    data += getTD("在远程异常中断")
+    data += getTD("远程执行成功")
+    data += getTD("远程执行失败")
+    data += getTD("远程异常中断")
     data += getTD("直接本地执行成功")
     data += getTD("直接本地执行失败")
     data += getTD("远程转本地执行成功")
     data += getTD("远程转本地执行失败")
-    data += getTD("总时间")
-    data += getTD("预处理时间")
-    data += getTD("远程执行时间")
-    data += getTD("后置处理时间")
-    data += getTD("本地处理时间")
+    data += getTD("总耗时(s)")
+    data += getTD("预处理耗时")
+    data += getTD("远程执行耗时")
+    data += getTD("后置处理耗时")
+    data += getTD("本地处理耗时")
     data += getTD("开始时间")
     data += getTD("结束时间")
+    data += getTD("远程开始时间")
+    data += getTD("远程结束时间")
+    data += getTD("本地开始时间")
+    data += getTD("本地结束时间")
+    data += getTD("预处理开始时间")
+    data += getTD("预处理结束时间")
     data += '</tr>'
 
     console.log("generate excel line " + vue.jobs_data.length)
@@ -2263,24 +2269,37 @@ function CreateReporter() {
         }
 
         data += '<tr>'
+        // 添加基础信息列
         data += getTD(vue.baseName(item.origin_args[0]))
         data += getTD(item.origin_args.join("&nbsp;"))
         data += getTD(simple_args.join("&nbsp;"))
-        data += getTD(item.remote_work_success && item.post_work_success)
-        data += getTD(item.remote_work_success && !item.post_work_success)
-        data += getTD(item.remote_work_start_time > 0 && !item.remote_work_success)
-        data += getTD(!item.pre_work_success && item.local_work_success)
-        data += getTD(!item.pre_work_success && !item.local_work_success)
-        // data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && item.local_work_success)
-        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && item.local_work_success)
-        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && !item.local_work_success)
-        data += getTD((item.leave_time - item.enter_time) / 1e9)
-        data += getTD((item.pre_work_end_time - item.pre_work_start_time) / 1e9)
-        data += getTD((item.remote_work_process_end_time - item.remote_work_process_start_time) / 1e9)
-        data += getTD((item.post_work_end_time - item.post_work_start_time) / 1e9)
-        data += getTD((item.local_work_end_time - item.local_work_start_time) / 1e9)
-        data += getTD(vue.date_format(item.enter_time))
-        data += getTD(vue.date_format(item.leave_time))
+        // 添加工作状态列，BasicCount中统计了相应的状态，如果修改请同步修改
+        data += getTD(item.remote_work_success && item.post_work_success) // 远程执行成功
+        data += getTD((!item.remote_work_success && item.remote_work_leave_time > 0) ||
+            (item.remote_work_success && item.post_work_leave_time > 0 && !item.post_work_success)) // 远程执行失败
+        data += getTD(item.remote_work_start_time > 0 && !item.remote_work_success) // 远程异常中断
+        data += getTD(!item.pre_work_success && item.local_work_success) // 直接本地执行成功
+        data += getTD(!item.pre_work_success && !item.local_work_success) // 直接本地执行失败
+        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && item.local_work_success) // 远程转本地执行成功
+        data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && !item.local_work_success) // 远程转本地执行失败
+        // 添加耗时统计列（转换为秒,保留3位小数,提高可读性）
+        data += getTD(((item.leave_time - item.enter_time) / 1e9).toFixed(3)) // 总耗时
+        data += getTD(((item.pre_work_end_time - item.pre_work_start_time) / 1e9).toFixed(3)) // 预处理耗时
+        data += getTD(((item.remote_work_process_end_time - item.remote_work_process_start_time) / 1e9).toFixed(3)) // 远程执行耗时
+        data += getTD(((item.post_work_end_time - item.post_work_start_time) / 1e9).toFixed(3)) // 后置处理耗时
+        data += getTD(((item.local_work_end_time - item.local_work_start_time) / 1e9).toFixed(3)) // 本地执行耗时
+        // 添加时间戳格式化列
+        data += getTD(vue.date_format(item.enter_time))// 任务开始时间
+        data += getTD(vue.date_format(item.leave_time))// 任务结束时间
+        data += item.remote_work_end_time - item.remote_work_start_time > 0 
+        ? getTD(vue.date_format(item.remote_work_start_time)) + getTD(vue.date_format(item.remote_work_end_time))
+        : getTD(0) + getTD(0) // 远程开始和结束时间
+    data += item.local_work_end_time - item.local_work_start_time > 0
+        ? getTD(vue.date_format(item.local_work_start_time)) + getTD(vue.date_format(item.local_work_end_time))
+        : getTD(0) + getTD(0) // 本地开始和结束时间
+        data += item.pre_work_end_time - item.pre_work_start_time > 0 
+        ? getTD(vue.date_format(item.pre_work_start_time)) + getTD(vue.date_format(item.pre_work_end_time))
+        : getTD(0) + getTD(0) // 预处理开始和结束时间
 
         data += '</tr>'
     }
