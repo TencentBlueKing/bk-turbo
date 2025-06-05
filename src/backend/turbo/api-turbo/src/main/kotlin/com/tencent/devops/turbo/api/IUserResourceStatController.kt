@@ -55,4 +55,21 @@ interface IUserResourceStatController {
         @RequestBody(required = true)
         summary: ResourceCostSummary
     ): Response<Boolean>
+
+    @ApiOperation("触发按天统计上报项目维度的metrics数据")
+    @PutMapping("/triggerUpload/metrics", produces = [MediaType.APPLICATION_JSON_VALUE])
+    fun triggerUploadMetrics(
+        @ApiParam(value = "用户信息", required = true)
+        @RequestHeader(AUTH_HEADER_DEVOPS_USER_ID)
+        userId: String,
+        @ApiParam(value = "项目id", required = true)
+        @RequestHeader(AUTH_HEADER_DEVOPS_PROJECT_ID)
+        projectId: String,
+        @ApiParam("触发需统计上报的日期")
+        @RequestParam("startDate")
+        statisticsDate: String?,
+        @ApiParam("项目分页大小")
+        @RequestParam("endDate")
+        pageSizeParam: Int?
+    ): Response<Boolean>
 }
