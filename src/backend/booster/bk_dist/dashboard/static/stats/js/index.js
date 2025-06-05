@@ -2234,7 +2234,7 @@ function CreateReporter() {
     data += getTD("直接本地执行失败")
     data += getTD("远程转本地执行成功")
     data += getTD("远程转本地执行失败")
-    data += getTD("总耗时")
+    data += getTD("总耗时(s)")
     data += getTD("预处理耗时")
     data += getTD("远程执行耗时")
     data += getTD("后置处理耗时")
@@ -2278,32 +2278,23 @@ function CreateReporter() {
         data += getTD(item.remote_work_start_time > 0 && !item.remote_work_success) // 远程异常中断
         data += getTD(!item.pre_work_success && item.local_work_success) // 直接本地执行成功
         data += getTD(!item.pre_work_success && !item.local_work_success) // 直接本地执行失败
-        // data += getTD(item.remote_work_start_time > 0 && !item.post_work_success && item.local_work_success)
         data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && item.local_work_success) // 远程转本地执行成功
         data += getTD(item.remote_work_enter_time > 0 && !item.post_work_success && !item.local_work_success) // 远程转本地执行失败
-        // 添加耗时统计列（转换为秒）
-        data += getTD((item.leave_time - item.enter_time) / 1e9) // 总耗时
-        data += getTD((item.pre_work_end_time - item.pre_work_start_time) / 1e9) // 预处理耗时
-        data += getTD((item.remote_work_process_end_time - item.remote_work_process_start_time) / 1e9) // 远程执行耗时
-        data += getTD((item.post_work_end_time - item.post_work_start_time) / 1e9) // 后置处理耗时
-        data += getTD((item.local_work_end_time - item.local_work_start_time) / 1e9) // 本地执行耗时
+        // 添加耗时统计列（转换为秒,保留3位小数,提高可读性）
+        data += getTD(((item.leave_time - item.enter_time) / 1e9).toFixed(3)) // 总耗时
+        data += getTD(((item.pre_work_end_time - item.pre_work_start_time) / 1e9).toFixed(3)) // 预处理耗时
+        data += getTD(((item.remote_work_process_end_time - item.remote_work_process_start_time) / 1e9).toFixed(3)) // 远程执行耗时
+        data += getTD(((item.post_work_end_time - item.post_work_start_time) / 1e9).toFixed(3)) // 后置处理耗时
+        data += getTD(((item.local_work_end_time - item.local_work_start_time) / 1e9).toFixed(3)) // 本地执行耗时
         // 添加时间戳格式化列
         data += getTD(vue.date_format(item.enter_time))// 任务开始时间
         data += getTD(vue.date_format(item.leave_time))// 任务结束时间
-        if (item.remote_work_end_time - item.remote_work_start_time > 0) {
-            data += getTD(vue.date_format(item.remote_work_start_time)) // 远程开始时间
-            data += getTD(vue.date_format(item.remote_work_end_time)) // 远程结束时间
-        } else {
-            data += getTD(0)
-            data += getTD(0)
-        }
-        if (item.local_work_end_time - item.local_work_start_time > 0) {
-            data += getTD(vue.date_format(item.local_work_start_time))// 本地开始时间
-            data += getTD(vue.date_format(item.local_work_end_time))// 本地结束时间
-        } else {
-            data += getTD(0)
-            data += getTD(0)
-        }
+        data += item.remote_work_end_time - item.remote_work_start_time > 0 
+        ? getTD(vue.date_format(item.remote_work_start_time)) + getTD(vue.date_format(item.remote_work_end_time))
+        : getTD(0) + getTD(0) // 远程开始和结束时间
+    data += item.local_work_end_time - item.local_work_start_time > 0
+        ? getTD(vue.date_format(item.local_work_start_time)) + getTD(vue.date_format(item.local_work_end_time))
+        : getTD(0) + getTD(0) // 本地开始和结束时间
 
         data += '</tr>'
     }
