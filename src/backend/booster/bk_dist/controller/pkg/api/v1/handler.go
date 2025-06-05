@@ -908,6 +908,7 @@ func getLocalTaskExecuteRequest(req *restful.Request) (*types.LocalTaskExecuteRe
 		Environments: param.Environments,
 		Stats:        param.Stats,
 		CommandType:  param.CommandType,
+		Attributes:   param.Attributes,
 	}
 
 	if config.Stats == nil {
@@ -933,6 +934,7 @@ func getLocalTaskExecuteRequestFromWebSocket(data []byte) (*types.LocalTaskExecu
 		Commands:     param.Commands,
 		Environments: param.Environments,
 		Stats:        param.Stats,
+		Attributes:   param.Attributes,
 	}
 
 	if config.Stats == nil {
