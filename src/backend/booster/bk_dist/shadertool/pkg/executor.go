@@ -65,7 +65,7 @@ func (d *Executor) Update() {
 }
 
 // Run main function entry
-func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (int, string, error) {
+func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (int, string, *dcSDK.LocalTaskResult, error) {
 	blog.Infof("shaderexecutor: command [%s] begins", strings.Join(fullargs, " "))
 	// for i, v := range fullargs {
 	// 	blog.Infof("shaderexecutor: arg[%d] : [%s]", i, v)
@@ -76,7 +76,7 @@ func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (
 	return d.runWork(fullargs, workdir, attributes)
 }
 
-func (d *Executor) runWork(fullargs []string, workdir string, attributes []string) (int, string, error) {
+func (d *Executor) runWork(fullargs []string, workdir string, attributes []string) (int, string, *dcSDK.LocalTaskResult, error) {
 	// d.initStats()
 
 	// TODO : add controller parameter to decide whether use websocket
@@ -98,7 +98,7 @@ func (d *Executor) runWork(fullargs []string, workdir string, attributes []strin
 		} else {
 			blog.Errorf("shaderexecutor: execute failed, ret code:%d, retmsg:%s, error: %v,cmd:%v", retcode, retmsg, err, fullargs)
 		}
-		return retcode, retmsg, err
+		return retcode, retmsg, r, err
 	}
 
 	charcode := 0
@@ -145,10 +145,10 @@ func (d *Executor) runWork(fullargs []string, workdir string, attributes []strin
 	if r.ExitCode != 0 {
 		blog.Warnf("shaderexecutor: execute failed, error: %v, exit code: %d, outmsg:%s,errmsg:%s,cmd:%v",
 			err, r.ExitCode, string(r.Stdout), string(r.Stderr), fullargs)
-		return r.ExitCode, retmsg, err
+		return r.ExitCode, retmsg, r, err
 	}
 
-	return 0, retmsg, nil
+	return 0, retmsg, r, nil
 }
 
 func (d *Executor) getStats(fullargs []string) *dcSDK.ControllerJobStats {
