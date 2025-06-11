@@ -475,8 +475,8 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
-	// 设置24小时超时时间
-	timeout := time.After(24 * time.Hour)
+	// 设置3分钟超时，此处主要跟踪deploy是否已经成功创建，不关注任务是否跑完
+	timeout := time.After(3 * time.Minute)
 	for {
 		select {
 		case <-rm.ctx.Done():
@@ -489,6 +489,21 @@ func (rm *resourceManager) trace(resourceID, user string) {
 			}
 		case <-timeout:
 			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
+			r, err := rm.getResources(resourceID)
+			if err == nil {
+				if r.noReadyInstance > 0 {
+					blog.Warnf("crm: resource(%s) user(%s) trace timeout, release no-ready instance(%d)",
+						resourceID, user, r.noReadyInstance)
+					rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+					if err := rm.saveResources(r); err != nil {
+						blog.Errorf("crm: resource(%s) user(%s) trace timeout, save resource failed: %v",
+							resourceID, user, err)
+					}
+				}
+			} else {
+				blog.Errorf("crm: resource(%s) user(%s) trace timeout, delete no-ready info failed: %v, exit",
+					resourceID, user, err)
+			}
 			return
 		}
 	}

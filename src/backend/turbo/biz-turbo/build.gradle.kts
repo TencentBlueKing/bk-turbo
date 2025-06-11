@@ -23,4 +23,7 @@ dependencies {
     api("com.tencent.bk.devops.ci.common:common-auth-api:${Versions.ciVersion}"){
         isTransitive = false
     }
+    api("com.tencent.bk.devops.ci.metrics:api-metrics") {
+        isTransitive = false
+    }
 }
