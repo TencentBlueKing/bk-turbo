@@ -691,6 +691,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 		return nil, ErrorUnrecognizedOption
 	}
 
+	isClangCL := strings.HasSuffix(args[0], "clang-cl.exe")
+
 	r := new(ccArgs)
 	seenOptionS := false
 	seenOptionC := false
@@ -890,7 +892,7 @@ func scanArgs(args []string) (*ccArgs, error) {
 			continue
 		} else if strings.HasPrefix(arg, "@") {
 			r.includeRspFiles = append(r.includeRspFiles, arg[1:])
-		} else if strings.HasPrefix(arg, "/") { // support clang-cl.exe
+		} else if isClangCL && strings.HasPrefix(arg, "/") { // support clang-cl.exe
 			switch arg {
 			case "/c":
 				seenOptionC = true
