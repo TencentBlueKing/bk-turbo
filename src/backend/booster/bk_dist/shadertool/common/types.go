@@ -32,7 +32,8 @@ const (
 
 // AvailableResp describe the response of available api
 type AvailableResp struct {
-	PID int32 `json:"pid"`
+	PID           int32          `json:"pid"`
+	FailedActions []FailedAction `json:"failed_actions"`
 }
 
 // Flags define flags needed by shader tool
@@ -55,6 +56,16 @@ type Action struct {
 	Arg      string `json:"arg"`
 	Running  bool   `json:"running"`
 	Finished bool   `json:"finished"`
+}
+
+// FailedAction define failed shader action
+type FailedAction struct {
+	Index         uint64 `json:"index"`
+	Errormsg      string `json:"errormsg"`
+	Exitcode      int    `json:"exitcode"`
+	ProcessID     int    `json:"process_id"` // got from arg
+	InputFile     string `json:"input_file"`
+	InputFileSize int64  `json:"input_file_size"`
 }
 
 // UE4Action define ue4 action

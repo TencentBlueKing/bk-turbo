@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
@@ -31,6 +32,8 @@ const (
 	VersionV1 = "v1"
 
 	PathV1 = prefix + VersionV1
+
+	processIDKey = "process_id"
 )
 
 // HTTPHandle : http handle
@@ -93,16 +96,39 @@ func (a *HTTPHandle) GetActions() []*httpserver.Action {
 	return a.actionsV1
 }
 
-// TODO (tomtian)
 func (a *HTTPHandle) available(req *restful.Request, resp *restful.Response) {
 	blog.Debugf("ShaderTool: available...")
 
+	// TODO : return error info to ue editor
 	// do no care the json content now, just return ok
+	processID := req.QueryParameter(processIDKey)
+	if processID != "" {
+		blog.Infof("ShaderTool: available with process_id: %s", processID)
+		processid, err := strconv.Atoi(processID)
+		if err == nil {
+			blog.Infof("ShaderTool: available with process_id: %d", processid)
+			failedactions, err := a.mgr.getAndRemoveFailedActions(processid)
+			if err == nil && failedactions != nil {
+				// blog.Infof("ShaderTool: available with failed actions: %v", string(failedactions))
+				ReturnRest(&RestResponse{
+					Resp:     resp,
+					HTTPCode: 0,
+					ErrCode:  0,
+					Data: &common.AvailableResp{
+						PID:           int32(os.Getpid()),
+						FailedActions: failedactions,
+					},
+				})
+				return
+			}
+		}
+	}
 
 	// return response
 	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0, Data: &common.AvailableResp{
 		PID: int32(os.Getpid()),
 	}})
+
 	return
 }
 
@@ -183,6 +209,7 @@ func ReturnRest(resp *RestResponse) {
 	if resp.WrapFunc != nil {
 		result = resp.WrapFunc(result)
 	}
+
 	resp.Resp.WriteHeader(resp.HTTPCode)
 	_, _ = resp.Resp.Write(result)
 }
