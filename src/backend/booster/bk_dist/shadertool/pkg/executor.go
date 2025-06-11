@@ -65,11 +65,7 @@ func (d *Executor) Update() {
 }
 
 // Run main function entry
-<<<<<<< HEAD
-func (d *Executor) Run(fullargs []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
-=======
-func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (int, string, error) {
->>>>>>> af953f7a5d76091023c6c037f29819a2ecc73968
+func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (int, string, *dcSDK.LocalTaskResult, error) {
 	blog.Infof("shaderexecutor: command [%s] begins", strings.Join(fullargs, " "))
 	// for i, v := range fullargs {
 	// 	blog.Infof("shaderexecutor: arg[%d] : [%s]", i, v)
@@ -80,11 +76,7 @@ func (d *Executor) Run(fullargs []string, workdir string, attributes []string) (
 	return d.runWork(fullargs, workdir, attributes)
 }
 
-<<<<<<< HEAD
-func (d *Executor) runWork(fullargs []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
-=======
-func (d *Executor) runWork(fullargs []string, workdir string, attributes []string) (int, string, error) {
->>>>>>> af953f7a5d76091023c6c037f29819a2ecc73968
+func (d *Executor) runWork(fullargs []string, workdir string, attributes []string) (int, string, *dcSDK.LocalTaskResult, error) {
 	// d.initStats()
 
 	// TODO : add controller parameter to decide whether use websocket

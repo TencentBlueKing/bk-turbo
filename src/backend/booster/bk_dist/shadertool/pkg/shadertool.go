@@ -536,11 +536,7 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 	var err error
 	var localr *dcSDK.LocalTaskResult
 	for try := 0; try < 3; try++ {
-<<<<<<< HEAD
-		retcode, retmsg, localr, err = h.executor.Run(fullargs, "")
-=======
-		retcode, retmsg, err = h.executor.Run(fullargs, "", action.Attributes)
->>>>>>> af953f7a5d76091023c6c037f29819a2ecc73968
+		retcode, retmsg, localr, err = h.executor.Run(fullargs, "", action.Attributes)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("ShaderTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
