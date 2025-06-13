@@ -156,6 +156,7 @@ type ControllerConfig struct {
 	WorkerOfferSlot     bool
 	ResultCacheIndexNum int
 	ResultCacheFileNum  int
+	PreferLocal         bool
 }
 
 // Target return the server ip and port of controller

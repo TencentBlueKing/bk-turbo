@@ -60,8 +60,9 @@ type ServerConfig struct {
 
 	WorkerOfferSlot bool `json:"worker_offer_slot" value:"false" usage:"if true, controller will get remote slot by worker offer"`
 
-	ResultCacheIndexNum int `json:"result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
-	ResultCacheFileNum  int `json:"result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
+	ResultCacheIndexNum int  `json:"result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
+	ResultCacheFileNum  int  `json:"result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
+	PreferLocal         bool `json:"prefer_local" value:"false" usage:"if true, controller will try to use local first"`
 }
 
 // CertConfig  configuration of Cert

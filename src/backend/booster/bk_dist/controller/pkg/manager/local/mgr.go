@@ -310,15 +310,18 @@ func (m *Mgr) ExecuteTask(
 			m.work.ID(), req.Pid)
 		return e.executeLocalTask(), nil
 	}
-
+	blog.Errorf("test0")
 	// TODO : 本地空闲资源执行任务需要更多条件判断
 	// 该任务已确定用本地资源运行，则直接走本地执行
 	if canUseLocalIdleResource {
+		blog.Errorf("test1")
 		if e.canExecuteWithLocalIdleResource() && f() {
+			blog.Errorf("test2")
 			blog.Infof("local: execute task [%s] for work(%s) from pid(%d) degrade to local with local idle resource",
 				req.Commands[0], m.work.ID(), req.Pid)
 			return e.executeLocalTask(), nil
 		}
+		blog.Errorf("test3")
 	}
 
 	// 优化没有远程资源转本地的逻辑； 如果没有远程资源，则先获取本地锁，然后转本地执行

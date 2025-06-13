@@ -210,6 +210,7 @@ func (h *ShaderTool) getControllerConfig() dcSDK.ControllerConfig {
 		UseLocalCPUPercent:  h.settings.ControllerUseLocalCPUPercent,
 		ResultCacheIndexNum: h.settings.ControllerResultCacheIndexNum,
 		ResultCacheFileNum:  h.settings.ControllerResultCacheFileNum,
+		PreferLocal:         h.settings.ControllerPreferLocal,
 	}
 
 	return *h.controllerconfig
