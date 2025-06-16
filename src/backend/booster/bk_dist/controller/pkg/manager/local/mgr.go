@@ -310,7 +310,6 @@ func (m *Mgr) ExecuteTask(
 			m.work.ID(), req.Pid)
 		return e.executeLocalTask(), nil
 	}
-
 	// TODO : 本地空闲资源执行任务需要更多条件判断
 	// 该任务已确定用本地资源运行，则直接走本地执行
 	if canUseLocalIdleResource {

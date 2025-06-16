@@ -416,6 +416,11 @@ func (s *sdk) launchServer() error {
 		workerOfferSlot = "--worker_offer_slot"
 	}
 
+	preferLocal := ""
+	if s.config.PreferLocal {
+		preferLocal = "--prefer_local"
+	}
+
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
@@ -427,6 +432,7 @@ func (s *sdk) launchServer() error {
 		" --remote_retry_times=%d"+
 		" %s %s"+
 		" %s %s"+
+		" %s"+
 		" %s"+
 		" %s"+
 		" --result_cache_index_num=%d"+
@@ -458,6 +464,7 @@ func (s *sdk) launchServer() error {
 		useDefaultWorker,
 		dynamicPort,
 		workerOfferSlot,
+		preferLocal,
 		s.config.ResultCacheIndexNum,
 		s.config.ResultCacheFileNum,
 	))
