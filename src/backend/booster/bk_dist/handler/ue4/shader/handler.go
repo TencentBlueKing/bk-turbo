@@ -10,6 +10,7 @@
 package shader
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -329,15 +330,20 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 	result := r.Results[0]
 
 	if result.RetCode != 0 {
-		blog.Warnf("shader: failed to remote execute, retcode %d, "+
-			"error message:[%s], output message:[%s]",
+		errMsg := result.ErrorMessage
+		if len(result.ResultFiles) > 0 {
+			msgs := [][]byte{result.ErrorMessage, result.ResultFiles[0].Buffer}
+			sep := []byte("||") // 分隔符
+			errMsg = bytes.Join(msgs, sep)
+		}
+		blog.Warnf("shader: failed to remote execute, retcode %d, error message:[%s], output message:[%s]",
 			result.RetCode,
-			result.ErrorMessage,
+			errMsg,
 			result.OutputMessage)
 
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
-			Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+			Error: fmt.Errorf("%s", errMsg),
 		}
 	}
 
@@ -349,7 +355,7 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
-			Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+			Error: fmt.Errorf("%s", result.ErrorMessage),
 		}
 	}
 
