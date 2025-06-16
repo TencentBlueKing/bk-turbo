@@ -32,7 +32,8 @@ const (
 
 // AvailableResp describe the response of available api
 type AvailableResp struct {
-	PID int32 `json:"pid"`
+	PID           int32          `json:"pid"`
+	FailedActions []FailedAction `json:"failed_actions"`
 }
 
 // Flags define flags needed by shader tool
@@ -58,6 +59,16 @@ type Action struct {
 	Adjust     bool     `json:"adjust"`
 	Running    bool     `json:"running"`
 	Finished   bool     `json:"finished"`
+}
+
+// FailedAction define failed shader action
+type FailedAction struct {
+	Index         uint64 `json:"index"`
+	Errormsg      string `json:"errormsg"`
+	Exitcode      int    `json:"exitcode"`
+	ProcessID     int    `json:"process_id"` // got from arg
+	InputFile     string `json:"input_file"`
+	InputFileSize int64  `json:"input_file_size"`
 }
 
 // UE4Action define ue4 action
@@ -100,6 +111,7 @@ type ApplyParameters struct {
 	ControllerUseLocalCPUPercent  int               `json:"controller_use_local_cpu_percent"`
 	ControllerResultCacheIndexNum int               `json:"controller_result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
 	ControllerResultCacheFileNum  int               `json:"controller_result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
+	ControllerPreferLocal         bool              `json:"controller_prefer_local" value:"false" usage:"if true, controller will try to use local first"`
 }
 
 // Actionresult define action result

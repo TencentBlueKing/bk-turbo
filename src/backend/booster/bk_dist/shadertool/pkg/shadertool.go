@@ -12,7 +12,6 @@ package pkg
 import (
 	"container/list"
 	"context"
-	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -66,6 +65,8 @@ const (
 // vars
 var (
 	IdleKeepSecs = 100 //
+
+	FailedActionMaxCount = 20
 )
 
 // NewShaderTool get a new ShaderTool
@@ -83,6 +84,8 @@ func NewShaderTool(flagsparam *common.Flags) *ShaderTool {
 		actionchan:     nil,
 		resourcestatus: common.ResourceInit,
 		// removelist:     []string{},
+		failedActions: make(map[int][]*common.FailedAction),
+		availableTime: make(map[int]time.Time),
 	}
 }
 
@@ -103,6 +106,10 @@ type ShaderTool struct {
 	actionlist  *list.List
 	actionindex uint64
 	actionchan  chan common.Actionresult
+
+	failedactionlock sync.RWMutex
+	failedActions    map[int][]*common.FailedAction
+	availableTime    map[int]time.Time
 
 	lasttoolchain *dcSDK.Toolchain
 
@@ -203,6 +210,7 @@ func (h *ShaderTool) getControllerConfig() dcSDK.ControllerConfig {
 		UseLocalCPUPercent:  h.settings.ControllerUseLocalCPUPercent,
 		ResultCacheIndexNum: h.settings.ControllerResultCacheIndexNum,
 		ResultCacheFileNum:  h.settings.ControllerResultCacheFileNum,
+		PreferLocal:         h.settings.ControllerPreferLocal,
 	}
 
 	return *h.controllerconfig
@@ -351,13 +359,44 @@ func (h *ShaderTool) checkQuit(ctx context.Context) error {
 
 				if readyquittime == 0 {
 					readyquittime = nowseconds
-				} else {
-					if nowseconds-readyquittime > int64(h.settings.ShaderToolIdleRunSeconds) {
-						blog.Infof("ShaderTool: process idle for %d seconds,over than %d, ready exit now",
-							nowseconds-readyquittime, h.settings.ShaderToolIdleRunSeconds)
-						h.ReleaseResource()
-						h.commitSuicide()
+				}
+
+				remainfailedactions := false
+				if h.failedActions != nil && len(h.failedActions) > 0 {
+					h.failedactionlock.Lock()
+					for k, v := range h.failedActions {
+						if len(v) > 0 {
+							blog.Infof("ShaderTool: remain %d failed actions for pid:%d to notify",
+								len(v), k)
+
+							if t, ok := h.availableTime[k]; ok {
+								blog.Infof("ShaderTool: last available time for pid:%d is %s, now is %s",
+									k, t.String(), time.Now().String())
+								if time.Now().Sub(t) < time.Duration(h.settings.ShaderToolIdleRunSeconds)*time.Second {
+									blog.Infof("ShaderTool: last available time for pid:%d is less than %d seconds,do not exit now",
+										k, h.settings.ShaderToolIdleRunSeconds)
+
+									remainfailedactions = true
+									break
+								} else {
+									blog.Infof("ShaderTool: last available time for pid:%d is over than %d seconds, remove failed actions",
+										k, h.settings.ShaderToolIdleRunSeconds)
+									delete(h.failedActions, k)
+								}
+							}
+						}
 					}
+					h.failedactionlock.Unlock()
+				}
+				if remainfailedactions {
+					break
+				}
+
+				if nowseconds-readyquittime > int64(h.settings.ShaderToolIdleRunSeconds) {
+					blog.Infof("ShaderTool: process idle for %d seconds,over than %d, ready exit now",
+						nowseconds-readyquittime, h.settings.ShaderToolIdleRunSeconds)
+					h.ReleaseResource()
+					h.commitSuicide()
 				}
 			} else {
 				readyquittime = 0
@@ -434,13 +473,14 @@ func (h *ShaderTool) tryExecuteActions(ctx context.Context) error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("ShaderTool: got action result:%+v", r)
-			if r.Exitcode != 0 || r.Err != nil {
-				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
-				blog.Errorf("ShaderTool: %v", err)
-				return err
-			}
+			// // TODO : return error info to ue editor
+			// if r.Exitcode != 0 || r.Err != nil {
+			// 	err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
+			// 	blog.Errorf("ShaderTool: %v", err)
+			// 	return err
+			// }
 			if r.Finished {
-				h.onActionFinished(r.Index)
+				h.onActionFinished(r)
 			}
 			h.selectActionsToExecute()
 			if h.runningnumber <= 0 {
@@ -495,8 +535,9 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 	retmsg := ""
 	waitsecs := 5
 	var err error
+	var localr *dcSDK.LocalTaskResult
 	for try := 0; try < 3; try++ {
-		retcode, retmsg, err = h.executor.Run(fullargs, "", action.Attributes)
+		retcode, retmsg, localr, err = h.executor.Run(fullargs, "", action.Attributes)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("ShaderTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
@@ -521,6 +562,21 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 		break
 	}
 
+	if localr != nil {
+		r := common.Actionresult{
+			Index:     action.Index,
+			Finished:  true,
+			Succeed:   err == nil,
+			Outputmsg: string(localr.Stdout),
+			Errormsg:  string(localr.Stderr),
+			Exitcode:  retcode,
+			Err:       err,
+		}
+
+		actionchan <- r
+		return nil
+	}
+
 	r := common.Actionresult{
 		Index:     action.Index,
 		Finished:  true,
@@ -537,28 +593,118 @@ func (h *ShaderTool) executeOneAction(action *common.Action, actionchan chan com
 }
 
 // update all actions and ready actions
-func (h *ShaderTool) onActionFinished(index uint64) error {
-	blog.Debugf("ShaderTool: action %d finished", index)
+func (h *ShaderTool) onActionFinished(r common.Actionresult) error {
+	blog.Infof("ShaderTool: action %v finished", r)
 
 	h.finishednumber++
 	h.runningnumber--
 	h.lastjobfinishedtime = time.Now().Unix()
 	blog.Infof("ShaderTool: finished : %d running : %d", h.finishednumber, h.runningnumber)
 
+	var failedAction *common.Action = nil
+
 	// update with index
 	h.actionlock.Lock()
-	defer h.actionlock.Unlock()
-
+	index := r.Index
+	inlist := false
 	// delete from ready array
 	for e := h.actionlist.Front(); e != nil; e = e.Next() {
 		a := e.Value.(*common.Action)
 		if a.Index == index {
+			inlist = true
+			if r.Exitcode != 0 || r.Err != nil {
+				// h.onActionFailed(a, r)
+				failedAction = a
+			}
 			h.actionlist.Remove(e)
+			blog.Infof("ShaderTool: remove action %v from list", a)
 			break
 		}
 	}
+	h.actionlock.Unlock()
+
+	if !inlist {
+		blog.Errorf("ShaderTool: action %v not in list", r)
+	}
+
+	if failedAction != nil {
+		h.onActionFailed(failedAction, r)
+	}
 
 	return nil
+}
+
+func (h *ShaderTool) onActionFailed(a *common.Action, r common.Actionresult) error {
+	blog.Infof("ShaderTool: action %v failed", a)
+	processid := 0
+	args, _ := shlex.Split(replaceWithNextExclude(a.Arg, '\\', "\\\\", []byte{'"'}))
+	if len(args) > 3 {
+		arg1, err1 := strconv.Atoi(args[1])
+		arg2, err2 := strconv.Atoi(args[2])
+		if err1 == nil && err2 == nil && arg2 == 0 {
+			processid = arg1
+			blog.Infof("ShaderTool: got failed process id %d for action %v", processid, a)
+		}
+		inputfile := filepath.Join(args[0], args[3])
+		inputfileinfo := dcFile.Stat(inputfile)
+		if inputfileinfo.Exist() {
+			inputfilesize := inputfileinfo.Size()
+			failedaction := &common.FailedAction{
+				Index: a.Index,
+				// Cmd:           a.Cmd,
+				// Arg:           a.Arg,
+				Errormsg:      r.Errormsg,
+				Exitcode:      r.Exitcode,
+				ProcessID:     processid,
+				InputFile:     inputfile,
+				InputFileSize: inputfilesize,
+			}
+
+			h.failedactionlock.Lock()
+			defer h.failedactionlock.Unlock()
+
+			if _, exists := h.failedActions[processid]; !exists {
+				h.failedActions[processid] = []*common.FailedAction{failedaction} // 显式初始化空切片
+			} else {
+				h.failedActions[processid] = append(h.failedActions[processid], failedaction)
+			}
+			blog.Infof("ShaderTool: got total %d failed after add action %v",
+				len(h.failedActions[processid]), failedaction)
+		}
+	}
+	return nil
+}
+
+func (h *ShaderTool) recordAvailableTime(processid int) {
+	h.availableTime[processid] = time.Now()
+}
+
+func (h *ShaderTool) getAndRemoveFailedActions(processid int) ([]common.FailedAction, error) {
+	blog.Infof("ShaderTool: getAndRemoveFailedActions for processid %d", processid)
+	h.failedactionlock.Lock()
+	defer h.failedactionlock.Unlock()
+
+	h.recordAvailableTime(processid)
+
+	// limit failed actions to FailedActionMaxCount
+	if _, exists := h.failedActions[processid]; exists {
+		var failedactions []common.FailedAction
+		if len(h.failedActions[processid]) < FailedActionMaxCount {
+			for _, v := range h.failedActions[processid] {
+				failedactions = append(failedactions, *v)
+			}
+			delete(h.failedActions, processid)
+			return failedactions, nil
+		} else {
+			for _, v := range h.failedActions[processid][:FailedActionMaxCount] {
+				failedactions = append(failedactions, *v)
+			}
+			h.failedActions[processid] = h.failedActions[processid][FailedActionMaxCount:]
+			return failedactions, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (h *ShaderTool) runCommitSuicideCheck(ctx context.Context) {
@@ -900,10 +1046,8 @@ func (h *ShaderTool) shaders(actions *common.UE4Action) error {
 
 	h.lasttoolchain = &actions.ToolJSON
 
-	blog.Infof("ShaderTool: try lock action lock")
 	h.actionlock.Lock()
 	defer h.actionlock.Unlock()
-	blog.Infof("ShaderTool: succeed to lock action lock")
 
 	h.adjustActions4UBAAgent(actions, &actions.ToolJSON)
 
