@@ -111,7 +111,7 @@ type ApplyParameters struct {
 	ControllerUseLocalCPUPercent  int               `json:"controller_use_local_cpu_percent"`
 	ControllerResultCacheIndexNum int               `json:"controller_result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
 	ControllerResultCacheFileNum  int               `json:"controller_result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
-	ControllerPreferLocal         bool              `json:"controller_prefer_local"`
+	ControllerPreferLocal         bool              `json:"controller_prefer_local" value:"false" usage:"if true, controller will try to use local first"`
 }
 
 // Actionresult define action result
