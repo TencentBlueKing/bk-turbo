@@ -475,6 +475,8 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
+	// 设置3分钟超时，此处主要跟踪deploy是否已经成功创建，不关注任务是否跑完
+	timeout := time.After(3 * time.Minute)
 	for {
 		select {
 		case <-rm.ctx.Done():
@@ -485,6 +487,24 @@ func (rm *resourceManager) trace(resourceID, user string) {
 				blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
 				return
 			}
+		case <-timeout:
+			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
+			r, err := rm.getResources(resourceID)
+			if err == nil {
+				if r.noReadyInstance > 0 {
+					blog.Warnf("crm: resource(%s) user(%s) trace timeout, release no-ready instance(%d)",
+						resourceID, user, r.noReadyInstance)
+					rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+					if err := rm.saveResources(r); err != nil {
+						blog.Errorf("crm: resource(%s) user(%s) trace timeout, save resource failed: %v",
+							resourceID, user, err)
+					}
+				}
+			} else {
+				blog.Errorf("crm: resource(%s) user(%s) trace timeout, delete no-ready info failed: %v, exit",
+					resourceID, user, err)
+			}
+			return
 		}
 	}
 }
@@ -915,9 +935,14 @@ func (rm *resourceManager) launch(
 	// 在启动协程前，将resource刷新到内存，其它协程依赖该数据
 	// r.status = resourceStatusDeploying
 	rm.updateResourcesCache(r)
-
+	newRes, err := rm.getResources(resourceID)
+	if err != nil {
+		blog.Errorf("crm: try get resource copy for resource(%s) user(%s) failed: %v",
+			resourceID, user, err)
+		return err
+	}
 	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
-	go rm.realLaunch(hasBroker, resourceID, user, r, condition, instance, originCity)
+	go rm.realLaunch(hasBroker, resourceID, user, newRes, condition, instance, originCity)
 
 	return nil
 }

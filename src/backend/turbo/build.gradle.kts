@@ -48,6 +48,7 @@ allprojects {
 			dependency("com.google.guava:guava:${Versions.guavaVersion}")
 			dependency("io.jsonwebtoken:jjwt:${Versions.jjwtVersion}")
 			dependency("commons-io:commons-io:${Versions.commonIo}")
+            dependency("com.tencent.bk.devops.ci.metrics:api-metrics:${Versions.ciVersion}")
 			dependencySet("io.swagger:${Versions.swaggerVersion}") {
                 entry("swagger-annotations")
                 entry("swagger-jersey2-jaxrs")
