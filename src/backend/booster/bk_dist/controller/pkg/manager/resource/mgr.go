@@ -34,6 +34,10 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
 )
 
+const (
+	ENCODE_RESP_ERR = "encode apiResp.Data error"
+)
+
 // NewMgr get a new ResourceMgr
 func NewMgr(pCtx context.Context, work *types.Work) types.ResourceMgr {
 	cli := httpclient.NewHTTPClient()
@@ -116,7 +120,7 @@ func (m *Mgr) IsApplyFinished() bool {
 	return m.applystatus != ResourceApplying
 }
 
-// 假定server返回的资源都是相同类型的，或者全部支持，或者全部不支持
+// SupportAbsPath 假定server返回的资源都是相同类型的，或者全部支持，或者全部不支持
 func (m *Mgr) SupportAbsPath() bool {
 	m.reslock.RLock()
 	defer m.reslock.RUnlock()
@@ -598,7 +602,7 @@ func (m *Mgr) SendStats(brief bool) error {
 	return nil
 }
 
-// send stats and reset after sent, if brief true, then will not send the job stats
+// SendAndResetStats send stats and reset after sent, if brief true, then will not send the job stats
 // !! this will call m.work.Lock() , to avoid dead lock
 func (m *Mgr) SendAndResetStats(brief bool, resapplytimes []int64) error {
 
@@ -718,11 +722,24 @@ func (m *Mgr) heartbeat() {
 			m.reslock.RLock()
 			for _, r := range m.resources {
 				if r.needHeartBeat() {
-					go func(data []byte) {
-						if _, _, err := m.request("POST", m.serverHost, heartbeatURI, data); err != nil {
-							blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", r.taskid, m.work.ID(), err)
+					go func(res *Res) {
+						_, requestOK, err := m.request("POST", m.serverHost, heartbeatURI, res.heartbeatData())
+						if err != nil {
+							blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", res.taskid, m.work.ID(), err)
+							// if requestOK but return error(not encode error), we should release resource right now
+							if requestOK && !strings.Contains(err.Error(), ENCODE_RESP_ERR) {
+								// double check if task is already released
+								_, _, err := m.request("GET", m.serverHost,
+									fmt.Sprintf(inspectDistributeTaskURI, res.taskid), nil)
+								if err != nil {
+									blog.Errorf("resource: task(%s) work(%s) maybe released with err:%v,  stop heartbeat right now",
+										res.taskid, m.work.ID(), err)
+									res.status = ResourceReleaseSucceed
+									m.onResChanged()
+								}
+							}
 						}
-					}(r.heartbeatData())
+					}(r)
 				}
 			}
 			m.reslock.RUnlock()
@@ -926,7 +943,8 @@ func (m *Mgr) addRes(info *v2.RespTaskInfo, status Status) error {
 		}
 	}
 
-	blog.Warnf("resource: add task:%s status(%s) work:%s but not found taskid in resources?", info.TaskID, status.String(), m.work.ID())
+	blog.Warnf("resource: add task:%s status(%s) work:%s but not found taskid in resources?",
+		info.TaskID, status.String(), m.work.ID())
 	m.resources = append(m.resources, &Res{
 		taskid:   info.TaskID,
 		status:   status,
@@ -1026,7 +1044,7 @@ func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, er
 
 	var by []byte
 	if err = codec.EncJSON(apiResp.Data, &by); err != nil {
-		return nil, true, fmt.Errorf("encode apiResp.Data error %s", err.Error())
+		return nil, true, fmt.Errorf("%s %s", ENCODE_RESP_ERR, err.Error())
 	}
 
 	return by, true, nil
