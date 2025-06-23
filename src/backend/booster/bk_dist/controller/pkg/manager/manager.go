@@ -837,6 +837,16 @@ func (m *mgr) canUseLocalIdleResource() bool {
 	return m.conf.UseLocalCPUPercent > 0 && m.conf.UseLocalCPUPercent <= 100
 }
 
+func (m *mgr) setPreferLocal(allowidlenum int) bool {
+	if !m.conf.PreferLocal { // if not set perfer local, return false right now
+		return false
+	}
+	if m.conf.LocalSlots <= allowidlenum-2 { // if local slots is not enough, not allow execute with local resource
+		return false
+	}
+	return true
+}
+
 func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	if m.conf.UseLocalCPUPercent <= 0 || m.conf.UseLocalCPUPercent > 100 {
 		return false
@@ -862,11 +872,13 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	blog.Infof("mgr localresource check: prepared task: %d,total remote slots:%d for work: %s",
 		prepared, remotetotal, work.Basic().Info().WorkID())
 
-	// check prepared task, if remote enough and not prefer local, not allow execute with local resource
-	if prepared < int32(remotetotal) && (!m.conf.PreferLocal || m.conf.LocalSlots > allowidlenum-2) {
-		blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
-			work.Basic().Info().WorkID())
-		return false
+	// if not set prefer local , check prepared task to use remote resource first
+	if !m.setPreferLocal(allowidlenum) {
+		if prepared < int32(remotetotal) { //check prepared task, if remote enough, not allow execute with local resource
+			blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
+				work.Basic().Info().WorkID())
+			return false
+		}
 	}
 
 	// check local idle cpu
