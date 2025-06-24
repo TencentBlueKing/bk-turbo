@@ -851,7 +851,7 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	runninglocalresourcetask := atomic.LoadInt32(&m.localResourceTaskNum)
 	if m.conf.LocalSlots-2 < allowidlenum {
 		blog.Infof("mgr localresource check: local slots(%d) less than allow cpu num(%d) for work: %s",
-			m.conf.LocalSlots, maxidlenum, work.Basic().Info().WorkID())
+			m.conf.LocalSlots-2, allowidlenum, work.Basic().Info().WorkID())
 		allowidlenum = m.conf.LocalSlots - 2
 	}
 	if runninglocalresourcetask >= int32(allowidlenum) {
