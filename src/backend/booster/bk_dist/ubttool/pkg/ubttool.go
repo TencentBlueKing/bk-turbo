@@ -679,6 +679,7 @@ func (h *UBTTool) getControllerConfig() dcSDK.ControllerConfig {
 		EnableLib:           h.settings.ControllerEnableLib,
 		LongTCP:             h.settings.ControllerLongTCP,
 		DynamicPort:         h.settings.ControllerDynamicPort,
+		PreferLocal:         h.settings.ControllerPreferLocal,
 	}
 }
 

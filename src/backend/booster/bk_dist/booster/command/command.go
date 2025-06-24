@@ -117,6 +117,7 @@ const (
 	FlagResultCacheTriggleSecs = "result_cache_triggle_secs"
 	FlagResultCacheIndexNum    = "result_cache_index_num"
 	FlagResultCacheFileNum     = "result_cache_file_num"
+	FlagPreferLocal            = "prefer_local"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -501,6 +502,10 @@ var (
 		commandCli.IntFlag{
 			Name:  "result_cache_file_num",
 			Usage: "specify file number for local result cache",
+		},
+		commandCli.BoolFlag{
+			Name:  "prefer_local",
+			Usage: "if true, controller will try to use local first",
 		},
 	}
 )

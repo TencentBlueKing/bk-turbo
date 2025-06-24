@@ -379,6 +379,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			WorkerOfferSlot:     c.Bool(FlagWorkerOfferSlot),
 			ResultCacheIndexNum: c.Int(FlagResultCacheIndexNum),
 			ResultCacheFileNum:  c.Int(FlagResultCacheFileNum),
+			PreferLocal:         c.Bool(FlagPreferLocal),
 		},
 	}
 

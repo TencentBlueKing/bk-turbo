@@ -861,7 +861,11 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	remotetotal := work.Remote().TotalSlots()
 	blog.Infof("mgr localresource check: prepared task: %d,total remote slots:%d for work: %s",
 		prepared, remotetotal, work.Basic().Info().WorkID())
-	if prepared < int32(remotetotal) {
+
+	// check prepared task, if remote enough and not prefer local, not allow execute with local resource
+	if prepared < int32(remotetotal) && !m.conf.PreferLocal {
+		blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
+			work.Basic().Info().WorkID())
 		return false
 	}
 
