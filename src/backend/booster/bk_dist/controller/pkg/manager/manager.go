@@ -849,6 +849,11 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	maxidlenum := runtime.NumCPU() - 2
 	allowidlenum := maxidlenum * m.conf.UseLocalCPUPercent / 100
 	runninglocalresourcetask := atomic.LoadInt32(&m.localResourceTaskNum)
+	if m.conf.LocalSlots-2 < allowidlenum {
+		blog.Infof("mgr localresource check: local slots(%d) less than allow cpu num(%d) for work: %s",
+			m.conf.LocalSlots, maxidlenum, work.Basic().Info().WorkID())
+		allowidlenum = m.conf.LocalSlots - 2
+	}
 	if runninglocalresourcetask >= int32(allowidlenum) {
 		blog.Infof("mgr localresource check: running local resource task: %d,"+
 			"max allow idle num:%d for work: %s",
@@ -893,12 +898,7 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	if curidlenum <= reservedidlenum {
 		return false
 	}
-	// if local	slots less than idle cpu num, not allow execute with local
-	if m.conf.LocalSlots > 0 && m.conf.LocalSlots < allowidlenum-occupied {
-		blog.Infof("mgr localresource check: local slots(%d) less than idle cpu num(%d) for work: %s, not allow execute with local resource",
-			m.conf.LocalSlots, allowidlenum-occupied, work.Basic().Info().WorkID())
-		return false
-	}
+
 	blog.Infof("mgr localresource check: execute with local resource, "+
 		"local resource task:%d,prepared task:%d,total remote slots:%d,"+
 		"local cpu:%d,reserved cpu num:%d,current idle cpu num:%d for work(%s)",
