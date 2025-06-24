@@ -196,7 +196,7 @@ onerror:
 
 // 预估可用slot
 func (o *tcpManager) estimateSlot() error {
-	blog.Debugf("[slotmgr] estimateSlot")
+	// blog.Debugf("[slotmgr] estimateSlot")
 
 	// 总可用任务数 - （运行中任务 + 预订的任务 + 等待运行的任务）
 	availableslotnum := int(currentAvailableSlotCPU) - o.curjobs - bookedSlotNum - len(o.buffedcmds)
@@ -325,7 +325,7 @@ func (o *tcpManager) receiveSlotRspAck(client *protocol.TCPClient) (*dcProtocol.
 
 // 检查客户端连接是否正常，如果异常了，则清理掉
 func (o *tcpManager) checkClient() {
-	blog.Debugf("[slotmgr] check all client now")
+	// blog.Debugf("[slotmgr] check all client now")
 	clientLock.Lock()
 	defer clientLock.Unlock()
 
@@ -361,7 +361,7 @@ func (o *tcpManager) checkClient() {
 // 检查分配的slot是否超时，需要考虑客户端发送工具链的额外时间，先将超时时间设置稍微大点
 // 超时的slot意味着什么？ 后续是否继续为该客户端分配slot？ worker端先不管，由客户端来检查和释放连接
 func (o *tcpManager) checkSlot() {
-	blog.Debugf("[slotmgr] check slot now")
+	// blog.Debugf("[slotmgr] check slot now")
 
 	slotLock.Lock()
 	defer slotLock.Unlock()

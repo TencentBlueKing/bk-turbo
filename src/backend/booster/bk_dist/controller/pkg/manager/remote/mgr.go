@@ -2632,7 +2632,7 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 
 func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 	for i, c := range req.Req.Commands {
-		if c.ExeToolChainKey != "" && !strings.HasSuffix(c.ExeToolChainKey, types.UbaAgent) {
+		if c.ExeToolChainKey != "" && !strings.Contains(c.ExeToolChainKey, types.UbaAgent) {
 			remotepath := ""
 			var err error
 			if !m.work.Resource().SupportAbsPath() {
