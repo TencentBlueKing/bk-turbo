@@ -894,7 +894,7 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 		return false
 	}
 	// if local	slots less than idle cpu num, not allow execute with local
-	if m.conf.LocalSlots > 0 && m.conf.LocalSlots <= allowidlenum-occupied {
+	if m.conf.LocalSlots > 0 && m.conf.LocalSlots < allowidlenum-occupied {
 		blog.Infof("mgr localresource check: local slots(%d) less than idle cpu num(%d) for work: %s, not allow execute with local resource",
 			m.conf.LocalSlots, allowidlenum-occupied, work.Basic().Info().WorkID())
 		return false
