@@ -705,15 +705,15 @@ func (m *Mgr) sendStatsData(data *[]byte) error {
 	return nil
 }
 
-func (m *Mgr) dealHeartBeat(res Res) {
-	_, requestOK, err := m.request("POST", m.serverHost, heartbeatURI, res.heartbeatData())
+func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
+	_, requestOK, err := m.request("POST", m.serverHost, heartbeatURI, heartbeatData)
 	if err != nil {
-		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", res.taskid, m.work.ID(), err)
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
 		// if requestOK but return error(not encode error), we should release resource right now
 		if requestOK && !strings.Contains(err.Error(), ENCODE_RESP_ERR) {
 			// double check if task is already released
 			_, _, err := m.request("GET", m.serverHost,
-				fmt.Sprintf(inspectDistributeTaskURI, res.taskid), nil)
+				fmt.Sprintf(inspectDistributeTaskURI, taskId), nil)
 			if err != nil {
 				resourcechanged := false
 				m.reslock.Lock()
@@ -725,9 +725,9 @@ func (m *Mgr) dealHeartBeat(res Res) {
 				}()
 
 				for _, r := range m.resources {
-					if r.taskid == res.taskid {
+					if r.taskid == taskId {
 						blog.Errorf("resource: task(%s) work(%s) maybe released with err:%v,  stop heartbeat right now",
-							res.taskid, m.work.ID(), err)
+							taskId, m.work.ID(), err)
 						r.status = ResourceReleaseSucceed
 						resourcechanged = true
 						break
@@ -755,7 +755,7 @@ func (m *Mgr) heartbeat() {
 			m.reslock.RLock()
 			for _, r := range m.resources {
 				if r.needHeartBeat() {
-					go m.dealHeartBeat(*r)
+					go m.dealHeartBeat(r.taskid, r.heartbeatData())
 				}
 			}
 
