@@ -29,13 +29,10 @@ import (
 	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
-)
-
-const (
-	ENCODE_RESP_ERR = "encode apiResp.Data error"
 )
 
 // NewMgr get a new ResourceMgr
@@ -705,34 +702,51 @@ func (m *Mgr) sendStatsData(data *[]byte) error {
 	return nil
 }
 
-func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
-	_, requestOK, err := m.request("POST", m.serverHost, heartbeatURI, heartbeatData)
-	if err != nil {
+func (m *Mgr) heartBeatCanStop(taskId string, respHeartbeat *v2.RespHeartbeat, err error) bool {
+	if err == nil {
+		if respHeartbeat.Status.Terminated() {
+			blog.Info("resource: task(%s) work(%s) status %s,can stop heartbeat", taskId, m.work.ID(), respHeartbeat.Status)
+			return true
+		}
+	} else {
 		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
 		// if requestOK but return error(not encode error), we should release resource right now
-		if requestOK && !strings.Contains(err.Error(), ENCODE_RESP_ERR) {
-			// double check if task is already released
-			_, _, err := m.request("GET", m.serverHost,
-				fmt.Sprintf(inspectDistributeTaskURI, taskId), nil)
-			if err != nil {
-				resourcechanged := false
-				m.reslock.Lock()
-				defer func() {
-					m.reslock.Unlock()
-					if resourcechanged {
-						m.onResChanged()
-					}
-				}()
+		if strings.Contains(err.Error(), api.ServerErrUpdateHeartbeatFailed.String()) {
+			return true
+		}
+	}
 
-				for _, r := range m.resources {
-					if r.taskid == taskId {
-						blog.Errorf("resource: task(%s) work(%s) maybe released with err:%v,  stop heartbeat right now",
-							taskId, m.work.ID(), err)
-						r.status = ResourceReleaseSucceed
-						resourcechanged = true
-						break
-					}
-				}
+	return false
+}
+
+func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
+	resp, requestOK, respErr := m.request("POST", m.serverHost, heartbeatURI, heartbeatData)
+	if !requestOK {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), respErr)
+		return
+	}
+	var respHeartbeat v2.RespHeartbeat
+	if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+		return
+	}
+
+	if m.heartBeatCanStop(taskId, &respHeartbeat, respErr) {
+		resourcechanged := false
+		m.reslock.Lock()
+		defer func() {
+			m.reslock.Unlock()
+			if resourcechanged {
+				m.onResChanged()
+			}
+		}()
+
+		for _, r := range m.resources {
+			if r.taskid == taskId {
+				blog.Info("resource: task(%s) work(%s) maybe in terminated status,  stop heartbeat right now", taskId, m.work.ID())
+				r.status = ResourceReleaseSucceed
+				resourcechanged = true
+				break
 			}
 		}
 	}
@@ -1061,7 +1075,7 @@ func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, er
 
 	var by []byte
 	if err = codec.EncJSON(apiResp.Data, &by); err != nil {
-		return nil, true, fmt.Errorf("%s %s", ENCODE_RESP_ERR, err.Error())
+		return nil, true, fmt.Errorf("encode apiResp.Data error %s", err.Error())
 	}
 
 	return by, true, nil
