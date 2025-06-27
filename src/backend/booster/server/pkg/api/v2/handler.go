@@ -143,10 +143,12 @@ func UpdateHeartbeat(req *restful.Request, resp *restful.Response) {
 	}
 
 	blog.Infof("update heartbeat: try to update task(%s) heartbeat", taskID)
-	if err = defaultManager.UpdateHeartbeat(taskID); err != nil {
+	status, err := defaultManager.UpdateHeartbeat(taskID)
+	if err != nil {
 		blog.Warnf("update heartbeat: update task(%s) heartbeat failed, url(%s): %v",
 			taskID, req.Request.URL.String(), err)
-		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrUpdateHeartbeatFailed, Message: err.Error()})
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrUpdateHeartbeatFailed,
+			Message: api.ServerErrUpdateHeartbeatFailed.String() + ":" + err.Error()})
 		return
 	}
 
@@ -154,6 +156,7 @@ func UpdateHeartbeat(req *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &RespHeartbeat{
 		TaskID: taskID,
 		Type:   HeartBeatPong.String(),
+		Status: status,
 	}})
 }
 

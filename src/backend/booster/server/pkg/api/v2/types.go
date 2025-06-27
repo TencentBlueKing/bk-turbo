@@ -65,8 +65,9 @@ type ParamHeartbeat struct {
 
 // RespHeartbeat contains the return data of UpdateHeartbeat
 type RespHeartbeat struct {
-	TaskID string `json:"task_id"`
-	Type   string `json:"type"`
+	TaskID string                `json:"task_id"`
+	Type   string                `json:"type"`
+	Status engine.TaskStatusType `json:"statuss"`
 }
 
 type HeartBeatType string
