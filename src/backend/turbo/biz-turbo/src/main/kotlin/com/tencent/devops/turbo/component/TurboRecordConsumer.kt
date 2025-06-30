@@ -48,16 +48,20 @@ class TurboRecordConsumer @Autowired constructor(
         try {
             val turboEngineConfig = turboEngineConfigCache[turboRecordCreateDto.engineCode]
             if (null == turboEngineConfig) {
-                logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] turbo engine config not found with code ${turboRecordCreateDto.engineCode}")
+                logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] turbo engine config " +
+                    "not found with code ${turboRecordCreateDto.engineCode}")
                 return
             }
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] create single turbo record!")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] create single turbo " +
+                "record!")
             turboDataSyncService.createTurboRecord(
                 turboRecordCreateDto, turboEngineConfig
             )
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] create turbo record and update stats finished!")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] create turbo record and " +
+                "update stats finished!")
         } catch (e: Exception) {
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] create turbo record fail! message: ${e.message}")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] create turbo record fail!" +
+                " message: ${e.message}")
         }
     }
 
@@ -66,7 +70,8 @@ class TurboRecordConsumer @Autowired constructor(
      */
     fun updateSingleTurboRecord(turboRecordUpdateDto: TurboRecordUpdateDto) {
         try {
-            logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update single turbo record!")
+            logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] " +
+                "update single turbo record!")
             val newTurboRecordList = TBSSdkApi.queryTurboRecordInfo(
                 engineCode = turboRecordUpdateDto.engineCode,
                 queryParam = if (!turboRecordUpdateDto.tbsTurboRecordId.isNullOrBlank()) mapOf(
@@ -75,10 +80,12 @@ class TurboRecordConsumer @Autowired constructor(
                     "build_id" to turboRecordUpdateDto.buildId
                 ) else return
             )
-            logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update single turbo record! new turbo record list size: ${newTurboRecordList.size}")
+            logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] " +
+                "update single turbo record! new turbo record list size: ${newTurboRecordList.size}")
             val turboEngineConfig = turboEngineConfigCache[turboRecordUpdateDto.engineCode]
             if (null == turboEngineConfig) {
-                logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] turbo engine config not found")
+                logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto
+                    .turboPlanId}] turbo engine config not found")
                 return
             }
             if (!newTurboRecordList.isNullOrEmpty()) {
@@ -96,10 +103,12 @@ class TurboRecordConsumer @Autowired constructor(
                     user = SYSTEM_ADMIN
                 )
             }
-            logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update turbo record and update stats finished!")
+            logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] " +
+                "update turbo record and update stats finished!")
         } catch (e: Exception) {
             e.printStackTrace()
-            logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update turbo record fail! message: ${e.message}")
+            logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] " +
+                "update turbo record fail! message: ${e.message}")
             turboRecordService.updateRecordStatus(
                 turboRecordUpdateDto.tbsTurboRecordId, turboRecordUpdateDto.buildId,
                 EnumDistccTaskStatus.FAILED.getTBSStatus(), SYSTEM_ADMIN

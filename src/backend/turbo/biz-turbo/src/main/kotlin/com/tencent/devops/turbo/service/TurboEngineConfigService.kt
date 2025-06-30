@@ -747,7 +747,7 @@ class TurboEngineConfigService @Autowired constructor(
         projectId: String,
         queueName: String?
     ): List<ParamEnumModel> {
-        logger.info("request param[$engineCode | $projectId | $queueName]")
+        logger.info("request param[$engineCode $projectId $queueName]")
         if (queueName.isNullOrEmpty()) {
             logger.info("getCompilerVersionList queueName is invalid")
             return listOf()
