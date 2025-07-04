@@ -849,6 +849,11 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	maxidlenum := runtime.NumCPU() - 2
 	allowidlenum := maxidlenum * m.conf.UseLocalCPUPercent / 100
 	runninglocalresourcetask := atomic.LoadInt32(&m.localResourceTaskNum)
+	if m.conf.LocalSlots-2 < allowidlenum {
+		blog.Infof("mgr localresource check: local slots(%d) less than allow cpu num(%d) for work: %s",
+			m.conf.LocalSlots-2, allowidlenum, work.Basic().Info().WorkID())
+		allowidlenum = m.conf.LocalSlots - 2
+	}
 	if runninglocalresourcetask >= int32(allowidlenum) {
 		blog.Infof("mgr localresource check: running local resource task: %d,"+
 			"max allow idle num:%d for work: %s",
@@ -862,11 +867,13 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	blog.Infof("mgr localresource check: prepared task: %d,total remote slots:%d for work: %s",
 		prepared, remotetotal, work.Basic().Info().WorkID())
 
-	// check prepared task, if remote enough and not prefer local, not allow execute with local resource
-	if prepared < int32(remotetotal) && !m.conf.PreferLocal {
-		blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
-			work.Basic().Info().WorkID())
-		return false
+	// if not set prefer local , check prepared task to use remote resource first
+	if !m.conf.PreferLocal {
+		if prepared < int32(remotetotal) { //check prepared task, if remote enough, not allow execute with local resource
+			blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
+				work.Basic().Info().WorkID())
+			return false
+		}
 	}
 
 	// check local idle cpu
