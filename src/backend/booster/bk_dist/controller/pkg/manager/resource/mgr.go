@@ -29,6 +29,7 @@ import (
 	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
@@ -116,7 +117,7 @@ func (m *Mgr) IsApplyFinished() bool {
 	return m.applystatus != ResourceApplying
 }
 
-// 假定server返回的资源都是相同类型的，或者全部支持，或者全部不支持
+// SupportAbsPath 假定server返回的资源都是相同类型的，或者全部支持，或者全部不支持
 func (m *Mgr) SupportAbsPath() bool {
 	m.reslock.RLock()
 	defer m.reslock.RUnlock()
@@ -598,7 +599,7 @@ func (m *Mgr) SendStats(brief bool) error {
 	return nil
 }
 
-// send stats and reset after sent, if brief true, then will not send the job stats
+// SendAndResetStats send stats and reset after sent, if brief true, then will not send the job stats
 // !! this will call m.work.Lock() , to avoid dead lock
 func (m *Mgr) SendAndResetStats(brief bool, resapplytimes []int64) error {
 
@@ -701,6 +702,56 @@ func (m *Mgr) sendStatsData(data *[]byte) error {
 	return nil
 }
 
+func (m *Mgr) heartBeatCanStop(taskId string, respHeartbeat *v2.RespHeartbeat, err error) bool {
+	if err == nil {
+		if respHeartbeat.Status.Terminated() {
+			blog.Info("resource: task(%s) work(%s) status %s,can stop heartbeat", taskId, m.work.ID(), respHeartbeat.Status)
+			return true
+		}
+	} else {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+		// if requestOK but return error(not encode error), we should release resource right now
+		if strings.Contains(err.Error(), api.ServerErrUpdateHeartbeatFailed.String()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
+	resp, requestOK, respErr := m.request("POST", m.serverHost, heartbeatURI, heartbeatData)
+	if !requestOK {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), respErr)
+		return
+	}
+	var respHeartbeat v2.RespHeartbeat
+	if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+		return
+	}
+
+	if m.heartBeatCanStop(taskId, &respHeartbeat, respErr) {
+		resourcechanged := false
+		m.reslock.Lock()
+		defer func() {
+			m.reslock.Unlock()
+			if resourcechanged {
+				m.onResChanged()
+			}
+		}()
+
+		for _, r := range m.resources {
+			if r.taskid == taskId {
+				blog.Info("resource: task(%s) work(%s) maybe in terminated status,  stop heartbeat right now", taskId, m.work.ID())
+				r.status = ResourceReleaseSucceed
+				resourcechanged = true
+				break
+			}
+		}
+	}
+}
+
 func (m *Mgr) heartbeat() {
 	blog.Infof("resource: run heartbeat tick for work: %s", m.work.ID())
 	ctx, _ := context.WithCancel(m.ctx)
@@ -718,13 +769,10 @@ func (m *Mgr) heartbeat() {
 			m.reslock.RLock()
 			for _, r := range m.resources {
 				if r.needHeartBeat() {
-					go func(data []byte) {
-						if _, _, err := m.request("POST", m.serverHost, heartbeatURI, data); err != nil {
-							blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", r.taskid, m.work.ID(), err)
-						}
-					}(r.heartbeatData())
+					go m.dealHeartBeat(r.taskid, r.heartbeatData())
 				}
 			}
+
 			m.reslock.RUnlock()
 		}
 	}
@@ -926,7 +974,8 @@ func (m *Mgr) addRes(info *v2.RespTaskInfo, status Status) error {
 		}
 	}
 
-	blog.Warnf("resource: add task:%s status(%s) work:%s but not found taskid in resources?", info.TaskID, status.String(), m.work.ID())
+	blog.Warnf("resource: add task:%s status(%s) work:%s but not found taskid in resources?",
+		info.TaskID, status.String(), m.work.ID())
 	m.resources = append(m.resources, &Res{
 		taskid:   info.TaskID,
 		status:   status,
