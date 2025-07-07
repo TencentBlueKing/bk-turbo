@@ -107,6 +107,7 @@ const (
 	KeyWorkerCacheMinSize   = "CACHE_MIN_SIZE"
 	KeyWorkerMemPerJob      = "MEM_PER_JOB_4_WORKER" // memory per job
 	KeyWorkerSupportAbsPath = "SUPPORT_ABS_PATH"     // whether support abs path
+	KeyWorkerWithRootEnv    = "WITH_ROOT_ENV"
 
 	KeyCustomSetting = "CUSTOM_SETTINGS"
 
