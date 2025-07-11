@@ -359,7 +359,7 @@ func (m *Mgr) ExecuteTask(
 	// TODO : check whether need more resource
 
 	for resMode == types.WaitResourceMode {
-		//blog.Debugf("local: execute task for work(%s) from pid(%d) still wait for resource", m.work.ID(), req.Pid)
+		blog.Debugf("local: execute task for work(%s) from pid(%d) still wait for resource", m.work.ID(), req.Pid)
 		resMode = f()
 		switch resMode {
 		case types.LocalResourceMode:

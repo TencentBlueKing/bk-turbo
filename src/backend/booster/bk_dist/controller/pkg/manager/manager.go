@@ -417,8 +417,10 @@ func (m *mgr) ExecuteLocalTask(
 	var resExecMode string
 	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() string {
 		resExecMode = m.selectResourceExecutionMode(work)
-		blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got mode %v",
-			workID, req.Pid, resExecMode)
+		if resExecMode != types.WaitResourceMode {
+			blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got mode %v",
+				workID, req.Pid, resExecMode)
+		}
 		return resExecMode
 	})
 	if resExecMode == types.LocalResourceMode {
