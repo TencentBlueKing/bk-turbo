@@ -274,7 +274,7 @@ func (m *Mgr) ExecuteTask(
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
 	canUseLocalIdleResource bool,
-	f types.CallbackCheckLocalResource) (*types.LocalTaskExecuteResult, error) {
+	f types.CallbackCheckResource) (*types.LocalTaskExecuteResult, error) {
 	blog.Infof("local: try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
 		strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
 
@@ -310,10 +310,11 @@ func (m *Mgr) ExecuteTask(
 			m.work.ID(), req.Pid)
 		return e.executeLocalTask(), nil
 	}
+	resMode := f()
 	// TODO : 本地空闲资源执行任务需要更多条件判断
 	// 该任务已确定用本地资源运行，则直接走本地执行
 	if canUseLocalIdleResource {
-		if e.canExecuteWithLocalIdleResource() && f() {
+		if e.canExecuteWithLocalIdleResource() && resMode == types.LocalResourceMode {
 			blog.Infof("local: execute task [%s] for work(%s) from pid(%d) degrade to local with local idle resource",
 				req.Commands[0], m.work.ID(), req.Pid)
 			return e.executeLocalTask(), nil
@@ -356,6 +357,21 @@ func (m *Mgr) ExecuteTask(
 	}
 
 	// TODO : check whether need more resource
+
+	for resMode == types.WaitResourceMode {
+		blog.Debugf("local: execute task for work(%s) from pid(%d) still wait for resource", m.work.ID(), req.Pid)
+		resMode = f()
+		switch resMode {
+		case types.LocalResourceMode:
+			blog.Infof("local: execute task for work(%s) from pid(%d) degrade to local", m.work.ID(), req.Pid)
+			return e.executeLocalTask(), nil
+		case types.RemoteResourceMode:
+			blog.Infof("local: execute task for work(%s) from pid(%d) try to execute with remote resource", m.work.ID(), req.Pid)
+			break
+		default:
+			time.Sleep(1 * time.Second)
+		}
+	}
 
 	// !! remember dec after finished remote execute !!
 	m.work.Basic().Info().IncPrepared()

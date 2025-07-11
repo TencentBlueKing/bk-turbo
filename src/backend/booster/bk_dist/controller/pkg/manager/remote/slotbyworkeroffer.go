@@ -215,6 +215,10 @@ func (wo *workerOffer) TotalSlots() int {
 	return wo.validWorkerNum
 }
 
+func (wo *workerOffer) WaitingListLen() int {
+	return wo.waitingList.Len()
+}
+
 func (wo *workerOffer) IsWorkerDisabled(host *dcProtocol.Host) bool {
 	if host == nil {
 		return true

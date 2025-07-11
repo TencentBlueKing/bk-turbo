@@ -29,6 +29,12 @@ import (
 	"github.com/emicklei/go-restful"
 )
 
+const (
+	LocalResourceMode  = "local"
+	RemoteResourceMode = "remote"
+	WaitResourceMode   = "wait"
+)
+
 // WorkRegisterConfig describe the config of registering work
 type WorkRegisterConfig struct {
 	BatchMode        bool           `json:"batch_mode"`
@@ -90,7 +96,7 @@ type CommonConfig struct {
 	Config    interface{}
 }
 
-// Equal check if the two key are point to one work config
+// KeyEqual check if the two key are point to one work config
 func (ccf *CommonConfig) KeyEqual(other *CommonConfig) bool {
 	if other != nil {
 		return (&ccf.WorkerKey).Equal(&other.WorkerKey) && ccf.Configkey == other.Configkey
@@ -206,6 +212,7 @@ type RemoteTaskExecuteRequest struct {
 	HttpConnCache *HttpConnCache
 }
 
+// NeedAllWorkerOnce check if need to run all worker once
 func (r *RemoteTaskExecuteRequest) NeedAllWorkerOnce() bool {
 	for _, v := range r.Attributes {
 		if v == AttributeAllWorkerOnce {
@@ -254,17 +261,20 @@ type httpConn struct {
 	ErrorStartTime time.Time
 }
 
+// HttpConnCache describe the http connection cache
 type HttpConnCache struct {
 	cache map[string]*httpConn
 	mutex sync.RWMutex
 }
 
+// NewHttpConnCache create a new http connection cache
 func NewHttpConnCache() *HttpConnCache {
 	return &HttpConnCache{
 		cache: make(map[string]*httpConn),
 	}
 }
 
+// InsertOnce insert a key into cache, if the key is already existed, return false
 func (c *HttpConnCache) InsertOnce(key string, delayCleanSecs int) bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -278,6 +288,7 @@ func (c *HttpConnCache) InsertOnce(key string, delayCleanSecs int) bool {
 	}
 }
 
+// IsConnStatusOk check the connection status of a key
 func (c *HttpConnCache) IsConnStatusOk(key string) bool {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
@@ -290,6 +301,7 @@ func (c *HttpConnCache) IsConnStatusOk(key string) bool {
 	return v.status == Connected
 }
 
+// OnConnStatusError set the connection status of a key to disconnected
 func (c *HttpConnCache) OnConnStatusError(key string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -305,6 +317,7 @@ func (c *HttpConnCache) OnConnStatusError(key string) {
 	}
 }
 
+// Check check the connection status of all keys in cache
 func (c *HttpConnCache) Check() {
 	// blog.Infof("types: httpconncache: start go routine to check http conn status")
 
@@ -356,6 +369,7 @@ type LocalTaskExecuteRequest struct {
 	HttpConnCache     *HttpConnCache
 }
 
+// NeedLocalExecute check if need execute locally
 func (r *LocalTaskExecuteRequest) NeedLocalExecute() bool {
 	for _, v := range r.Attributes {
 		if v == AttributeNoLocalExecute {
@@ -366,7 +380,7 @@ func (r *LocalTaskExecuteRequest) NeedLocalExecute() bool {
 	return true
 }
 
-// 这个正常只有一个协程调用，无需加锁
+// InitHttpConnStatus 这个正常只有一个协程调用，无需加锁
 func (r *LocalTaskExecuteRequest) InitHttpConnStatus(req *restful.Request,
 	cache *HttpConnCache,
 	s *websocket.Session,
@@ -429,6 +443,7 @@ func (r *LocalTaskExecuteRequest) InitHttpConnStatus(req *restful.Request,
 	}
 }
 
+// IsHttpConnStatusOk check the http connection status
 func IsHttpConnStatusOk(cache *HttpConnCache, key string) bool {
 	if cache == nil || key == "" {
 		return true
@@ -505,6 +520,7 @@ func (f FileSendStatus) String() string {
 	return "unknown"
 }
 
+// IsFinished check if the file send status is finished
 func (f FileSendStatus) IsFinished() bool {
 	return f == FileSendSucceed || f == FileSendFailed
 }
@@ -555,6 +571,8 @@ func (f *FileInfo) copy() *FileInfo {
 		SendStatus:     f.SendStatus,
 	}
 }
+
+// IsTerminated check if the file send status is terminated
 func (f *FileInfo) IsTerminated() bool {
 	switch f.SendStatus {
 	case FileSendSucceed, FileSendFailed:

@@ -524,6 +524,7 @@ func (m *Mgr) Init() {
 	}
 }
 
+// Start start resource slots for remote manager
 func (m *Mgr) Start() {
 	blog.Infof("remote: start for work:%s", m.work.ID())
 }
@@ -2381,6 +2382,11 @@ func (m *Mgr) unlockSlots(usage dcSDK.JobUsage, host *dcProtocol.Host) {
 // TotalSlots return available total slots
 func (m *Mgr) TotalSlots() int {
 	return m.resource.TotalSlots()
+}
+
+// WaitingListLen return waiting list length
+func (m *Mgr) WaitingListLen() int {
+	return m.resource.WaitingListLen()
 }
 
 func (m *Mgr) getRemoteFileBaseDir() string {

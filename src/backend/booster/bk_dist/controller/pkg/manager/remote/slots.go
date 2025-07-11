@@ -20,6 +20,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
+// RemoteSlotMgr defines the interface for slot manager
 type RemoteSlotMgr interface {
 	Handle(ctx context.Context)
 	Reset(hl []*dcProtocol.Host) ([]*dcProtocol.Host, error)
@@ -37,6 +38,7 @@ type RemoteSlotMgr interface {
 	CountWorkerError(w *worker)
 	IsWorkerDead(w *worker, netErrorLimit int) bool
 	WorkerDead(w *worker)
+	WaitingListLen() int
 }
 
 type lockWorkerMessage struct {
@@ -227,6 +229,10 @@ func (wr *resource) Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host) {
 
 func (wr *resource) TotalSlots() int {
 	return wr.totalSlots
+}
+
+func (wr *resource) WaitingListLen() int {
+	return wr.waitingList.Len()
 }
 
 func (wr *resource) IsWorkerDisabled(host *dcProtocol.Host) bool {
