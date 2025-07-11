@@ -50,6 +50,7 @@ const (
 	defaultClangPS5Compiler           = "prospero-clang.exe" // regard as clang
 	defaultClangCLCompiler            = "clang-cl.exe"       // regard as clang
 	defaultUbaAgent                   = "UbaAgent.exe"
+	defaultUbaAgentLinux              = "UbaAgent"
 	hookConfigPathDefault             = "bk_default_rules.json"
 	hookConfigPathCCCommon            = "bk_cl_rules.json"
 )
@@ -289,7 +290,7 @@ func (u *UE4) initInnerHandle(command []string) {
 					blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
 				}
 			}
-		case defaultUbaAgent:
+		case defaultUbaAgent, defaultUbaAgentLinux:
 			{
 				u.innerhandler = ubaagent.NewUbaAgent()
 				blog.Debugf("ue4: innerhandle with ubaagent for command[%s]", command[0])
