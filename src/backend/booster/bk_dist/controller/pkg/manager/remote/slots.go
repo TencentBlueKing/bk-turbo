@@ -100,7 +100,8 @@ func newResource(hl []*dcProtocol.Host) *resource {
 		emptyChan:     make(chan bool, 1000),
 		worker:        wl,
 
-		waitingList: list.New(),
+		waitingList:    list.New(),
+		waitingListLen: 0,
 	}
 }
 
@@ -124,7 +125,8 @@ type resource struct {
 	handling bool
 
 	// to save waiting requests
-	waitingList *list.List
+	waitingList    *list.List
+	waitingListLen int
 }
 
 // reset with []*dcProtocol.Host
@@ -232,7 +234,7 @@ func (wr *resource) TotalSlots() int {
 }
 
 func (wr *resource) WaitingListLen() int {
-	return wr.waitingList.Len()
+	return wr.waitingListLen
 }
 
 func (wr *resource) IsWorkerDisabled(host *dcProtocol.Host) bool {
@@ -700,6 +702,16 @@ func (wr *resource) isIdle(set *usageWorkerSet) bool {
 	return false
 }
 
+func (wr *resource) pushWaitList(msg *lockWorkerMessage) {
+	wr.waitingList.PushBack(msg)
+	wr.waitingListLen++
+}
+
+func (wr *resource) popWaitList(e *list.Element) {
+	wr.waitingList.Remove(e)
+	wr.waitingListLen--
+}
+
 func (wr *resource) getSlot(msg lockWorkerMessage) {
 	if wr.totalSlots <= 0 {
 		msg.result <- nil
@@ -727,7 +739,7 @@ func (wr *resource) getSlot(msg lockWorkerMessage) {
 			wr.totalSlots, wr.occupiedSlots)
 		// wr.waitingList.PushBack(usage)
 		// wr.waitingList.PushBack(msg.result)
-		wr.waitingList.PushBack(&msg)
+		wr.pushWaitList(&msg)
 	}
 }
 
@@ -750,12 +762,14 @@ func (wr *resource) putSlot(msg lockWorkerMessage) {
 					set.occupied++
 					wr.occupiedSlots++
 					msg.result <- h
-					wr.waitingList.Remove(e)
+					wr.popWaitList(e)
+
 					break
 				} else if !hasAvailableWorker {
 					msg.result <- nil
-					wr.waitingList.Remove(e)
-					blog.Infof("remote slot: occupy waiting list, but no slot available for ban worker list %v, just turn it local", msg.banWorkerList)
+					wr.popWaitList(e)
+					blog.Infof("remote slot: occupy waiting list, but no slot available for ban worker list %v, just turn it local",
+						msg.banWorkerList)
 				} else {
 					blog.Debugf("remote slot: occupy waiting list, but no slot available %v", msg.banWorkerList)
 				}
@@ -765,13 +779,14 @@ func (wr *resource) putSlot(msg lockWorkerMessage) {
 }
 
 func (wr *resource) onSlotEmpty() {
-	blog.Infof("remote slot: on slot empty: occupy:%d,total:%d,waiting:%d", wr.occupiedSlots, wr.totalSlots, wr.waitingList.Len())
+	blog.Infof("remote slot: on slot empty: occupy:%d,total:%d,waiting:%d",
+		wr.occupiedSlots, wr.totalSlots, wr.waitingList.Len())
 
 	for wr.waitingList.Len() > 0 {
 		e := wr.waitingList.Front()
 		msg := e.Value.(*lockWorkerMessage)
 		msg.result <- nil
-		wr.waitingList.Remove(e)
+		wr.popWaitList(e)
 	}
 }
 
@@ -786,12 +801,13 @@ func (wr *resource) occupyWaitList() {
 					set.occupied++
 					wr.occupiedSlots++
 					msg.result <- h
-					wr.waitingList.Remove(e)
+					wr.popWaitList(e)
 					blog.Debugf("remote slot: occupy waiting list")
 				} else if !hasAvailableWorker { // no slot available for ban worker list, turn it local
-					blog.Infof("remote slot: occupy waiting list, but no slot available for ban worker list %v, just turn it local", msg.banWorkerList)
+					blog.Infof("remote slot: occupy waiting list, but no slot available for ban worker list %v, just turn it local",
+						msg.banWorkerList)
 					msg.result <- nil
-					wr.waitingList.Remove(e)
+					wr.popWaitList(e)
 				} else {
 					blog.Debugf("remote slot: occupy waiting list, but no slot available %v", msg.banWorkerList)
 				}

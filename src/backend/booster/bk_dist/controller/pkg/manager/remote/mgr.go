@@ -2385,6 +2385,7 @@ func (m *Mgr) TotalSlots() int {
 }
 
 // WaitingListLen return waiting list length
+// TODO: 此处取waitingListLen存在并发读写问题，后续如需要可优化
 func (m *Mgr) WaitingListLen() int {
 	return m.resource.WaitingListLen()
 }
