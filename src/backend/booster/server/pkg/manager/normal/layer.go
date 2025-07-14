@@ -61,7 +61,7 @@ type TaskBasicLayer interface {
 	UpdateTaskBasic(tb *engine.TaskBasic, rawWhere []string, delaySaveDB bool) error
 
 	// update heartbeat to task basic
-	UpdateHeartbeat(taskID string) error
+	UpdateHeartbeat(taskID string) (engine.TaskStatusType, error)
 
 	// get current unterminated task number of the specific projectID
 	GetConcurrency(projectID string) int
@@ -273,7 +273,7 @@ func (tc *taskBasicLayer) UpdateTaskBasic(tb *engine.TaskBasic, rawWhere []strin
 }
 
 // UpdateHeartbeat update a new heartbeat to a task basic with given taskID.
-func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) error {
+func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) (engine.TaskStatusType, error) {
 	return tc.updateHeartbeat(taskID)
 }
 
@@ -344,7 +344,7 @@ func (tc *taskBasicLayer) updateTaskBasic(tbRaw *engine.TaskBasic, rawWhere []st
 	return nil
 }
 
-func (tc *taskBasicLayer) updateHeartbeat(taskID string) error {
+func (tc *taskBasicLayer) updateHeartbeat(taskID string) (engine.TaskStatusType, error) {
 	blog.Infof("layer: ready update heart beat for task(%s)", taskID)
 
 	tc.tbmLock.Lock()
@@ -353,11 +353,11 @@ func (tc *taskBasicLayer) updateHeartbeat(taskID string) error {
 	tb, ok := tc.tbm[taskID]
 	if !ok {
 		blog.Infof("layer: task(%s) not in layer when update heart beat", taskID)
-		return engine.ErrorUnterminatedTaskNoFound
+		return "", engine.ErrorUnterminatedTaskNoFound
 	}
 
 	tb.Status.Beats()
-	return nil
+	return tb.Status.Status, nil
 }
 
 // InsertTB create a new record of init task in cache, do not need to create in queue

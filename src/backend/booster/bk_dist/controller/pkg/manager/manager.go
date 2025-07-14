@@ -414,14 +414,16 @@ func (m *mgr) ExecuteLocalTask(
 	// if withlocalresource {
 	// 	defer m.decLocalResourceTask()
 	// }
-	var withlocalresource bool
-	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() bool {
-		withlocalresource = m.checkRunWithLocalResource(work)
-		blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got %v",
-			workID, req.Pid, withlocalresource)
-		return withlocalresource
+	var resExecMode string
+	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() string {
+		resExecMode = m.selectResourceExecutionMode(work)
+		if resExecMode != types.WaitResourceMode {
+			blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got mode %v",
+				workID, req.Pid, resExecMode)
+		}
+		return resExecMode
 	})
-	if withlocalresource {
+	if resExecMode == types.LocalResourceMode {
 		m.decLocalResourceTask()
 	}
 	if err != nil {
@@ -837,6 +839,20 @@ func (m *mgr) canUseLocalIdleResource() bool {
 	return m.conf.UseLocalCPUPercent > 0 && m.conf.UseLocalCPUPercent <= 100
 }
 
+func (m *mgr) selectResourceExecutionMode(work *types.Work) string {
+	if m.checkRunWithLocalResource(work) {
+		return types.LocalResourceMode
+	}
+	//TODO: 此处取waitingList长度未加锁，因此存在并发读问题，后续如需要可优化
+	// 检查远程资源等待队列是否过长
+	if work.Remote().WaitingListLen() > work.Remote().TotalSlots()/10 {
+		blog.Debugf("mgr: remote resource waiting list len %d is too long, wait resource for work:%s",
+			work.Remote().WaitingListLen(), work.ID())
+		return types.WaitResourceMode
+	}
+	return types.RemoteResourceMode
+}
+
 func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	if m.conf.UseLocalCPUPercent <= 0 || m.conf.UseLocalCPUPercent > 100 {
 		return false
@@ -849,6 +865,11 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	maxidlenum := runtime.NumCPU() - 2
 	allowidlenum := maxidlenum * m.conf.UseLocalCPUPercent / 100
 	runninglocalresourcetask := atomic.LoadInt32(&m.localResourceTaskNum)
+	if m.conf.LocalSlots-2 < allowidlenum {
+		blog.Infof("mgr localresource check: local slots(%d) less than allow cpu num(%d) for work: %s",
+			m.conf.LocalSlots-2, allowidlenum, work.Basic().Info().WorkID())
+		allowidlenum = m.conf.LocalSlots - 2
+	}
 	if runninglocalresourcetask >= int32(allowidlenum) {
 		blog.Infof("mgr localresource check: running local resource task: %d,"+
 			"max allow idle num:%d for work: %s",
@@ -862,11 +883,13 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	blog.Infof("mgr localresource check: prepared task: %d,total remote slots:%d for work: %s",
 		prepared, remotetotal, work.Basic().Info().WorkID())
 
-	// check prepared task, if remote enough and not prefer local, not allow execute with local resource
-	if prepared < int32(remotetotal) && !m.conf.PreferLocal {
-		blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
-			work.Basic().Info().WorkID())
-		return false
+	// if not set prefer local , check prepared task to use remote resource first
+	if !m.conf.PreferLocal {
+		if prepared < int32(remotetotal) { //check prepared task, if remote enough, not allow execute with local resource
+			blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
+				work.Basic().Info().WorkID())
+			return false
+		}
 	}
 
 	// check local idle cpu

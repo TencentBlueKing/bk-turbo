@@ -524,6 +524,7 @@ func (m *Mgr) Init() {
 	}
 }
 
+// Start start resource slots for remote manager
 func (m *Mgr) Start() {
 	blog.Infof("remote: start for work:%s", m.work.ID())
 }
@@ -2383,6 +2384,12 @@ func (m *Mgr) TotalSlots() int {
 	return m.resource.TotalSlots()
 }
 
+// WaitingListLen return waiting list length
+// TODO: 此处取waitingListLen存在并发读写问题，后续如需要可优化
+func (m *Mgr) WaitingListLen() int {
+	return m.resource.WaitingListLen()
+}
+
 func (m *Mgr) getRemoteFileBaseDir() string {
 	return fmt.Sprintf("common_%s", m.work.ID())
 }
@@ -2632,7 +2639,7 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 
 func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 	for i, c := range req.Req.Commands {
-		if c.ExeToolChainKey != "" && !strings.HasSuffix(c.ExeToolChainKey, types.UbaAgent) {
+		if c.ExeToolChainKey != "" && !strings.Contains(c.ExeToolChainKey, types.UbaAgent) {
 			remotepath := ""
 			var err error
 			if !m.work.Resource().SupportAbsPath() {

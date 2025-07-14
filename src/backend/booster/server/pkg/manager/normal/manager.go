@@ -239,18 +239,19 @@ func (m *manager) GetTask(taskID string) (*engine.TaskBasic, engine.TaskExtensio
 }
 
 // UpdateHeartbeat update the task heartbeat.
-func (m *manager) UpdateHeartbeat(taskID string) error {
+func (m *manager) UpdateHeartbeat(taskID string) (engine.TaskStatusType, error) {
 	if !m.running {
 		blog.Errorf("manager: update heartbeat failed: manager is not running")
-		return types.ErrorManagerNotRunning
+		return "", types.ErrorManagerNotRunning
 	}
 
-	if err := m.layer.UpdateHeartbeat(taskID); err != nil {
+	status, err := m.layer.UpdateHeartbeat(taskID)
+	if err != nil {
 		blog.Warnf("manager: try updating heartbeat, get task basic(%s) failed: %v", taskID, err)
-		return err
+		return "", err
 	}
 
-	return nil
+	return status, nil
 }
 
 func (m *manager) start() {

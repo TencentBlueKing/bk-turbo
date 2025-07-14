@@ -85,8 +85,9 @@ func newWorkerOfferResource(hl []*dcProtocol.Host) *workerOffer {
 		worker:         wl,
 		validWorkerNum: len(hl),
 
-		waitingList: list.New(),
-		slotQueried: false,
+		waitingList:    list.New(),
+		waitingListLen: 0,
+		slotQueried:    false,
 
 		lastGetSlotTime:   time.Now(),
 		localJosBatchSize: runtime.NumCPU() - 2,
@@ -110,7 +111,8 @@ type workerOffer struct {
 	handling bool
 
 	// to save waiting requests
-	waitingList *list.List
+	waitingList    *list.List
+	waitingListLen int
 
 	// 用于接收worker提供的slot offer
 	slotChan chan *dcSDK.BKQuerySlotResult
@@ -213,6 +215,10 @@ func (wo *workerOffer) Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host) {}
 
 func (wo *workerOffer) TotalSlots() int {
 	return wo.validWorkerNum
+}
+
+func (wo *workerOffer) WaitingListLen() int {
+	return wo.waitingListLen
 }
 
 func (wo *workerOffer) IsWorkerDisabled(host *dcProtocol.Host) bool {
@@ -533,13 +539,23 @@ func (wo *workerOffer) handle(ctx context.Context) {
 	}
 }
 
+func (wo *workerOffer) pushWaitList(msg *lockWorkerMessage) {
+	wo.waitingList.PushBack(msg)
+	wo.waitingListLen++
+}
+
+func (wo *workerOffer) popWaitList(e *list.Element) {
+	wo.waitingList.Remove(e)
+	wo.waitingListLen--
+}
+
 func (wo *workerOffer) getSlot(msg lockWorkerMessage) {
 	if wo.validWorkerNum <= 0 {
 		msg.result <- nil
 		return
 	}
 
-	wo.waitingList.PushBack(&msg)
+	wo.pushWaitList(&msg)
 
 	// 第一次发现没有slot
 	if !wo.slotQueried {
@@ -556,7 +572,7 @@ func (wo *workerOffer) onSlotEmpty() {
 		e := wo.waitingList.Front()
 		msg := e.Value.(*lockWorkerMessage)
 		msg.result <- nil
-		wo.waitingList.Remove(e)
+		wo.popWaitList(e)
 	}
 }
 
@@ -643,7 +659,7 @@ func (wo *workerOffer) consumeSlot(r *remoteSlotOffer) (int, error) {
 
 			msg := e.Value.(*lockWorkerMessage)
 			msg.result <- r.Host
-			wo.waitingList.Remove(e)
+			wo.popWaitList(e)
 			consumed += 1
 
 			e = next
@@ -829,7 +845,7 @@ func (wo *workerOffer) jobCheck() error {
 		msg := e.Value.(*lockWorkerMessage)
 		if msg.startWait.Add(MaxJosIdleIntervalTime).Before(time.Now()) {
 			msg.result <- nil
-			wo.waitingList.Remove(e)
+			wo.popWaitList(e)
 
 			toLocalNum += 1
 			if toLocalNum >= wo.localJosBatchSize {
