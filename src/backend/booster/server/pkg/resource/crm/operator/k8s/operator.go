@@ -13,9 +13,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -110,10 +111,11 @@ const (
 
 // NewOperator get a new operator.
 // TODO: For now, k8s operator do not support to deploy multi instances in one node(all pods with some host port).
-//  So the request_cpu must big enough to occupy whole resource in one node. This should be solved later, and handle
-//  the ports managements.
+//
+//	So the request_cpu must big enough to occupy whole resource in one node. This should be solved later, and handle
+//	the ports managements.
 func NewOperator(conf *config.ContainerResourceConfig) (op.Operator, error) {
-	data, err := ioutil.ReadFile(conf.BcsAppTemplate)
+	data, err := os.ReadFile(conf.BcsAppTemplate)
 	if err != nil {
 		blog.Errorf("get new operator, read template file failed: %v", err)
 		return nil, err
@@ -153,9 +155,12 @@ type clusterClientSet struct {
 
 // GetResource get specific cluster's resources.
 func (o *operator) GetResource(clusterID string) ([]*op.NodeInfo, error) {
+	// BCS 联邦集群
 	if o.conf.BcsClusterType == FederationCluster {
 		return o.getFederationResource(clusterID)
 	}
+
+	// BCS or 原生集群
 	return o.getResource(clusterID)
 }
 
@@ -229,21 +234,45 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 		dl, _ := node.Labels[disableLabel]
 		disabled := dl == "true"
 
+		memTotal := float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024
+		cpuTotal := float64(node.Status.Capacity.Cpu().Value())
+		memUsed := float64(allocatedResource.Memory().Value()) / 1024 / 1024
+		cpuUsed := float64(allocatedResource.Cpu().Value())
+		diskUsed := float64(allocatedResource.StorageEphemeral().Value())
+		diskTotal := float64(node.Status.Capacity.StorageEphemeral().Value())
+		for _, ist := range o.conf.InstanceType {
+			if ist.Group == node.Labels[o.cityLabelKey] && ist.Platform == node.Labels[o.platformLabelKey] {
+				if ist.CPUPerInstanceOffset > 0.0 || ist.MemPerInstanceOffset > 0.0 {
+					//通过offset计算实际可用的instance数量，并矫正cpu和内存总量
+					n := op.NodeInfo{
+						MemTotal:  memTotal,
+						CPUTotal:  cpuTotal,
+						MemUsed:   memUsed,
+						CPUUsed:   cpuUsed,
+						DiskTotal: diskTotal,
+						DiskUsed:  diskUsed,
+					}
+					availableNum := n.FigureAvailableInstanceFromFree(ist.CPUPerInstance-ist.CPUPerInstanceOffset, ist.MemPerInstance-ist.MemPerInstanceOffset, 1)
+					cpuTotal = cpuUsed + float64(availableNum)*ist.CPUPerInstance
+					memTotal = memUsed + float64(availableNum)*ist.MemPerInstance
+				}
+				break
+			}
+		}
 		// use city-label-key value and platform-label-key to overwrite the city and platform
 		node.Labels[op.AttributeKeyCity], _ = node.Labels[o.cityLabelKey]
 		node.Labels[op.AttributeKeyPlatform], _ = node.Labels[o.platformLabelKey]
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:         ip,
 			Hostname:   node.Name,
-			DiskTotal:  float64(node.Status.Capacity.StorageEphemeral().Value()),
-			MemTotal:   float64(node.Status.Capacity.Memory().Value()) / 1024 / 1024,
-			CPUTotal:   float64(node.Status.Capacity.Cpu().Value()),
-			DiskUsed:   float64(allocatedResource.StorageEphemeral().Value()),
-			MemUsed:    float64(allocatedResource.Memory().Value()) / 1024 / 1024,
-			CPUUsed:    float64(allocatedResource.Cpu().Value()),
+			DiskTotal:  diskTotal,
+			MemTotal:   memTotal,
+			CPUTotal:   cpuTotal,
+			DiskUsed:   diskUsed,
+			MemUsed:    memUsed,
+			CPUUsed:    cpuUsed,
 			Attributes: node.Labels,
-
-			Disabled: disabled,
+			Disabled:   disabled,
 		})
 	}
 
@@ -303,7 +332,7 @@ func (o *operator) request(method, uri string, requestHeader http.Header, data [
 	return
 }
 
-//FederationResourceParam define
+// FederationResourceParam define
 type FederationResourceParam struct {
 	Resources     ResRequests       `json:"resources"`
 	ClusterID     string            `json:"clusterID"` //子集群ID，非联邦集群ID
@@ -311,23 +340,23 @@ type FederationResourceParam struct {
 	NodeSelector  map[string]string `json:"nodeSelector"`
 }
 
-//ResRequests define
+// ResRequests define
 type ResRequests struct {
 	Requests ResRequest `json:"requests"`
 }
 
-//ResRequest define
+// ResRequest define
 type ResRequest struct {
 	CPU    string `json:"cpu"`
 	Memory string `json:"memory"`
 }
 
-//FederationData define
+// FederationData define
 type FederationData struct {
 	Total int `json:"total"`
 }
 
-//FederationResult define
+// FederationResult define
 type FederationResult struct {
 	Code int            `json:"code"`
 	Msg  string         `json:"msg"`
@@ -379,6 +408,26 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*
 	return result, nil
 }
 
+func (o *operator) getPodList(clusterID string) (*coreV1.PodList, error) {
+	blog.Debugf("k8s-operator: begin to get federation podlist %s, %s", clusterID, o.conf.BcsNamespace)
+
+	if o.conf.BcsNamespace == "" {
+		return nil, fmt.Errorf("k8s-operator: get podlist failed clusterID(%s): namespace is nil", clusterID)
+	}
+	client, err := o.getClientSet(clusterID)
+	if err != nil {
+		blog.Errorf("k8s-operator: try to get podlist clusterID(%s) namespace(%s)"+
+			"and get client set failed: %v", clusterID, o.conf.BcsNamespace, err)
+		return nil, err
+	}
+	podList, err := client.clientSet.CoreV1().Pods(o.conf.BcsNamespace).List(context.TODO(), metaV1.ListOptions{})
+	if err != nil {
+		blog.Errorf("k8s-operator: get pod list from k8s failed clusterID(%s): %v", clusterID, err)
+		return nil, err
+	}
+	return podList, nil
+}
+
 func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, error) {
 	blog.Debugf("k8s-operator: begin to get federation resource %s, %s", clusterID, o.conf.BcsNamespace)
 	nodeInfoList := make([]*op.NodeInfo, 0, 1000)
@@ -386,6 +435,11 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 		return nil, fmt.Errorf("crm: get federation resource request failed clusterID(%s): namespace is nil", clusterID)
 	}
 	url := fmt.Sprintf(bcsAPIFederatedURI, o.conf.BcsAPIPool.GetAddress(), clusterID, o.conf.BcsNamespace)
+	podList, err := o.getPodList(clusterID)
+	if err != nil {
+		return nodeInfoList, fmt.Errorf("crm: get federation resource request failed clusterID(%s): %s", clusterID, err)
+	}
+
 	for _, ist := range o.conf.InstanceType {
 		result, err := o.getFederationTotalNum(url, ist)
 		if err != nil { //接口请求失败，直接返回错误
@@ -404,12 +458,37 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			return nodeInfoList, err
 		}
 		totalIst := float64(result.Data.Total)
+		resourceUsed := make(coreV1.ResourceList)
+		for _, pod := range podList.Items {
+			if pod.Status.Phase == coreV1.PodSucceeded || pod.Status.Phase == coreV1.PodFailed {
+				continue
+			}
+			if pod.Spec.NodeSelector != nil {
+				if pod.Spec.NodeSelector[o.platformLabelKey] != ist.Platform ||
+					pod.Spec.NodeSelector[o.cityLabelKey] != ist.Group {
+					continue
+				}
+			}
+			for podName, podLimitValue := range podLimits(&pod) {
+				if value, ok := resourceUsed[podName]; !ok {
+					resourceUsed[podName] = podLimitValue.DeepCopy()
+				} else {
+					value.Add(podLimitValue)
+					resourceUsed[podName] = value
+				}
+			}
+		}
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			DiskLeft: totalIst,
-			MemLeft:  totalIst * ist.MemPerInstance,
-			CPULeft:  totalIst * ist.CPUPerInstance,
+			//CPULeft:  totalIst * ist.CPUPerInstance,
+			//MemLeft:  totalIst * ist.MemPerInstance,
+			MemUsed:  float64(resourceUsed.Memory().Value()) / 1024 / 1024,
+			CPUUsed:  float64(resourceUsed.Cpu().Value()),
+			DiskUsed: float64(resourceUsed.StorageEphemeral().Value()),
+			CPUTotal: float64(resourceUsed.Cpu().Value()) + totalIst*ist.CPUPerInstance,
+			MemTotal: float64(resourceUsed.Memory().Value())/1024/1024 + totalIst*ist.MemPerInstance,
 			Attributes: map[string]string{
 				op.AttributeKeyPlatform: ist.Platform,
 				op.AttributeKeyCity:     ist.Group,
@@ -476,23 +555,32 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 	podList, err := client.clientSet.CoreV1().Pods(namespace).List(context.TODO(), metaV1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", appLabel, name),
 	})
-
+	if err != nil {
+		blog.Errorf("k8s-operator: try to get podList clusterID(%s) namespace(%s) name(%s) failed: %v", clusterID, namespace, name, err)
+	}
 	availableEndpoint := make([]*op.Endpoint, 0, 100)
 	for _, pod := range podList.Items {
 		if pod.Status.Phase != coreV1.PodRunning {
+			if info.Status != op.ServiceStatusStaging && pod.Status.Phase != coreV1.PodPending {
+				blog.Warnf("k8s-operator: pod(%s) of %s in wrong status(%s)", pod.Name, name, pod.Status.Phase)
+			}
 			if (info.Status != op.ServiceStatusStaging) && (pod.Status.Phase == coreV1.PodPending) {
-				blog.Warnf("k8s-operator: there is still a pod(%s) in status(%s), "+
-					"server status will be set to staging by force", pod.Name, pod.Status.Phase)
+				blog.Warnf("k8s-operator: there is still a pod(%s) of %s in status(%s), "+
+					"server status will be set to staging by force", pod.Name, name, pod.Status.Phase)
 				info.Status = op.ServiceStatusStaging
 			}
 			continue
 		}
 
 		if len(pod.Status.ContainerStatuses) <= 0 || len(pod.Spec.Containers) <= 0 {
+			blog.Warnf("k8s-operator: found exception pod of %s:[%+v]", name, pod)
 			continue
 		}
 
 		ports := make(map[string]int)
+		if len(pod.Spec.Containers[0].Ports) == 0 {
+			blog.Warnf("k8s-operator: found empty port info in pod %s of %s:[%+v]", pod.Name, name, pod)
+		}
 		for _, port := range pod.Spec.Containers[0].Ports {
 			ports[k8sPort2EnginePort(port.Name)] = int(port.HostPort)
 		}
@@ -500,11 +588,12 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 		availableEndpoint = append(availableEndpoint, &op.Endpoint{
 			IP:    pod.Status.HostIP,
 			Ports: ports,
+			Name:  pod.Name,
 		})
 	}
-
 	// if taskgroup are not all built, just means that the application is staging yet.
-	if (info.RequestInstances < len(podList.Items)) && info.Status != op.ServiceStatusStaging {
+	if (info.RequestInstances > len(podList.Items)) && info.Status != op.ServiceStatusStaging {
+		blog.Warnf("k8s-operator: found RequestInstances(%d) greater than pods num(%d) of %s in status %s", info.RequestInstances, len(podList.Items), name, info.Status)
 		info.Status = op.ServiceStatusStaging
 	}
 
@@ -742,6 +831,47 @@ func (o *operator) getClientSetFromCache(clusterID string) (*clusterClientSet, b
 }
 
 func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
+	// 通过 crm_kubeconfig_path 配置原生 k8s 集群
+	if o.conf.KubeConfigPath != "" {
+		return o.generateNativeClient(clusterID, o.conf.KubeConfigPath)
+	}
+
+	return o.generateBCSClient(clusterID)
+}
+
+// generateNativeClient native cluster
+func (o *operator) generateNativeClient(clusterID, kubeconfigPath string) (*clusterClientSet, error) {
+	c, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		blog.Errorf("k8s-operator: get client set(%s), create new native client set, build config failed: %v", clusterID, err)
+		return nil, err
+	}
+
+	// kubeConfig 配置优化, TLS certificate 等需要在 kubeconfig 配置
+	c.QPS = 1e6
+	c.Burst = 1e6
+
+	clientSet, err := kubernetes.NewForConfig(c)
+	if err != nil {
+		blog.Errorf("k8s-operator: get client set(%s), create new native client set failed: %v", clusterID, err)
+		return nil, err
+	}
+
+	cs := &clusterClientSet{
+		clientSet:   clientSet,
+		timeoutTime: time.Now().Local().Add(1 * time.Minute),
+	}
+	o.cacheLock.Lock()
+	o.clusterClientCache[clusterID] = cs
+	o.cacheLock.Unlock()
+
+	blog.Infof("k8s-operator: get client set, create new native client set for cluster(%s), config host: %s", clusterID, c.Host)
+
+	return cs, nil
+}
+
+// generateBCSClient bcs 客户端
+func (o *operator) generateBCSClient(clusterID string) (*clusterClientSet, error) {
 	address := o.conf.BcsAPIPool.GetAddress()
 	var host string
 	if o.conf.EnableBCSApiGw {
@@ -750,7 +880,7 @@ func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
 		host = fmt.Sprintf(bcsAPIK8SBaseURI, address, clusterID)
 	}
 
-	blog.Infof("k8s-operator: try generate client with host(%s) token(%s)", host, o.conf.BcsAPIToken)
+	blog.Infof("k8s-operator: try generate bcs client with host(%s) token(%s)", host, o.conf.BcsAPIToken)
 	// get client set by real api-server address
 	c := &rest.Config{
 		Host:        host,
@@ -768,11 +898,11 @@ func (o *operator) generateClient(clusterID string) (*clusterClientSet, error) {
 		},
 	}
 
-	blog.Infof("k8s-operator: get client set, create new client set for cluster(%s), config: %v",
+	blog.Infof("k8s-operator: get client set, create new bcs client set for cluster(%s), config: %v",
 		clusterID, c)
 	clientSet, err := kubernetes.NewForConfig(c)
 	if err != nil {
-		blog.Errorf("k8s-operator: get client set(%s), create new client set failed: %v", clusterID, err)
+		blog.Errorf("k8s-operator: get client set(%s), create new bcs client set failed: %v", clusterID, err)
 		return nil, err
 	}
 
@@ -903,6 +1033,19 @@ func podRequests(pod *coreV1.Pod) coreV1.ResourceList {
 	}
 
 	return requests
+}
+
+func podLimits(pod *coreV1.Pod) coreV1.ResourceList {
+	limits := coreV1.ResourceList{}
+	for _, container := range pod.Spec.Containers {
+		addResourceList(limits, container.Resources.Limits)
+	}
+	// init containers define the minimum of any resource
+	for _, container := range pod.Spec.InitContainers {
+		maxResourceList(limits, container.Resources.Limits)
+	}
+
+	return limits
 }
 
 // addResourceList adds the resources in newList to list

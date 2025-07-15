@@ -147,15 +147,31 @@ func (t *tracker) track(taskID string, egn engine.Engine) {
 }
 
 func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
-	t.layer.LockTask(taskID)
+	t.layer.LockTask(taskID, "isFinishStarting_of_tracker")
 	defer t.layer.UnLockTask(taskID)
 
+	var tGetTaskBasicStart, tGetTaskBasicEnd int64
+	var tLaunchDoneStart, tLaunchDoneEnd int64
+	var tGetTaskExtensionStart, tGetTaskExtensionEnd int64
+	defer func() {
+		d1 := tGetTaskBasicEnd - tGetTaskBasicStart
+		d2 := tLaunchDoneEnd - tLaunchDoneStart
+		d3 := tGetTaskExtensionEnd - tGetTaskExtensionStart
+		if d1 > 2 || d2 > 2 || d3 > 2 {
+			blog.Infof("tracker: task(%s) too long spent %d seconds to GetTaskBasic,%d to LaunchDone,%d to GetTaskExtension",
+				taskID, d1, d2, d3)
+		}
+	}()
+
 	blog.V(5).Infof("tracker: try to check if task(%s) is finish starting", taskID)
+
+	tGetTaskBasicStart = time.Now().Unix()
 	tb, err := t.layer.GetTaskBasic(taskID)
 	if err == engine.ErrorUnterminatedTaskNoFound {
 		blog.Infof("tracker: task(%s) is not in terminated status, just finish starting", taskID)
 		return true
 	}
+	tGetTaskBasicEnd = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("tracker: try checking if task finish starting, get task(%s) failed: %v", taskID, err)
 		return false
@@ -167,11 +183,13 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 		return true
 	}
 
+	tLaunchDoneStart = time.Now().Unix()
 	ok, err := egn.LaunchDone(taskID)
 	if err != nil {
-		blog.Errorf("tracker: check task(%s) launch done failed: %v", taskID, err)
+		blog.Infof("tracker: check task(%s) launch done failed: %v", taskID, err)
 		return false
 	}
+	tLaunchDoneEnd = time.Now().Unix()
 
 	// task still under launching
 	if !ok {
@@ -179,18 +197,20 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 		return false
 	}
 
+	tGetTaskExtensionStart = time.Now().Unix()
 	task, err := egn.GetTaskExtension(taskID)
 	if err != nil {
 		blog.Error("tracker: get task extension(%s) from engine(%s) failed: %v", taskID, egn.Name(), err)
 		return false
 	}
+	tGetTaskExtensionEnd = time.Now().Unix()
 
 	// if task is done but available resource is less than expect, make task failed
 	if !task.EnoughAvailableResource() {
 		blog.Warnf("tracker: check task(%s) launch is done but no enough resource", taskID)
 		tb.Status.FailWithServerDown()
 		tb.Status.Message = messageNoEnoughAvailableWorkers
-		if err = t.layer.UpdateTaskBasic(tb); err != nil {
+		if err = t.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 			blog.Errorf("tracker: update basic task failed: %v", err)
 			return false
 		}
@@ -208,7 +228,7 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 
 	tb.Status.Message = messageTaskRunning
 	blog.Infof("tracker: task(%s) is ready at start_time(%s)", taskID, tb.Status.StartTime.String())
-	if err = t.layer.UpdateTaskBasic(tb); err != nil {
+	if err = t.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("tracker: set task(%s) running and update basic task failed: %v", taskID, err)
 		return false
 	}

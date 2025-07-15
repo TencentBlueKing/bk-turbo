@@ -29,4 +29,9 @@ interface TurboPlanRepository : MongoRepository<TTurboPlanEntity, String> {
      * 根据项目id和编译加速方案名称和id判断是否存在
      */
     fun existsByProjectIdAndPlanNameAndIdNot(projectId: String, planName: String, planId: String): Boolean
+
+    /**
+     * 根据方案id集合批量查询
+     */
+    fun findByIdIn(planIdSet: List<String?>): List<TTurboPlanEntity>
 }

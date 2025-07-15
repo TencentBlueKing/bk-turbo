@@ -23,85 +23,101 @@ import (
 
 // define const vars
 const (
-	FlagProjectID            = "project_id"
-	FlagBuildID              = "build_id"
-	FlagArgs                 = "args"
-	FlagGccVersion           = "gcc_version"
-	FlagBazel                = "bazel"
-	FlagBazelPlus            = "bazel_plus"
-	FlagBazel4Plus           = "bazel4_plus"
-	FlagLauncher             = "launcher"
-	FlagLog                  = "log"
-	FlagLogDir               = "log_dir"
-	FlagLogToConsole         = "log_to_console"
-	FlagExecutorLog          = "executor_log"
-	FlagTest                 = "test"
-	FlagCommandPath          = "command_path"
-	FlagLimit                = "limit"
-	FlagNoLocal              = "no_local"
-	FlagLocal                = "local"
-	FlagDegraded             = "degraded"
-	FlagSaveCode             = "save_code"
-	FlagJobs                 = "jobs"
-	FlagMaxJobs              = "max_jobs"
-	FlagPresetJobs           = "preset_jobs"
-	FlagMaxDegradedJobs      = "max_degraded_jobs"
-	FlagMaxLocalTotalJobs    = "max_local_total_jobs"
-	FlagMaxLocalExeJobs      = "max_local_exe_jobs"
-	FlagMaxLocalPreJobs      = "max_local_pre_jobs"
-	FlagMaxLocalPostJobs     = "max_local_post_jobs"
-	FlagHook                 = "hook"
-	FlagBoosterType          = "booster_type"
-	FlagHookConfig           = "hook_config"
-	FlagHookPreloadLib       = "hook_preload_library"
-	FlagAdditionFile         = "addition_file"
-	FlagDashboard            = "dashboard"
-	FlagWorkerList           = "worker_list"
-	FlagCheckMd5             = "check_md5"
-	FlagOutputEnvJSONFile    = "output_env_json_file"
-	FlagOutputEnvSourceFile  = "output_env_source_file"
-	FlagCommitSuicide        = "commit_suicide"
-	FlagToolChainJSONFile    = "tool_chain_json_file"
-	FlagBatchMode            = "batch_mode"
-	FlagDirectives           = "directives"
-	FlagGlobalSlots          = "global_slots"
-	FlagSudoController       = "sudo_controller"
-	FlagIOTimeoutSecs        = "io_timeout_secs"
-	FlagPump                 = "pump"
-	FlagPumpDisableMacro     = "pump_disable_macro"
-	FlagPumpIncludeSysHeader = "pump_include_sys_header"
-	FlagPumpCheck            = "pump_check"
-	FlagPumpCache            = "pump_cache"
-	FlagPumpCacheDir         = "pump_cache_dir"
-	FlagPumpCacheSizeMaxMB   = "pump_cache_size_max_MB"
-	FlagPumpCacheRemoveAll   = "pump_cache_remove_all"
-	FlagPumpBlackList        = "pump_black_list"
-	FlagPumpMinActionNum     = "pump_min_action_num"
-	FlagPumpDisableStatCache = "pump_disable_stat_cache"
-	FlagPumpSearchLink       = "pump_search_link"
-	FlagPumpSearchLinkFile   = "pump_search_link_file"
-	FlagPumpSearchLinkDir    = "pump_search_link_dir"
-	FlagPumpLstatByDir       = "pump_lstat_by_dir"
-	FlagForceLocalList       = "force_local_list"
-	FlagNoWork               = "no_work"
-	FlagControllerNoWait     = "controller_no_wait"
-	FlagControllerRemainTime = "controller_remain_time"
-	FlagServer               = "server"
-	FlagWorkerSideCache      = "worker_side_cache"
-	FlagLocalRecord          = "local_record"
-	FlagWriteMemroMemroy     = "write_memory"
-	FlagIdleKeepSecs         = "idle_keep_secs"
-	FlagResourceTimeoutSecs  = "resource_timeout_secs"
-	FlagLocalIdleCPUPercent  = "use_local_cpu_percent"
-	FlagDisableFileLock      = "disable_file_lock"
-	FlagAutoResourceMgr      = "auto_resource_mgr"
-	FlagResIdleSecsForFree   = "res_idle_secs_for_free"
-	FlagSendCork             = "send_cork"
-	FlagSendFileMemoryLimit  = "send_file_memory_limit"
-	FlagNetErrorLimit        = "net_error_limit"
-	FlagRemoteRetryTimes     = "remote_retry_times"
-	FlagEnableLink           = "enable_link"
-	FlagEnableLib            = "enable_lib"
+	FlagProjectID              = "project_id"
+	FlagBuildID                = "build_id"
+	FlagArgs                   = "args"
+	FlagGccVersion             = "gcc_version"
+	FlagBazel                  = "bazel"
+	FlagBazelPlus              = "bazel_plus"
+	FlagBazel4Plus             = "bazel4_plus"
+	FlagBazelNoLauncher        = "bazel_no_launcher"
+	FlagLauncher               = "launcher"
+	FlagLog                    = "log"
+	FlagLogDir                 = "log_dir"
+	FlagLogToConsole           = "log_to_console"
+	FlagExecutorLog            = "executor_log"
+	FlagTest                   = "test"
+	FlagCommandPath            = "command_path"
+	FlagLimit                  = "limit"
+	FlagNoLocal                = "no_local"
+	FlagLocal                  = "local"
+	FlagDegraded               = "degraded"
+	FlagSaveCode               = "save_code"
+	FlagJobs                   = "jobs"
+	FlagMaxJobs                = "max_jobs"
+	FlagPresetJobs             = "preset_jobs"
+	FlagMaxDegradedJobs        = "max_degraded_jobs"
+	FlagMaxLocalTotalJobs      = "max_local_total_jobs"
+	FlagMaxLocalExeJobs        = "max_local_exe_jobs"
+	FlagMaxLocalPreJobs        = "max_local_pre_jobs"
+	FlagMaxLocalPostJobs       = "max_local_post_jobs"
+	FlagHook                   = "hook"
+	FlagBoosterType            = "booster_type"
+	FlagHookConfig             = "hook_config"
+	FlagHookPreloadLib         = "hook_preload_library"
+	FlagAdditionFile           = "addition_file"
+	FlagDashboard              = "dashboard"
+	FlagWorkerList             = "worker_list"
+	FlagCheckMd5               = "check_md5"
+	FlagOutputEnvJSONFile      = "output_env_json_file"
+	FlagOutputEnvSourceFile    = "output_env_source_file"
+	FlagCommitSuicide          = "commit_suicide"
+	FlagToolChainJSONFile      = "tool_chain_json_file"
+	FlagSearchToolchain        = "search_toolchain"
+	FlagBatchMode              = "batch_mode"
+	FlagDirectives             = "directives"
+	FlagGlobalSlots            = "global_slots"
+	FlagSudoController         = "sudo_controller"
+	FlagIOTimeoutSecs          = "io_timeout_secs"
+	FlagPump                   = "pump"
+	FlagPumpDisableMacro       = "pump_disable_macro"
+	FlagPumpIncludeSysHeader   = "pump_include_sys_header"
+	FlagPumpCheck              = "pump_check"
+	FlagPumpCache              = "pump_cache"
+	FlagPumpCacheDir           = "pump_cache_dir"
+	FlagPumpCacheSizeMaxMB     = "pump_cache_size_max_MB"
+	FlagPumpCacheRemoveAll     = "pump_cache_remove_all"
+	FlagPumpBlackList          = "pump_black_list"
+	FlagPumpMinActionNum       = "pump_min_action_num"
+	FlagPumpDisableStatCache   = "pump_disable_stat_cache"
+	FlagPumpSearchLink         = "pump_search_link"
+	FlagPumpSearchLinkFile     = "pump_search_link_file"
+	FlagPumpSearchLinkDir      = "pump_search_link_dir"
+	FlagPumpLstatByDir         = "pump_lstat_by_dir"
+	FlagPumpCorrectCap         = "pump_correct_cap"
+	FlagForceLocalList         = "force_local_list"
+	FlagNoWork                 = "no_work"
+	FlagControllerNoWait       = "controller_no_wait"
+	FlagControllerRemainTime   = "controller_remain_time"
+	FlagServer                 = "server"
+	FlagResultCacheList        = "result_cache_list"
+	FlagWorkerSideCache        = "worker_side_cache"
+	FlagLocalRecord            = "local_record"
+	FlagWriteMemroMemroy       = "write_memory"
+	FlagIdleKeepSecs           = "idle_keep_secs"
+	FlagResourceTimeoutSecs    = "resource_timeout_secs"
+	FlagLocalIdleCPUPercent    = "use_local_cpu_percent"
+	FlagDisableFileLock        = "disable_file_lock"
+	FlagAutoResourceMgr        = "auto_resource_mgr"
+	FlagResIdleSecsForFree     = "res_idle_secs_for_free"
+	FlagSendCork               = "send_cork"
+	FlagSendFileMemoryLimit    = "send_file_memory_limit"
+	FlagSendMemoryCache        = "send_memory_cache"
+	FlagNetErrorLimit          = "net_error_limit"
+	FlagRemoteRetryTimes       = "remote_retry_times"
+	FlagEnableLink             = "enable_link"
+	FlagEnableLib              = "enable_lib"
+	FlagLongTCP                = "long_tcp"
+	FlagUseDefaultWorker       = "use_default_worker"
+	FlagDynamicPort            = "dynamic_port"
+	FlagWorkerOfferSlot        = "worker_offer_slot"
+	FlagCleanTmpFilesDayAgo    = "clean_tmp_files_day_ago"
+	FlagIgnoreHttpStatus       = "ignore_http_status"
+	FlagResultCacheType        = "result_cache_type"
+	FlagResultCacheTriggleSecs = "result_cache_triggle_secs"
+	FlagResultCacheIndexNum    = "result_cache_index_num"
+	FlagResultCacheFileNum     = "result_cache_file_num"
+	FlagPreferLocal            = "prefer_local"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -272,6 +288,10 @@ var (
 			Usage: "json file to describe tool chain",
 		},
 		commandCli.BoolFlag{
+			Name:  "search_toolchain",
+			Usage: "automatically search for toolchain based on command",
+		},
+		commandCli.BoolFlag{
 			Name:  "batch_mode, bm",
 			Usage: "batch mode for booster, multi booster in the same projectID will use one same workID",
 		},
@@ -351,6 +371,10 @@ var (
 			Name:  "pump_lstat_by_dir",
 			Usage: "whether get file stat info by search dir",
 		},
+		commandCli.BoolFlag{
+			Name:  "pump_correct_cap",
+			Usage: "whether correct capitalization when save pump depend file list",
+		},
 		commandCli.StringSliceFlag{
 			Name:  "force_local_list, fll",
 			Usage: "key list which will be force executed locally",
@@ -370,6 +394,10 @@ var (
 		commandCli.StringFlag{
 			Name:  "server",
 			Usage: "specify the server address for booster",
+		},
+		commandCli.StringSliceFlag{
+			Name:  "result_cache_list, rcl",
+			Usage: "specify the result cache list for booster",
 		},
 		commandCli.BoolFlag{
 			Name:  "worker_side_cache, wsc",
@@ -415,6 +443,10 @@ var (
 			Name:  "send_file_memory_limit",
 			Usage: "set send file memory limit",
 		},
+		commandCli.BoolFlag{
+			Name:  "send_memory_cache",
+			Usage: "send files with memory cache",
+		},
 		commandCli.IntFlag{
 			Name:  "net_error_limit",
 			Usage: "disable a remote worker which's continuous net errors reach this limit",
@@ -430,6 +462,50 @@ var (
 		commandCli.BoolFlag{
 			Name:  "enable_lib",
 			Usage: "enable remote lib.exe",
+		},
+		commandCli.BoolFlag{
+			Name:  "long_tcp",
+			Usage: "whether connect to worker with long tcp connection",
+		},
+		commandCli.BoolFlag{
+			Name:  "use_default_worker",
+			Usage: "use default worker if worker id is empty",
+		},
+		commandCli.BoolFlag{
+			Name:  "dynamic_port",
+			Usage: "controller will listen dynamic port if true",
+		},
+		commandCli.BoolFlag{
+			Name:  "worker_offer_slot",
+			Usage: "controller will get remote slot by worker offer",
+		},
+		commandCli.IntFlag{
+			Name:  "clean_tmp_files_day_ago",
+			Usage: "clean tmp files which modify time before this days, default is 1",
+		},
+		commandCli.BoolFlag{
+			Name:  "ignore_http_status",
+			Usage: "tasks will be executed even local http connection disconnected when this flag set",
+		},
+		commandCli.IntFlag{
+			Name:  "result_cache_type",
+			Usage: "use which result cache type, 0:no cache, 1:local cache, 2:remote cache, 3:both",
+		},
+		commandCli.IntFlag{
+			Name:  "result_cache_triggle_secs",
+			Usage: "only remote execute time(seconds) great than this will triggle result cache",
+		},
+		commandCli.IntFlag{
+			Name:  "result_cache_index_num",
+			Usage: "specify index number for local result cache",
+		},
+		commandCli.IntFlag{
+			Name:  "result_cache_file_num",
+			Usage: "specify file number for local result cache",
+		},
+		commandCli.BoolFlag{
+			Name:  "prefer_local",
+			Usage: "if true, controller will try to use local first",
 		},
 	}
 )
@@ -465,6 +541,11 @@ func GetApp(ct ClientType) *commandCli.App {
 				Name: "bazel4_plus, bz4p",
 				Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
 					"compilation works with at least bazel 4.0",
+			},
+			commandCli.BoolFlag{
+				Name: "bazel_no_launcher, bz4nl",
+				Usage: "if the flag set, then consider the args as a pure bazel command and keep the incremental " +
+					"compilation works with at least bazel 4.0; this will simplify bazel accelerate environment",
 			},
 			commandCli.BoolFlag{
 				Name:  "launcher, lc",

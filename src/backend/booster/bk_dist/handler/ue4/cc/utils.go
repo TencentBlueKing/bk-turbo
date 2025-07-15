@@ -25,6 +25,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
+	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -52,54 +53,6 @@ func hasSpace(s string) bool {
 
 	return false
 }
-
-// func parseArgument(data string) ([]string, []string, error) {
-// 	options := make([]string, 0, 0)
-// 	sources := make([]string, 0, 0)
-// 	curstr := make([]byte, 0, 0)
-// 	i := 0
-// 	for ; i < len(data); i++ {
-// 		c := data[i]
-// 		if c != ' ' && c != '\r' && c != '\n' {
-// 			curstr = []byte{}
-// 			inQuotes := 0
-// 			for ; i < len(data); i++ {
-// 				curChar := data[i]
-// 				curIsQuote := 0
-// 				if curChar == '"' {
-// 					curIsQuote = 1
-// 				}
-// 				if curIsQuote == 1 {
-// 					inQuotes = inQuotes ^ 1
-// 				}
-
-// 				if (curChar == ' ' || curChar == '\r' || curChar == '\n') && inQuotes == 0 {
-// 					break
-// 				}
-
-// 				curstr = append(curstr, curChar)
-// 			}
-
-// 			s := strings.Trim(string(curstr), "\"")
-// 			if isSourceFile(s) {
-// 				sources = append(sources, s)
-// 			} else {
-// 				if string(curstr) == "/we4668" {
-// 					options = append(options, "/wd4668") // for ue4
-// 				} else {
-// 					// !!! here is maybe unnecesary !!!
-// 					if !hasSpace(string(curstr)) {
-// 						options = append(options, strings.Replace(string(curstr), "\"", "", -1))
-// 					} else {
-// 						options = append(options, string(curstr))
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	return options, sources, nil
-// }
 
 func checkCharset(rawBytes []byte) (string, error) {
 	detector := chardet.NewTextDetector()
@@ -154,13 +107,13 @@ func readUtf8(filename string) (string, error) {
 }
 
 // return compile options and source files
-func readResponse(f, dir string) (string, error) {
+func readResponse(f, dir string) (string, string, error) {
 	newf := f
 	if !dcFile.Stat(newf).Exist() {
 		// try with dir
 		tempf, _ := filepath.Abs(filepath.Join(dir, newf))
 		if !dcFile.Stat(tempf).Exist() {
-			return "", fmt.Errorf("%s or %s dose not exist", newf, tempf)
+			return "", "", fmt.Errorf("%s or %s dose not exist", newf, tempf)
 		} else {
 			newf = tempf
 		}
@@ -168,7 +121,7 @@ func readResponse(f, dir string) (string, error) {
 
 	charset, err := checkResponseFileCharset(newf)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	data := ""
@@ -178,14 +131,14 @@ func readResponse(f, dir string) (string, error) {
 		data, err = readUtf8(newf)
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	if data == "" {
-		return "", fmt.Errorf("%s is empty", newf)
+		return "", "", fmt.Errorf("%s is empty", newf)
 	}
 
-	return data, nil
+	return data, newf, nil
 }
 
 // replace which next is not in nextExcludes
@@ -249,20 +202,10 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 		if strings.HasPrefix(v, "@") {
 			responseFile = strings.Trim(v[1:], "\"")
 
-			data := ""
-			if responseFile != "" {
-				var err error
-				data, err = readResponse(responseFile, workdir)
-				if err != nil {
-					blog.Infof("cc: failed to read response file:%s,err:%v", responseFile, err)
-					return responseFile, nil, showinclude, sourcedependfile, objectfile, pchfile, err
-				}
-			}
-			// options, sources, err := parseArgument(data)
-			options, err := shlex.Split(replaceWithNextExclude(string(data), '\\', "\\\\", []byte{'"'}))
-			if err != nil {
-				blog.Infof("cc: failed to parse response file:%s,err:%v", responseFile, err)
-				return responseFile, nil, showinclude, sourcedependfile, objectfile, pchfile, err
+			allrspfile := []string{}
+			options := expandRspFilesRecursively(responseFile, workdir, &allrspfile)
+			if len(options) == 0 {
+				return responseFile, nil, showinclude, sourcedependfile, objectfile, pchfile, fmt.Errorf("failed to resolve response file")
 			}
 
 			args = []string{args[0]}
@@ -271,6 +214,10 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 		} else if v == "/showIncludes" {
 			showinclude = true
 		}
+	}
+
+	if showinclude {
+		args = append(args, "/showIncludes")
 	}
 
 	firstinclude := true
@@ -287,6 +234,18 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 				return responseFile, nil, showinclude, sourcedependfile, objectfile, pchfile, ErrorMissingOption
 			}
 			sourcedependfile = args[i]
+		} else if strings.HasPrefix(args[i], "/clang:-MF") {
+			if len(args[i]) > 10 {
+				sourcedependfile = strings.Trim(args[i][10:], "\"")
+				continue
+			}
+
+			i++
+			if i >= len(args) {
+				blog.Warnf("cc: scan args: no output file found after /clang:-MF")
+				continue
+			}
+			sourcedependfile = strings.Trim(args[i], "\"")
 		} else if strings.HasPrefix(args[i], "-o") {
 			// if -o just a prefix, the output file is also in this index, then skip the -o.
 			if len(args[i]) > 2 {
@@ -301,6 +260,23 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 				return responseFile, nil, showinclude, sourcedependfile, objectfile, pchfile, ErrorMissingOption
 			}
 			objectfile = args[i]
+			blog.Infof("cc: got objectfile file:%s", objectfile)
+		} else if strings.HasPrefix(args[i], "/Fo") {
+			// if /Fo just a prefix, the output file is also in this index, then skip the /Fo.
+			if len(args[i]) > 3 {
+				objectfile = strings.Trim(args[i][3:], "\"")
+				blog.Infof("cc: got objectfile file:%s", objectfile)
+				continue
+			}
+
+			// if file name is in the next index, then take it.
+			// Whatever follows must be the output file
+			i++
+			if i >= len(args) {
+				blog.Warnf("cc: scan args: no output file found after /Fo")
+				return responseFile, nil, showinclude, sourcedependfile, objectfile, pchfile, ErrorMissingOption
+			}
+			objectfile = strings.Trim(args[i], "\"")
 			blog.Infof("cc: got objectfile file:%s", objectfile)
 		} else if strings.HasPrefix(args[i], "-include-pch") {
 			firstinclude = false
@@ -349,38 +325,60 @@ func ensureCompilerRaw(args []string, workdir string) (string, []string, bool, s
 	return responseFile, args, showinclude, sourcedependfile, objectfile, pchfile, nil
 }
 
+func expandRspFilesRecursively(responseFile, workdir string, rspfiles *[]string) []string {
+	data := ""
+	fullrsppath := ""
+	if responseFile != "" {
+		var err error
+		data, fullrsppath, err = readResponse(responseFile, workdir)
+		if err != nil {
+			blog.Infof("cc: failed to read response file:%s,err:%v", responseFile, err)
+			return nil
+		}
+	}
+
+	options, err := shlex.Split(replaceWithNextExclude(string(data), '\\', "\\\\", []byte{'"'}))
+	if err != nil {
+		blog.Infof("cc: failed to parse response file:%s,err:%v", responseFile, err)
+		return nil
+	}
+
+	for i := 0; i < len(options); i++ {
+		if strings.HasPrefix(options[i], "@") && len(options[i]) > 1 {
+			newoptions := expandRspFilesRecursively(strings.Trim(options[i][1:], "\""), workdir, rspfiles)
+			if len(newoptions) > 0 {
+				options = append(options[:i], append(newoptions, options[i+1:]...)...)
+				i += len(newoptions) - 1
+			}
+		}
+	}
+
+	*rspfiles = append(*rspfiles, fullrsppath)
+
+	return options
+}
+
 // ensure compiler exist in args.
 // change "executor -c foo.c" -> "cc -c foo.c"
-func ensureCompiler(args []string, workdir string) (string, []string, error) {
+func ensureCompiler(args []string, workdir string) (string, []string, []string, error) {
 	responseFile := ""
 	if len(args) == 0 {
 		blog.Warnf("cc: ensure compiler got empty arg")
-		return responseFile, nil, ErrorMissingOption
+		return responseFile, nil, nil, ErrorMissingOption
 	}
 
 	if args[0] == "-" || isSourceFile(args[0]) || isObjectFile(args[0]) {
-		return responseFile, append([]string{defaultCompiler}, args...), nil
+		return responseFile, append([]string{defaultCompiler}, args...), nil, nil
 	}
 
+	allrspfile := []string{}
+	showinclude := false
 	for _, v := range args {
 		if strings.HasPrefix(v, "@") {
 			responseFile = strings.Trim(v[1:], "\"")
-
-			data := ""
-			if responseFile != "" {
-				var err error
-				data, err = readResponse(responseFile, workdir)
-				if err != nil {
-					blog.Infof("cc: failed to read response file:%s,err:%v", responseFile, err)
-					return responseFile, nil, err
-				}
-			}
-
-			// options, sources, err := parseArgument(data)
-			options, err := shlex.Split(replaceWithNextExclude(string(data), '\\', "\\\\", []byte{'"'}))
-			if err != nil {
-				blog.Infof("cc: failed to parse response file:%s,err:%v", responseFile, err)
-				return responseFile, nil, err
+			options := expandRspFilesRecursively(responseFile, workdir, &allrspfile)
+			if len(options) == 0 {
+				return responseFile, nil, nil, fmt.Errorf("failed to resolve response file")
 			}
 
 			for i := range options {
@@ -390,24 +388,18 @@ func ensureCompiler(args []string, workdir string) (string, []string, error) {
 				}
 			}
 
-			// if len(sources) != 1 {
-			// 	var err error
-			// 	if len(sources) == 0 {
-			// 		err = fmt.Errorf("cc: not found source file")
-			// 	} else {
-			// 		err = fmt.Errorf("cc: do not support multi source files")
-			// 	}
-			// 	blog.Infof("%v", err)
-			// 	return responseFile, nil, err
-			// }
-
 			args = []string{args[0]}
 			args = append(args, options...)
-			// args = append(args, sources[0])
+		} else if v == "/showIncludes" {
+			showinclude = true
 		}
 	}
 
-	return responseFile, args, nil
+	if showinclude {
+		args = append(args, "/showIncludes")
+	}
+
+	return responseFile, args, allrspfile, nil
 }
 
 var (
@@ -495,6 +487,10 @@ var (
 		// ++ for ue 4.26 mac compile
 		"-isysroot": true,
 		// --
+		"/I":         true,
+		"/imsvc":     true,
+		"/FI":        true,
+		"/clang:-MF": true,
 	}
 
 	// skip options without value
@@ -509,21 +505,29 @@ var (
 		// ++ for ue4.25.0 linux clang++
 		"-Werror": true,
 		// --
+		"/clang:-MD": true,
 	}
 
 	// skip options start with flags
 	skipLocalOptionStartWith = map[string]bool{
-		"-Wp,":     true,
-		"-Wl,":     true,
-		"-D":       true,
-		"-I":       true,
-		"-U":       true,
-		"-L":       true,
-		"-l":       true,
-		"-MF":      true,
-		"-MT":      true,
-		"-MQ":      true,
-		"-isystem": true,
+		"-Wp,":            true,
+		"-Wl,":            true,
+		"-D":              true,
+		"-I":              true,
+		"-U":              true,
+		"-L":              true,
+		"-l":              true,
+		"-MF":             true,
+		"-MT":             true,
+		"-MQ":             true,
+		"-isystem":        true,
+		"@":               true, // such as @"..\XXX\XXX.rsp"
+		"--gcc-toolchain": true,
+		"--sysroot":       true,
+		"/I":              true,
+		"/imsvc":          true,
+		"/FI":             true,
+		"/clang:-MF":      true,
 	}
 )
 
@@ -580,7 +584,7 @@ func getPreprocessedExt(inputFile string) string {
 // are pointed to by that array are aliased with the values pointed
 // to by 'from'.  The caller is responsible for calling free() on
 // '*out_argv'.
-func stripLocalArgs(args []string) []string {
+func stripLocalArgs(args []string, env *env.Sandbox) []string {
 	r := make([]string, 0, len(args))
 
 	// skip through argv, copying all arguments but skipping ones that ought to be omitted
@@ -613,7 +617,9 @@ func stripLocalArgs(args []string) []string {
 		r = append(r, arg)
 	}
 
-	r[0] = filepath.Base(r[0])
+	if !dcSyscall.NeedSearchToolchain(env) {
+		r[0] = filepath.Base(r[0])
+	}
 	return r
 }
 
@@ -666,9 +672,14 @@ func copyExtraArgs(option string) ([]string, error) {
 }
 
 type ccArgs struct {
-	inputFile  string
-	outputFile string
-	args       []string
+	inputFile       string
+	outputFile      string
+	mfOutputFile    []string
+	args            []string
+	includeRspFiles []string // with @ in response file
+	includePaths    []string // with -I
+	includeFiles    []string // with -include
+	hasDependencies bool
 }
 
 // scanArgs receive the complete compiling args, and the first item should always be a compiler name.
@@ -680,6 +691,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 		return nil, ErrorUnrecognizedOption
 	}
 
+	isClangCL := strings.HasSuffix(args[0], "clang-cl.exe")
+
 	r := new(ccArgs)
 	seenOptionS := false
 	seenOptionC := false
@@ -689,7 +702,6 @@ func scanArgs(args []string) (*ccArgs, error) {
 		arg := args[index]
 
 		if strings.HasPrefix(arg, "-") {
-
 			switch arg {
 			case "-E":
 				// pre-process should be run locally.
@@ -699,6 +711,7 @@ func scanArgs(args []string) (*ccArgs, error) {
 			case "-MD", "-MMD":
 				// These two generate dependencies as a side effect.  They
 				// should work with the way we call cpp.
+				r.hasDependencies = true
 				continue
 
 			case "-MG", "-MP":
@@ -709,6 +722,9 @@ func scanArgs(args []string) (*ccArgs, error) {
 			case "-MF", "-MT", "-MQ":
 				// As above but with extra argument.
 				index++
+				if arg == "-MF" && index < len(args) {
+					r.mfOutputFile = append(r.mfOutputFile, strings.Trim(arg, "\""))
+				}
 				continue
 
 			case "-march=native":
@@ -737,7 +753,8 @@ func scanArgs(args []string) (*ccArgs, error) {
 			}
 
 			// ++ by tomtian 20201127,for example: -MF/data/.../XX.cpp.d
-			if strings.HasPrefix(arg, "-MF") {
+			if strings.HasPrefix(arg, "-MF") && len(arg) > 3 {
+				r.mfOutputFile = append(r.mfOutputFile, strings.Trim(args[index][3:], "\""))
 				continue
 			}
 			// --
@@ -770,6 +787,14 @@ func scanArgs(args []string) (*ccArgs, error) {
 				return nil, ErrorNotSupportSpecs
 			}
 
+			// ++ by tomtian 20250408, to support -Xclang
+			if strings.HasPrefix(arg, "-Xclang") {
+				// skip -Xclang and next arg
+				index++
+				index++
+			}
+			//--
+
 			if strings.HasPrefix(arg, "-x") {
 				index++
 				if index >= len(args) {
@@ -801,6 +826,45 @@ func scanArgs(args []string) (*ccArgs, error) {
 			}
 			// --
 
+			if strings.HasPrefix(arg, "-I") {
+				// if -I just a prefix, save the remain of this line.
+				if len(arg) > 2 {
+					r.includePaths = append(r.includePaths, strings.Trim(arg[2:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no file found after -I")
+					return nil, ErrorMissingOption
+				}
+				r.includePaths = append(r.includePaths, strings.Trim(args[index], "\""))
+				continue
+			}
+
+			if strings.HasPrefix(arg, "-include") {
+				keylen := 8
+				if arg == "-include-pch" {
+					keylen = 12
+				}
+
+				// if -include just a prefix, save the remain of this line.
+				if len(arg) > keylen {
+					r.includeFiles = append(r.includeFiles, strings.Trim(arg[keylen:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no file found after -include or -include-pch")
+					return nil, ErrorMissingOption
+				}
+				r.includeFiles = append(r.includeFiles, strings.Trim(args[index], "\""))
+				continue
+			}
+
 			if strings.HasPrefix(arg, "-o") {
 				// -o should always appear once.
 				if seenOptionO {
@@ -825,6 +889,65 @@ func scanArgs(args []string) (*ccArgs, error) {
 				r.outputFile = args[index]
 				continue
 			}
+			continue
+		} else if strings.HasPrefix(arg, "@") {
+			r.includeRspFiles = append(r.includeRspFiles, arg[1:])
+		} else if isClangCL && strings.HasPrefix(arg, "/") { // support clang-cl.exe
+			switch arg {
+			case "/c":
+				seenOptionC = true
+				continue
+			case "/Yc":
+				// Creates a precompiled header file, should be run locally
+				blog.Warnf("cc: scan args: /Yc call for cpp must be local")
+				return nil, ErrorNotSupportYc
+			}
+
+			if strings.HasPrefix(arg, "/Yc") {
+				// Creates a precompiled header file, should be run locally
+				blog.Warnf("cc: scan args: /Yc call for cpp must be local")
+				return nil, ErrorNotSupportYc
+			}
+
+			if strings.HasPrefix(arg, "/Fo") {
+				// /Fo should always appear once.
+				if seenOptionO {
+					blog.Warnf("cc: scan args: multi /FO found in args")
+					return nil, ErrorInvalidOption
+				}
+				seenOptionO = true
+
+				// if /Fo just a prefix, the output file is also in this index, then skip the /Fo.
+				if len(arg) > 3 {
+					r.outputFile = strings.Trim(arg[3:], "\"")
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				// Whatever follows must be the output file
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no output file found after /Fo")
+					return nil, ErrorMissingOption
+				}
+				r.outputFile = strings.Trim(arg, "\"")
+				continue
+			}
+
+			if strings.HasPrefix(arg, "/clang:-MF") {
+				if len(arg) > 10 {
+					r.mfOutputFile = append(r.mfOutputFile, strings.Trim(arg[10:], "\""))
+					continue
+				}
+
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no output file found after /clang:-MF")
+					continue
+				}
+				r.mfOutputFile = append(r.mfOutputFile, strings.Trim(arg, "\""))
+			}
+
 			continue
 		}
 
@@ -1075,9 +1198,9 @@ func makeTmpFile(tmpDir, prefix, ext string) (string, error) {
 	return "", fmt.Errorf("cc: create tmp file failed: %s", target)
 }
 
-func getPumpIncludeFile(tmpDir, prefix, ext string, args []string) (string, error) {
+func getPumpIncludeFile(tmpDir, prefix, ext string, args []string, workdir string) (string, error) {
 	fullarg := strings.Join(args, " ")
-	md5str := md5.Sum([]byte(fullarg))
+	md5str := md5.Sum([]byte((fullarg + workdir)))
 	target := filepath.Join(tmpDir, fmt.Sprintf("%s_%x%s", prefix, md5str, ext))
 
 	return target, nil
@@ -1150,6 +1273,10 @@ func setActionOptionE(args []string) ([]string, error) {
 			found = true
 			r = append(r, "-E")
 			continue
+		} else if arg == "/c" {
+			found = true
+			r = append(r, "/E")
+			continue
 		}
 
 		r = append(r, arg)
@@ -1201,56 +1328,37 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 		return fmt.Errorf("file path is empty")
 	}
 
-	f, err := os.Create(fp)
-	if err != nil {
-		if !filepath.IsAbs(fp) && dir != "" {
-			newfp, _ := filepath.Abs(filepath.Join(dir, fp))
-			f, err = os.Create(newfp)
-			if err != nil {
-				blog.Errorf("cc: create file %s or %s error: [%s]", fp, newfp, err.Error())
-				return err
-			}
-		} else {
-			blog.Errorf("cc: create file %s error: [%s]", fp, err.Error())
-			return err
-		}
+	if !filepath.IsAbs(fp) {
+		fp = filepath.Join(dir, fp)
 	}
-	defer func() {
-		_ = f.Close()
-	}()
 
 	if rf.CompressedSize > 0 {
 		switch rf.Compresstype {
 		case protocol.CompressNone:
-			// allocTime = time.Now().Local().UnixNano()
-			// compressTime = allocTime
-			_, err := f.Write(data)
+
+			f, err := os.Create(fp)
+			if err != nil {
+				if !filepath.IsAbs(fp) && dir != "" {
+					newfp, _ := filepath.Abs(filepath.Join(dir, fp))
+					f, err = os.Create(newfp)
+					if err != nil {
+						blog.Errorf("cc: create file %s or %s error: [%s]", fp, newfp, err.Error())
+						return err
+					}
+				} else {
+					blog.Errorf("cc: create file %s error: [%s]", fp, err.Error())
+					return err
+				}
+			}
+			defer f.Close()
+
+			_, err = f.Write(data)
 			if err != nil {
 				blog.Errorf("save file [%s] error: [%s]", fp, err.Error())
 				return err
 			}
 			break
-		// case protocol.CompressLZO:
-		// 	// decompress with lzox1 firstly
-		// 	outdata, err := golzo.Decompress1X(bytes.NewReader(data), int(rf.CompressedSize), 0)
-		// 	if err != nil {
-		// 		blog.Errorf("cc: decompress file %s error: [%s]", fp, err.Error())
-		// 		return err
-		// 	}
-		// 	outlen := len(string(outdata))
-		// 	blog.Debugf("cc: decompressed file %s with lzo1x, from [%d] to [%d]", fp, rf.CompressedSize, outlen)
-		// 	if outlen != int(rf.FileSize) {
-		// 		err := fmt.Errorf("cc: decompressed size %d, expected size %d", outlen, rf.FileSize)
-		// 		blog.Errorf("cc: decompress error: [%v]", err)
-		// 		return err
-		// 	}
 
-		// 	_, err = f.Write(outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("cc: save file [%s] error: [%v]", fp, err)
-		// 		return err
-		// 	}
-		// 	break
 		case protocol.CompressLZ4:
 			// decompress with lz4 firstly
 			dst := make([]byte, rf.FileSize)
@@ -1277,11 +1385,28 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 				return err
 			}
 
+			f, err := os.Create(fp)
+			if err != nil {
+				if !filepath.IsAbs(fp) && dir != "" {
+					newfp, _ := filepath.Abs(filepath.Join(dir, fp))
+					f, err = os.Create(newfp)
+					if err != nil {
+						blog.Errorf("cc: create file %s or %s error: [%s]", fp, newfp, err.Error())
+						return err
+					}
+				} else {
+					blog.Errorf("cc: create file %s error: [%s]", fp, err.Error())
+					return err
+				}
+			}
+			defer f.Close()
+
 			_, err = f.Write(outdata)
 			if err != nil {
 				blog.Errorf("cc: save file [%s] error: [%v]", fp, err)
 				return err
 			}
+			blog.Infof("cc: succeed save file %s size [%d]", fp, outlen)
 			break
 		default:
 			return fmt.Errorf("cc: unknown compress type [%s]", rf.Compresstype)
@@ -1298,11 +1423,11 @@ func saveResultFile(rf *dcSDK.FileDesc, dir string) error {
 // in https://msdn.microsoft.com/en-us/library/ms880421.
 // This function returns "" (2 double quotes) if s is empty.
 // Alternatively, these transformations are done:
-// - every back slash (\) is doubled, but only if immediately
-//   followed by double quote (");
-// - every double quote (") is escaped by back slash (\);
-// - finally, s is wrapped with double quotes (arg -> "arg"),
-//   but only if there is space or tab inside s.
+//   - every back slash (\) is doubled, but only if immediately
+//     followed by double quote (");
+//   - every double quote (") is escaped by back slash (\);
+//   - finally, s is wrapped with double quotes (arg -> "arg"),
+//     but only if there is space or tab inside s.
 func EscapeArg(s string) string {
 	if len(s) == 0 {
 		return "\"\""
@@ -1531,4 +1656,113 @@ func getIncludeLinks(env *env.Sandbox, uniqlines []string) ([]string, error) {
 
 	return nil, nil
 
+}
+
+// scanRspFiles 类似scanArgs，递归解析包含的rsp文件，得到依赖列表，包括路径/文件/新的rsp列表
+func scanRspFilesRecursively(
+	newrspfile string,
+	workdir string,
+	resultIncludePaths *[]string,
+	resultIncludeFiles *[]string,
+	checkedRspFiles *[]string) {
+	blog.Infof("cc: ready resolve recursively rsp file: %s", newrspfile)
+
+	for _, f := range *checkedRspFiles {
+		if f == newrspfile {
+			blog.Errorf("cc: found dead loop include response file %s", newrspfile)
+			return
+		}
+	}
+
+	*checkedRspFiles = append(*checkedRspFiles, newrspfile)
+
+	if !filepath.IsAbs(newrspfile) {
+		newrspfile, _ = filepath.Abs(filepath.Join(workdir, newrspfile))
+	}
+
+	blog.Infof("cc: ready resolve recursively rsp file with full path: %s", newrspfile)
+
+	data := ""
+	var err error
+	data, _, err = readResponse(newrspfile, workdir)
+	if err != nil {
+		blog.Infof("cc: failed to read response file:%s,err:%v", newrspfile, err)
+		return
+	}
+
+	// options, sources, err := parseArgument(data)
+	args, err := shlex.Split(replaceWithNextExclude(string(data), '\\', "\\\\", []byte{'"'}))
+	if err != nil {
+		blog.Infof("cc: failed to parse response file:%s,err:%v", newrspfile, err)
+		return
+	}
+
+	// for debug
+	blog.Infof("cc: response file:%s,args:%+v", newrspfile, args)
+
+	// 只关心包含的依赖，其它选项忽略
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if strings.HasPrefix(arg, "-") {
+			if strings.HasPrefix(arg, "-I") {
+				// if -I just a prefix, save the remain of this line.
+				if len(arg) > 2 {
+					*resultIncludePaths = append(*resultIncludePaths, strings.Trim(arg[2:], "\""))
+					// for debug
+					blog.Debugf("cc: response file:%s,got include path:%s", newrspfile, strings.Trim(arg[2:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no file found after -I")
+					return
+				}
+				*resultIncludePaths = append(*resultIncludePaths, strings.Trim(args[index], "\""))
+				// for debug
+				blog.Debugf("cc: response file:%s,got include path:%s", newrspfile, strings.Trim(args[index], "\""))
+				continue
+			}
+
+			if strings.HasPrefix(arg, "-include") {
+				keylen := 8
+				if arg == "-include-pch" {
+					keylen = 12
+				}
+
+				// if -include just a prefix, save the remain of this line.
+				if len(arg) > keylen {
+					*resultIncludeFiles = append(*resultIncludeFiles, strings.Trim(arg[keylen:], "\""))
+					// for debug
+					blog.Debugf("cc: response file:%s,got include file:%s", newrspfile, strings.Trim(arg[keylen:], "\""))
+					continue
+				}
+
+				// if file name is in the next index, then take it.
+				index++
+				if index >= len(args) {
+					blog.Warnf("cc: scan args: no file found after -include or -include-pch")
+					return
+				}
+				*resultIncludeFiles = append(*resultIncludeFiles, strings.Trim(args[index], "\""))
+				// for debug
+				blog.Debugf("cc: response file:%s,got include file:%s", newrspfile, strings.Trim(args[index], "\""))
+				continue
+			}
+			continue
+		} else if strings.HasPrefix(arg, "@") {
+			// 递归调用
+			scanRspFilesRecursively(
+				arg[1:],
+				workdir,
+				resultIncludePaths,
+				resultIncludeFiles,
+				checkedRspFiles)
+		}
+	}
+
+	// for debug
+	blog.Debugf("cc: response file:%s,resultIncludePaths:%+v,resultIncludeFiles:%+v",
+		newrspfile, *resultIncludePaths, *resultIncludeFiles)
 }

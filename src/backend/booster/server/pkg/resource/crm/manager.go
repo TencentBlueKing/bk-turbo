@@ -95,8 +95,8 @@ type ResourceManager interface {
 	// RegisterUser receive a user and return a HandlerWithUser which operates under this user.
 	RegisterUser(user string) (HandlerWithUser, error)
 
-	// GetResourceDetail return details of resource description.
-	GetResourceDetail() *rsc.Details
+	// // GetResourceDetail return details of resource description.
+	// GetResourceDetail() *rsc.Details
 
 	// Run the manager.
 	Run() error
@@ -140,6 +140,32 @@ type ResourceParam struct {
 	BrokerName string `json:"broker_name"`
 }
 
+func (rp *ResourceParam) copy() ResourceParam {
+	newrp := ResourceParam{
+		City:       rp.City,
+		Platform:   rp.Platform,
+		Image:      rp.Image,
+		BrokerName: rp.BrokerName,
+		Env:        make(map[string]string),
+		Ports:      make(map[string]string),
+		Volumes:    make(map[string]op.BcsVolume),
+	}
+
+	for k, v := range rp.Env {
+		newrp.Env[k] = v
+	}
+
+	for k, v := range rp.Ports {
+		newrp.Ports[k] = v
+	}
+
+	for k, v := range rp.Volumes {
+		newrp.Volumes[k] = v
+	}
+
+	return newrp
+}
+
 const (
 	ServiceStatusStaging = op.ServiceStatusStaging
 	ServiceStatusRunning = op.ServiceStatusRunning
@@ -170,12 +196,12 @@ type resourceManager struct {
 
 	// following should be init in recover
 	registeredResourceMap     map[string]*resource
-	registeredResourceMapLock sync.Mutex
+	registeredResourceMapLock sync.RWMutex
 
 	nodeInfoPool *op.NodeInfoPool
 
 	rscDetail []*rsc.RscDetails
-	appDetail []*rsc.AppDetails
+	//appDetail []*rsc.AppDetails
 }
 
 const (
@@ -200,13 +226,13 @@ func (rm *resourceManager) RegisterUser(user string) (HandlerWithUser, error) {
 	return rm.registerUser(user)
 }
 
-// GetResourceDetail get the details of all resources in pool.
-func (rm *resourceManager) GetResourceDetail() *rsc.Details {
-	return &rsc.Details{
-		Rsc: rm.rscDetail,
-		App: rm.appDetail,
-	}
-}
+// // GetResourceDetail get the details of all resources in pool.
+// func (rm *resourceManager) GetResourceDetail() *rsc.Details {
+// 	return &rsc.Details{
+// 		Rsc: rm.rscDetail,
+// 		App: rm.appDetail,
+// 	}
+// }
 
 // Run the resource manager. Listen to role change events. Start manager when master, stop when not.
 func (rm *resourceManager) Run() error {
@@ -252,7 +278,7 @@ func (rm *resourceManager) start() {
 	go rm.runLockCleaner()
 	go rm.runBrokerChecker()
 	go rm.runRscDetailSync()
-	go rm.runAppDetailSync()
+	// go rm.runAppDetailSync()
 }
 
 func (rm *resourceManager) stop() {
@@ -343,50 +369,51 @@ func (rm *resourceManager) runRscDetailSync() {
 	}
 }
 
-func (rm *resourceManager) runAppDetailSync() {
-	blog.Infof("crm: begin to run app detail sync")
-	ticker := time.NewTimer(syncAppDetailTimeGap)
-	defer ticker.Stop()
+// func (rm *resourceManager) runAppDetailSync() {
+// 	blog.Infof("crm: begin to run app detail sync")
+// 	ticker := time.NewTimer(syncAppDetailTimeGap)
+// 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-rm.ctx.Done():
-			blog.Warnf("crm: app detail sync done")
-			return
-		case <-ticker.C:
-			if rm.registeredResourceMap == nil {
-				continue
-			}
+// 	for {
+// 		select {
+// 		case <-rm.ctx.Done():
+// 			blog.Warnf("crm: app detail sync done")
+// 			return
+// 		case <-ticker.C:
+// 			if rm.registeredResourceMap == nil {
+// 				continue
+// 			}
 
-			appDetail := make([]*rsc.AppDetails, 0, 100)
-			rm.registeredResourceMapLock.Lock()
-			for _, r := range rm.registeredResourceMap {
-				if r.status == resourceStatusReleased {
-					continue
-				}
+// 			appDetail := make([]*rsc.AppDetails, 0, 100)
+// 			rm.registeredResourceMapLock.RLock()
+// 			for _, r := range rm.registeredResourceMap {
+// 				if r.status == resourceStatusReleased {
+// 					continue
+// 				}
 
-				appDetail = append(appDetail, &rsc.AppDetails{
-					ResourceID:       r.resourceID,
-					BrokerID:         r.brokerResourceID,
-					BrokerName:       r.brokerName,
-					BrokerSold:       r.brokerSold,
-					User:             r.user,
-					Status:           r.status.String(),
-					Image:            r.param.Image,
-					CreateTime:       r.initTime,
-					RequestInstance:  r.requestInstance,
-					NotReadyInstance: r.noReadyInstance,
-					Label:            r.param.City,
-				})
-			}
-			rm.registeredResourceMapLock.Unlock()
-			rm.appDetail = appDetail
-		}
-	}
-}
+// 				appDetail = append(appDetail, &rsc.AppDetails{
+// 					ResourceID:       r.resourceID,
+// 					BrokerID:         r.brokerResourceID,
+// 					BrokerName:       r.brokerName,
+// 					BrokerSold:       r.brokerSold,
+// 					User:             r.user,
+// 					Status:           r.status.String(),
+// 					Image:            r.param.Image,
+// 					CreateTime:       r.initTime,
+// 					RequestInstance:  r.requestInstance,
+// 					NotReadyInstance: r.noReadyInstance,
+// 					Label:            r.param.City,
+// 				})
+// 			}
+// 			rm.registeredResourceMapLock.RUnlock()
+// 			rm.appDetail = appDetail
+// 		}
+// 	}
+// }
 
 func (rm *resourceManager) logResourceStats() {
 	blog.Infof("crm: report resources(%s) following: %s", rm.conf.Operator, rm.nodeInfoPool.GetStats())
+	op.PrintNoReadyInfo()
 }
 
 func (rm *resourceManager) recover() error {
@@ -397,13 +424,14 @@ func (rm *resourceManager) recover() error {
 		return err
 	}
 
-	rm.nodeInfoPool = op.NewNodeInfoPool(rm.conf.BcsCPUPerInstance, rm.conf.BcsMemPerInstance, 1, rm.conf.InstanceType)
+	rm.nodeInfoPool = op.NewNodeInfoPool(rm.conf)
 
 	rm.registeredResourceMapLock.Lock()
 	defer rm.registeredResourceMapLock.Unlock()
 
 	rm.registeredResourceMap = make(map[string]*resource, 1000)
 	for _, r := range rl {
+		blog.Debugf("crm: recover resource(%s) status(%s)", r.resourceID, r.status.String())
 		if rm.conf.Operator == config.CRMOperatorK8S && rm.conf.InstanceType != nil {
 			isBelongToRm := false
 			for _, ist := range rm.conf.InstanceType {
@@ -421,7 +449,7 @@ func (rm *resourceManager) recover() error {
 			continue
 		}
 		// recover the no-ready records
-		rm.nodeInfoPool.RecoverNoReadyBlock(r.resourceBlockKey, r.noReadyInstance)
+		rm.nodeInfoPool.RecoverNoReadyBlock(r.resourceBlockKey, r.noReadyInstance, r.resourceID)
 		blog.Infof("crm: recover no-ready-instance(%d) from resource(%s)", r.noReadyInstance, r.resourceID)
 	}
 
@@ -447,6 +475,8 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
+	// 设置3分钟超时，此处主要跟踪deploy是否已经成功创建，不关注任务是否跑完
+	timeout := time.After(3 * time.Minute)
 	for {
 		select {
 		case <-rm.ctx.Done():
@@ -457,6 +487,24 @@ func (rm *resourceManager) trace(resourceID, user string) {
 				blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
 				return
 			}
+		case <-timeout:
+			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
+			r, err := rm.getResources(resourceID)
+			if err == nil {
+				if r.noReadyInstance > 0 {
+					blog.Warnf("crm: resource(%s) user(%s) trace timeout, release no-ready instance(%d)",
+						resourceID, user, r.noReadyInstance)
+					rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+					if err := rm.saveResources(r); err != nil {
+						blog.Errorf("crm: resource(%s) user(%s) trace timeout, save resource failed: %v",
+							resourceID, user, err)
+					}
+				}
+			} else {
+				blog.Errorf("crm: resource(%s) user(%s) trace timeout, delete no-ready info failed: %v, exit",
+					resourceID, user, err)
+			}
+			return
 		}
 	}
 }
@@ -477,11 +525,18 @@ func (rm *resourceManager) isFinishDeploying(resourceID, user string) bool {
 
 	switch info.Status {
 	case ServiceStatusRunning, ServiceStatusFailed:
-		blog.Infof("crm: check isFinishDeploying resource(%s) user(%s) finish deploying", resourceID, user)
+		blog.Infof("crm: check isFinishDeploying resource(%s) user(%s) finish deploying with status:%s",
+			resourceID, user, info.Status.String())
 		return true
 	default:
 		return false
 	}
+}
+
+func (rm *resourceManager) updateNoReadyInfo(r *resource, cleannum int, leftnum int, caller string) {
+	r.noReadyInstance = leftnum
+	rm.updateResourcesCache(r)
+	go rm.releaseNoReadyInstance(r.resourceBlockKey, cleannum, caller)
 }
 
 func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready int, terminated bool) {
@@ -499,14 +554,15 @@ func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready i
 	}
 
 	if terminated {
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-		r.noReadyInstance = 0
+		if r.noReadyInstance > 0 {
+			rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+		}
 	} else {
 		// the newest no ready num = resource request instance - the newest ready num
 		currentNoReady := r.requestInstance - ready
 		if r.noReadyInstance > currentNoReady && currentNoReady >= 0 {
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance-currentNoReady)
-			r.noReadyInstance = currentNoReady
+			cleannum := r.noReadyInstance - currentNoReady
+			rm.updateNoReadyInfo(r, cleannum, currentNoReady, resourceID)
 		}
 	}
 
@@ -607,11 +663,13 @@ func (rm *resourceManager) init(resourceID, user string, param ResourceParam) er
 		brokerName: param.BrokerName,
 		initTime:   time.Now().Local(),
 	}
-	if err := rm.createResources(r); err != nil {
-		blog.Errorf("crm: create resource(%s) failed: %v", resourceID, err)
 
-		return err
-	}
+	// 初始数据先屏蔽掉，减少db操作
+	// if err := rm.createResources(r); err != nil {
+	// 	blog.Errorf("crm: create resource(%s) failed: %v", resourceID, err)
+
+	// 	return err
+	// }
 
 	rm.registeredResourceMap[resourceID] = r
 	return nil
@@ -621,6 +679,7 @@ func (rm *resourceManager) listResources(status ...resourceStatus) ([]*resource,
 	opts := commonMySQL.NewListOptions()
 	opts.In("status", status)
 	opts.Limit(-1)
+	opts.Gt("update_at", time.Now().Add(-24*time.Hour))
 	trl, _, err := rm.mysql.ListResource(opts)
 	if err != nil {
 		blog.Errorf("crm: list resources with status(%v) failed: %v", status, err)
@@ -641,26 +700,38 @@ func (rm *resourceManager) createResources(r *resource) error {
 
 func (rm *resourceManager) saveResources(r *resource) error {
 	rm.registeredResourceMapLock.Lock()
-	defer rm.registeredResourceMapLock.Unlock()
+	// defer rm.registeredResourceMapLock.Unlock()
 
 	rm.registeredResourceMap[r.resourceID] = r
 	if r.status == resourceStatusReleased {
 		delete(rm.registeredResourceMap, r.resourceID)
 	}
+	tr := resource2Table(r)
+	rm.registeredResourceMapLock.Unlock()
 
-	return rm.mysql.PutResource(resource2Table(r))
+	return rm.mysql.PutResource(tr)
+}
+
+func (rm *resourceManager) updateResourcesCache(r *resource) error {
+	rm.registeredResourceMapLock.Lock()
+	defer rm.registeredResourceMapLock.Unlock()
+
+	rm.registeredResourceMap[r.resourceID] = r
+
+	return nil
 }
 
 func (rm *resourceManager) getResources(resourceID string) (*resource, error) {
-	rm.registeredResourceMapLock.Lock()
-	defer rm.registeredResourceMapLock.Unlock()
+	rm.registeredResourceMapLock.RLock()
+	defer rm.registeredResourceMapLock.RUnlock()
 
 	r, ok := rm.registeredResourceMap[resourceID]
 	if !ok {
 		return nil, ErrorResourceNoExist
 	}
 
-	return copyResource(r), nil
+	// return copyResource(r), nil
+	return r.copy(), nil
 }
 
 func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceInfo, error) {
@@ -668,7 +739,23 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		return nil, ErrorManagerNotRunning
 	}
 
+	var t1start, t1end int64
+	var t2start, t2end int64
+	var t3start, t3end int64
+	defer func() {
+		d1 := t1end - t1start
+		d2 := t2end - t2start
+		d3 := t3end - t3start
+		if d1 > 2 || d2 > 2 || d3 > 2 {
+			blog.Infof("crm: resourceID(%s) user(%s) too long spent %d seconds to getServerRealName,"+
+				"%d to GetServerStatus,%d to freshDeployingStatus",
+				resourceID, user, d1, d2, d3)
+		}
+	}()
+
+	t1start = time.Now().Unix()
 	targetID, err := rm.getServerRealName(resourceID)
+	t1end = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("crm: get service info for resource(%s) user(%s), get server real name failed: %v",
 			resourceID, user, err)
@@ -678,7 +765,10 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		blog.Errorf("crm: get service info for resource(%s) user(%s), get handlerMap nil", resourceID, user)
 		return nil, fmt.Errorf("handlerMap nil")
 	}
+
+	t2start = time.Now().Unix()
 	info, err := rm.operator.GetServerStatus(rm.conf.BcsClusterID, rm.handlerMap[user].GetNamespace(), targetID)
+	t2end = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("crm: get service info for resource(%s) target(%s) user(%s) namespace(%s) failed: %v",
 			resourceID, targetID, user, rm.handlerMap[user].GetNamespace(), err)
@@ -692,14 +782,19 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 		terminated = true
 	}
 
+	t3start = time.Now().Unix()
 	rm.freshDeployingStatus(resourceID, user, info.CurrentInstances, terminated)
+	t3end = time.Now().Unix()
+
 	return info, nil
 }
 
-func (rm *resourceManager) isServicePreparing(resourceID, user string) (bool, error) {
+func (rm *resourceManager) isServicePreparing(resourceID string) (bool, error) {
 	if !rm.running {
 		return false, ErrorManagerNotRunning
 	}
+	rm.lockResource(resourceID)
+	defer rm.unlockResource(resourceID)
 
 	r, err := rm.getResources(resourceID)
 	// if resource not exist, it's meet "no preparing"
@@ -737,16 +832,17 @@ func (rm *resourceManager) getServerRealName(resourceID string) (string, error) 
 
 func (rm *resourceManager) getFreeInstances(
 	condition map[string]string,
-	function op.InstanceFilterFunction) (int, string, error) {
+	function op.InstanceFilterFunction,
+	caller string) (int, string, error) {
 
-	return rm.nodeInfoPool.GetFreeInstances(condition, function)
+	return rm.nodeInfoPool.GetFreeInstances(condition, function, caller)
 }
 
-func (rm *resourceManager) releaseNoReadyInstance(key string, instance int) {
+func (rm *resourceManager) releaseNoReadyInstance(key string, instance int, caller string) {
 	now := time.Now()
 	for ; ; time.Sleep(syncTimeGap) {
 		if rm.nodeInfoPool.GetLastUpdateTime().After(now) {
-			rm.nodeInfoPool.ReleaseNoReadyInstance(key, instance)
+			rm.nodeInfoPool.ReleaseNoReadyInstance(key, instance, caller)
 			break
 		}
 	}
@@ -762,17 +858,17 @@ func (rm *resourceManager) launch(
 	}
 
 	hasBroker := false
-	needTrace := false
+	// needTrace := false
 
 	rm.lockResource(resourceID)
 	defer func() {
 		rm.unlockResource(resourceID)
-		if needTrace {
-			if !hasBroker || !rm.isFinishDeploying(resourceID, user) {
-				// begin to trace resource until it finish deploying
-				go rm.trace(resourceID, user)
-			}
-		}
+		// if needTrace {
+		// 	if !hasBroker || !rm.isFinishDeploying(resourceID, user) {
+		// 		// begin to trace resource until it finish deploying
+		// 		go rm.trace(resourceID, user)
+		// 	}
+		// }
 	}()
 
 	r, err := rm.getResources(resourceID)
@@ -787,6 +883,7 @@ func (rm *resourceManager) launch(
 		blog.Errorf("crm: try launching service failed, resource(%s) user(%s): %v", resourceID, user, err)
 		return err
 	}
+	blog.Infof("crm: try launching service, resource(%s) for user(%s)", resourceID, user)
 
 	// specify city
 	originCity := r.param.City
@@ -808,12 +905,15 @@ func (rm *resourceManager) launch(
 		return ErrorBrokerNotEnoughResources
 	}
 
+	var condition map[string]string
+	var instance int
+	var key string
 	if !hasBroker {
-		condition := map[string]string{
+		condition = map[string]string{
 			op.AttributeKeyCity:     r.param.City,
 			op.AttributeKeyPlatform: r.param.Platform,
 		}
-		instance, key, err := rm.getFreeInstances(condition, function)
+		instance, key, err = rm.getFreeInstances(condition, function, resourceID)
 		if err == engine.ErrorNoEnoughResources || err == ErrorBrokerNotEnoughResources {
 			return err
 		}
@@ -829,9 +929,37 @@ func (rm *resourceManager) launch(
 
 		r.noReadyInstance = instance
 		r.resourceBlockKey = key
+		r.requestInstance = instance
+	}
 
-		blog.Infof("crm: try to launch service with resource(%s) instance(%d) for user(%s)",
-			resourceID, instance, user)
+	// 在启动协程前，将resource刷新到内存，其它协程依赖该数据
+	// r.status = resourceStatusDeploying
+	rm.updateResourcesCache(r)
+	newRes, err := rm.getResources(resourceID)
+	if err != nil {
+		blog.Errorf("crm: try get resource copy for resource(%s) user(%s) failed: %v",
+			resourceID, user, err)
+		return err
+	}
+	// 将涉及到外部接口（资源分配和写数据库操作）单独起协程执行，避免阻塞pick流程
+	go rm.realLaunch(hasBroker, resourceID, user, newRes, condition, instance, originCity)
+
+	return nil
+}
+
+func (rm *resourceManager) realLaunch(
+	hasBroker bool,
+	resourceID, user string,
+	r *resource,
+	condition map[string]string,
+	instance int,
+	originCity string) error {
+
+	blog.Infof("crm: try to real launch service with resource(%s) instance(%d) for user(%s)",
+		resourceID, instance, user)
+
+	var err error
+	if !hasBroker {
 		if err = rm.operator.LaunchServer(rm.conf.BcsClusterID, op.BcsLaunchParam{
 			Name:               resourceID,
 			Namespace:          rm.handlerMap[user].GetNamespace(),
@@ -845,30 +973,41 @@ func (rm *resourceManager) launch(
 			blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
 			// if launch failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+			if r.noReadyInstance > 0 {
+				rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+			}
 			return err
 		}
-
-		r.requestInstance = instance
 	}
 
+	// TODO : 这个地方可能会导致资源泄漏（远程资源创建了，但是记录db失败，如果这时server重启，则没办法跟踪和释放）；
+	//        概率比较小，先不处理
 	r.status = resourceStatusDeploying
-	if err = rm.saveResources(r); err != nil {
+	rm.lockResource(resourceID)
+	err = rm.saveResources(r)
+	rm.unlockResource(resourceID)
+	if err != nil {
 		blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
 			resourceID, user, err)
 
+		// 不从这儿返回失败，后续的 rm.trace 还有机会继续写db
 		// if save resource failed, clean the dirty data in noReadyInstance
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-		return err
+		// go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+
+		// return err
 	}
 
-	needTrace = true
+	if !hasBroker || !rm.isFinishDeploying(resourceID, user) {
+		// begin to trace resource until it finish deploying
+		go rm.trace(resourceID, user)
+	}
 
 	blog.Infof(
 		"crm: success to launch service with resource(%s) instance(%d) "+
 			"for user(%s) in city(%s) from originCity(%s)",
 		resourceID, r.requestInstance, user, r.param.City, originCity,
 	)
+
 	return nil
 }
 
@@ -907,7 +1046,7 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 		condition := map[string]string{
 			op.AttributeKeyCity: r.param.City,
 		}
-		deltaInstance, key, err := rm.getFreeInstances(condition, function)
+		deltaInstance, key, err := rm.getFreeInstances(condition, function, resourceID)
 		if err != nil {
 			blog.Errorf("crm: try get free instances for resource(%s) user(%s) failed: %v",
 				resourceID, user, err)
@@ -927,7 +1066,10 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 				resourceID, r.requestInstance, targetInstance, user, err)
 
 			// if scale failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+			if r.noReadyInstance > 0 {
+				rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+			}
+
 			return err
 		}
 
@@ -939,7 +1081,9 @@ func (rm *resourceManager) scale(resourceID, user string, function op.InstanceFi
 		blog.Errorf("crm: try scaling service, save resource(%s) for user(%s) failed: %v", resourceID, user, err)
 
 		// if save resource failed, clean the dirty data in noReadyInstance
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		if r.noReadyInstance > 0 {
+			rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
+		}
 		return err
 	}
 
@@ -991,8 +1135,7 @@ func (rm *resourceManager) release(resourceID, user string) error {
 	}
 
 	if r.noReadyInstance > 0 {
-		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-		r.noReadyInstance = 0
+		rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
 	}
 	r.status = resourceStatusReleased
 	if err = rm.saveResources(r); err != nil {
@@ -1042,9 +1185,10 @@ func (rm *resourceManager) checkBroker(broker *Broker) {
 		for i := 0; i < delta; i++ {
 			if err := broker.Launch(); err != nil {
 				switch err {
-				case ErrorBrokerNotEnoughResources, ErrorBrokeringUnderCoolingTime:
-					blog.Errorf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
+				case ErrorBrokeringUnderCoolingTime, ErrorBrokerNotEnoughResources:
+					blog.Warnf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
 						broker.name, broker.user, err)
+
 					return
 				}
 				blog.Errorf("crm: try launching resource for broker(%s) with user(%s) failed: %v",
@@ -1118,7 +1262,7 @@ func (hwu *handlerWithUser) GetServiceInfo(resourceID string) (*op.ServiceInfo, 
 
 // IsServicePreparing
 func (hwu *handlerWithUser) IsServicePreparing(resourceID string) (bool, error) {
-	return hwu.mgr.isServicePreparing(hwu.resourceID(resourceID), hwu.user)
+	return hwu.mgr.isServicePreparing(hwu.resourceID(resourceID))
 }
 
 // Release
@@ -1136,7 +1280,7 @@ func (hwu *handlerWithUser) AddBroker(
 	return hwu.mgr.addBroker(name, hwu.user, strategyType, strategy, param)
 }
 
-//GetInstanceType return the instanceType from key
+// GetInstanceType return the instanceType from key
 func (hwu *handlerWithUser) GetInstanceType(platform string, group string) *config.InstanceType {
 	retIst := config.InstanceType{
 		CPUPerInstance: hwu.mgr.conf.BcsCPUPerInstance,
@@ -1259,8 +1403,26 @@ func resource2Table(r *resource) *TableResource {
 	}
 }
 
-func copyResource(res *resource) *resource {
-	r := new(resource)
-	*r = *res
-	return r
+// func copyResource(res *resource) *resource {
+// 	r := new(resource)
+// 	*r = *res
+// 	return r
+// }
+
+func (r *resource) copy() *resource {
+	newr := resource{
+		resourceID:       r.resourceID,
+		user:             r.user,
+		param:            r.param.copy(),
+		resourceBlockKey: r.resourceBlockKey,
+		noReadyInstance:  r.noReadyInstance,
+		requestInstance:  r.requestInstance,
+		status:           r.status,
+		brokerResourceID: r.brokerResourceID,
+		brokerName:       r.brokerName,
+		brokerSold:       r.brokerSold,
+		initTime:         r.initTime,
+	}
+
+	return &newr
 }

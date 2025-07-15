@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -27,12 +28,12 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 const (
-	ExitErrorCode = 99
-
+	ExitErrorCode            = 99
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
 )
 
@@ -149,6 +150,8 @@ func (s *Sandbox) Fork() *Sandbox {
 
 // ExecScripts run the scripts
 func (s *Sandbox) ExecScripts(src string) (int, error) {
+	blog.Infof("sanbox:ready exec script:%s", src)
+
 	caller, options := GetCallerAndOptions()
 
 	s.spa = &syscall.SysProcAttr{
@@ -156,6 +159,69 @@ func (s *Sandbox) ExecScripts(src string) (int, error) {
 		HideWindow: true,
 	}
 	return s.execCommand(caller)
+}
+
+func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
+	blog.Infof("sanbox:ready exec raw script:%s", src)
+
+	caller, _ := GetCallerAndOptions()
+
+	s.spa = &syscall.SysProcAttr{
+		CmdLine:    src,
+		HideWindow: true,
+	}
+	return s.execCommand(caller)
+}
+
+// ExecCommand run the origin commands by file
+func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
+	fullArgs := strings.Join(arg, " ")
+	argsFile, err := os.CreateTemp(GetHandlerTmpDir(s, bt), "args-*.txt")
+	if err != nil {
+		blog.Errorf("sanbox: exec raw script in file failed to create tmp file, error:%s", err.Error())
+		return -1, err
+	}
+	blog.Infof("sanbox:ready exec raw script in file %s with arg len %d", argsFile.Name(), len(arg))
+	err = os.WriteFile(argsFile.Name(), []byte(fullArgs), os.ModePerm)
+	if err != nil {
+		argsFile.Close() // 关闭文件
+		blog.Errorf("sasanbox: exec raw script in file failed to write tmp file %s, error:%s", argsFile.Name(), err.Error())
+		return -1, err
+	}
+	argsFile.Close() // 关闭文件
+	code, err := s.execCommand(name, "@"+argsFile.Name())
+	if err != nil {
+		blog.Errorf("sanbox: exec raw script in file failed to exec command [%s] %s in file (%s) , error:%s", name, fullArgs, argsFile.Name(), err.Error())
+		return code, err
+	}
+	blog.Infof("sanbox: success to exec raw script in file %s, delete the arg file now", argsFile.Name())
+	os.Remove(argsFile.Name())
+	return code, err
+}
+
+// GetHandlerTmpDir get temp dir by booster type
+func GetHandlerTmpDir(sandBox *Sandbox, bt string) string {
+	var baseTmpDir string
+	if sandBox == nil {
+		baseTmpDir = os.TempDir()
+	} else {
+		if baseTmpDir = sandBox.Env.GetOriginEnv("TMPDIR"); baseTmpDir == "" {
+			baseTmpDir = os.TempDir()
+		}
+	}
+
+	if baseTmpDir != "" {
+		fullTmpDir := path.Join(baseTmpDir, protocol.BKDistDir, bt)
+		if !dcFile.Stat(fullTmpDir).Exist() {
+			if err := os.MkdirAll(fullTmpDir, os.ModePerm); err != nil {
+				blog.Warnf("common util: create tmp dir failed with error:%v", err)
+				return ""
+			}
+		}
+		return fullTmpDir
+	}
+
+	return ""
 }
 
 // ExecScriptsWithMessage run the scripts and return the output
@@ -233,6 +299,8 @@ func (s *Sandbox) ExecCommand(name string, arg ...string) (int, error) {
 }
 
 func (s *Sandbox) execCommand(name string, arg ...string) (int, error) {
+	blog.Infof("sanbox:ready run cmd:%s %v", name, arg)
+
 	if s.Env == nil {
 		s.Env = env.NewSandbox(os.Environ())
 	}
@@ -260,6 +328,10 @@ func (s *Sandbox) execCommand(name string, arg ...string) (int, error) {
 	// if not relative path find the command in PATH
 	if !strings.HasPrefix(name, ".") {
 		name, err = s.LookPath(name)
+
+		if err != nil {
+			blog.Infof("sanbox:LookPath %s with error:%v", name, err)
+		}
 	}
 
 	var cmd *exec.Cmd
@@ -282,6 +354,9 @@ func (s *Sandbox) execCommand(name string, arg ...string) (int, error) {
 	}
 
 	if err := cmd.Run(); err != nil {
+		// blog.Infof("sanbox:run cmd:%+v with error:%v", cmd, err)
+		blog.Infof("sanbox:run cmd:%+v with error:%v,spa:%+v\n", *cmd, err, *cmd.SysProcAttr)
+
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 				return status.ExitStatus(), err
@@ -492,4 +567,8 @@ func RedirectStderror(f string) error {
 	}
 
 	return nil
+}
+
+func NeedSearchToolchain(input *env.Sandbox) bool {
+	return false
 }

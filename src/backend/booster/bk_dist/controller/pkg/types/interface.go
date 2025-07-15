@@ -84,6 +84,9 @@ type Mgr interface {
 
 	// Get first workid
 	GetFirstWorkID() (string, error)
+
+	// Get first bazelNoLauncher workid
+	GetFirstBazelNoLauncherWorkID() (string, error)
 }
 
 // RemoteMgr describe a manager for handling all actions with remote workers for work
@@ -107,7 +110,11 @@ type RemoteMgr interface {
 
 	// dec remote jobs
 	DecRemoteJobs()
+
+	WaitingListLen() int
 }
+
+type CallbackCheckResource func() string
 
 // LocalMgr describe a manager for handling all actions with local execution for work
 type LocalMgr interface {
@@ -122,10 +129,14 @@ type LocalMgr interface {
 	// unlock local slot
 	UnlockSlots(usage dcSDK.JobUsage, weight int32)
 
+	// try lock local slot
+	TryLockSlots(usage dcSDK.JobUsage, weight int32) (bool, error)
+
 	// do task execution
 	ExecuteTask(req *LocalTaskExecuteRequest,
 		globalWork *Work,
-		withlocalresource bool) (*LocalTaskExecuteResult, error)
+		canUseLocalIdleResource bool,
+		f CallbackCheckResource) (*LocalTaskExecuteResult, error)
 
 	// get caches in pump mode
 	GetPumpCache() (*analyser.FileCache, *analyser.RootCache)
@@ -172,6 +183,11 @@ type ResourceMgr interface {
 
 	// check whether apply finished
 	IsApplyFinished() bool
+
+	// TODO : check whether support abs path
+	SupportAbsPath() bool
+
+	GetCacheList(projectid string) (*v2.CacheConfigList, error)
 }
 
 // BasicMgr describe a manager for handling all actions with work basic issues
@@ -233,11 +249,20 @@ type BasicMgr interface {
 	// update toolchain
 	SetToolChain(toolchain *ToolChain) error
 
+	//is tool exsited
+	IsToolChainExsited(key string) bool
+
 	// get toolchain files by key
 	GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error)
 
+	// get toolchain relative files by key
+	GetToolChainRelativeFiles(key string) ([]dcSDK.FileDesc, int64, error)
+
 	// get toolchain remote path by key
 	GetToolChainRemotePath(key string) (string, error)
+
+	// get toolchain remote Relative path by key
+	GetToolChainRelativeRemotePath(key string) (string, error)
 
 	// get toolchain timestamp by key
 	GetToolChainTimestamp(key string) (int64, error)
@@ -247,4 +272,9 @@ type BasicMgr interface {
 
 	// minus registered count for batch mode
 	DecRegistered()
+
+	// search toolchain files by cmd, ensure only execute once
+	SearchToolChain(cmd, path string) error
+
+	GetCacheServer() []string
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/conf"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	"github.com/shirou/gopsutil/process"
 	commandCli "github.com/urfave/cli"
@@ -167,7 +168,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 
 	controllerIP := ControllerIP
 	if c.Bool(FlagDashboard) {
-		if ipList := dcUtil.GetIPAddress(); len(ipList) > 0 {
+		if ipList := util.GetIPAddress(); len(ipList) > 0 {
 			controllerIP = ipList[0]
 		}
 	}
@@ -236,6 +237,24 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		remoteRetryTimes = c.Int(FlagRemoteRetryTimes)
 	}
 
+	withDynamicPort := c.Bool(FlagDynamicPort)
+	// bazel 暂时不支持动态端口，没办法解决参数变化的问题
+	if c.Bool(FlagBazel) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus) || c.Bool(FlagBazelNoLauncher) {
+		withDynamicPort = false
+	}
+
+	cleanTmpFilesDayAgo := 1
+	if c.IsSet(FlagCleanTmpFilesDayAgo) && c.Int(FlagCleanTmpFilesDayAgo) >= 0 {
+		cleanTmpFilesDayAgo = c.Int(FlagCleanTmpFilesDayAgo)
+	}
+
+	// cache_server, _ := getCacheServerHost(c)
+
+	resultCacheTriggleSecs := -1
+	if c.IsSet(FlagResultCacheTriggleSecs) && c.Int(FlagResultCacheTriggleSecs) >= 0 {
+		resultCacheTriggleSecs = c.Int(FlagResultCacheTriggleSecs)
+	}
+
 	// generate a new booster.
 	cmdConfig := dcType.BoosterConfig{
 		Type:      dcType.GetBoosterType(bt),
@@ -245,62 +264,70 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 		Args:      c.String(FlagArgs),
 		Cmd:       strings.Join(os.Args, " "),
 		Works: dcType.BoosterWorks{
-			Stdout:               os.Stdout,
-			Stderr:               os.Stderr,
-			RunDir:               runDir,
-			User:                 usr.Username,
-			LimitPerWorker:       c.Int(FlagLimit),
-			Jobs:                 c.Int(FlagJobs),
-			MaxJobs:              c.Int(FlagMaxJobs),
-			Presetjobs:           c.Int(FlagPresetJobs),
-			MaxDegradedJobs:      c.Int(FlagMaxDegradedJobs),
-			MaxLocalTotalJobs:    defaultCPULimit(c.Int(FlagMaxLocalTotalJobs)),
-			MaxLocalPreJobs:      c.Int(FlagMaxLocalPreJobs),
-			MaxLocalExeJobs:      c.Int(FlagMaxLocalExeJobs),
-			MaxLocalPostJobs:     c.Int(FlagMaxLocalPostJobs),
-			HookPreloadLibPath:   c.String(FlagHookPreloadLib),
-			HookConfigPath:       c.String(FlagHookConfig),
-			HookMode:             c.Bool(FlagHook),
-			NoLocal:              c.Bool(FlagNoLocal),
-			Local:                c.Bool(FlagLocal),
-			WorkerSideCache:      c.Bool(FlagWorkerSideCache),
-			LocalRecord:          c.Bool(FlagLocalRecord),
-			Degraded:             c.Bool(FlagDegraded),
-			ExecutorLogLevel:     c.String(FlagExecutorLog),
-			Environments:         make(map[string]string),
-			Bazel:                c.Bool(FlagBazel),
-			BazelPlus:            c.Bool(FlagBazelPlus),
-			Bazel4Plus:           c.Bool(FlagBazel4Plus),
-			Launcher:             c.Bool(FlagLauncher) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus),
-			AdditionFiles:        c.StringSlice(FlagAdditionFile),
-			WorkerList:           c.StringSlice(FlagWorkerList),
-			CheckMd5:             c.Bool(FlagCheckMd5),
-			OutputEnvJSONFile:    c.StringSlice(FlagOutputEnvJSONFile),
-			OutputEnvSourceFile:  c.StringSlice(FlagOutputEnvSourceFile),
-			CommitSuicide:        c.Bool(FlagCommitSuicide),
-			ToolChainJSONFile:    c.String(FlagToolChainJSONFile),
-			SupportDirectives:    c.Bool(FlagDirectives),
-			GlobalSlots:          c.Bool(FlagGlobalSlots),
-			IOTimeoutSecs:        c.Int(FlagIOTimeoutSecs),
-			Pump:                 c.Bool(FlagPump),
-			PumpDisableMacro:     c.Bool(FlagPumpDisableMacro),
-			PumpIncludeSysHeader: c.Bool(FlagPumpIncludeSysHeader),
-			PumpCheck:            c.Bool(FlagPumpCheck),
-			PumpCache:            c.Bool(FlagPumpCache),
-			PumpCacheDir:         c.String(FlagPumpCacheDir),
-			PumpCacheSizeMaxMB:   pumpCacheSizeMaxMB,
-			PumpCacheRemoveAll:   c.Bool(FlagPumpCacheRemoveAll),
-			PumpBlackList:        c.StringSlice(FlagPumpBlackList),
-			PumpMinActionNum:     int32(pumpMinActionNum),
-			PumpDisableStatCache: c.Bool(FlagPumpDisableStatCache),
-			PumpSearchLink:       c.Bool(FlagPumpSearchLink),
-			PumpSearchLinkFile:   c.String(FlagPumpSearchLinkFile),
-			PumpSearchLinkDir:    c.StringSlice(FlagPumpSearchLinkDir),
-			PumpLstatByDir:       c.Bool(FlagPumpLstatByDir),
-			ForceLocalList:       c.StringSlice(FlagForceLocalList),
-			NoWork:               c.Bool(FlagNoWork),
-			WriteMemroy:          c.Bool(FlagWriteMemroMemroy),
-			IdleKeepSecs:         c.Int(FlagIdleKeepSecs),
+			Stdout:                 os.Stdout,
+			Stderr:                 os.Stderr,
+			RunDir:                 runDir,
+			User:                   usr.Username,
+			LimitPerWorker:         c.Int(FlagLimit),
+			Jobs:                   c.Int(FlagJobs),
+			MaxJobs:                c.Int(FlagMaxJobs),
+			Presetjobs:             c.Int(FlagPresetJobs),
+			MaxDegradedJobs:        c.Int(FlagMaxDegradedJobs),
+			MaxLocalTotalJobs:      defaultCPULimit(c.Int(FlagMaxLocalTotalJobs)),
+			MaxLocalPreJobs:        c.Int(FlagMaxLocalPreJobs),
+			MaxLocalExeJobs:        c.Int(FlagMaxLocalExeJobs),
+			MaxLocalPostJobs:       c.Int(FlagMaxLocalPostJobs),
+			HookPreloadLibPath:     c.String(FlagHookPreloadLib),
+			HookConfigPath:         c.String(FlagHookConfig),
+			HookMode:               c.Bool(FlagHook),
+			NoLocal:                c.Bool(FlagNoLocal),
+			Local:                  c.Bool(FlagLocal),
+			WorkerSideCache:        c.Bool(FlagWorkerSideCache),
+			LocalRecord:            c.Bool(FlagLocalRecord),
+			Degraded:               c.Bool(FlagDegraded),
+			ExecutorLogLevel:       c.String(FlagExecutorLog),
+			Environments:           make(map[string]string),
+			Bazel:                  c.Bool(FlagBazel),
+			BazelPlus:              c.Bool(FlagBazelPlus),
+			Bazel4Plus:             c.Bool(FlagBazel4Plus),
+			BazelNoLauncher:        c.Bool(FlagBazelNoLauncher),
+			Launcher:               c.Bool(FlagLauncher) || c.Bool(FlagBazelPlus) || c.Bool(FlagBazel4Plus),
+			AdditionFiles:          c.StringSlice(FlagAdditionFile),
+			WorkerList:             c.StringSlice(FlagWorkerList),
+			CheckMd5:               c.Bool(FlagCheckMd5),
+			OutputEnvJSONFile:      c.StringSlice(FlagOutputEnvJSONFile),
+			OutputEnvSourceFile:    c.StringSlice(FlagOutputEnvSourceFile),
+			CommitSuicide:          c.Bool(FlagCommitSuicide),
+			ToolChainJSONFile:      c.String(FlagToolChainJSONFile),
+			SupportDirectives:      c.Bool(FlagDirectives),
+			GlobalSlots:            c.Bool(FlagGlobalSlots),
+			IOTimeoutSecs:          c.Int(FlagIOTimeoutSecs),
+			Pump:                   c.Bool(FlagPump),
+			PumpDisableMacro:       c.Bool(FlagPumpDisableMacro),
+			PumpIncludeSysHeader:   c.Bool(FlagPumpIncludeSysHeader),
+			PumpCheck:              c.Bool(FlagPumpCheck),
+			PumpCache:              c.Bool(FlagPumpCache),
+			PumpCacheDir:           c.String(FlagPumpCacheDir),
+			PumpCacheSizeMaxMB:     pumpCacheSizeMaxMB,
+			PumpCacheRemoveAll:     c.Bool(FlagPumpCacheRemoveAll),
+			PumpBlackList:          c.StringSlice(FlagPumpBlackList),
+			PumpMinActionNum:       int32(pumpMinActionNum),
+			PumpDisableStatCache:   c.Bool(FlagPumpDisableStatCache),
+			PumpSearchLink:         c.Bool(FlagPumpSearchLink),
+			PumpSearchLinkFile:     c.String(FlagPumpSearchLinkFile),
+			PumpSearchLinkDir:      c.StringSlice(FlagPumpSearchLinkDir),
+			PumpLstatByDir:         c.Bool(FlagPumpLstatByDir),
+			PumpCorrectCap:         c.Bool(FlagPumpCorrectCap),
+			ForceLocalList:         c.StringSlice(FlagForceLocalList),
+			NoWork:                 c.Bool(FlagNoWork),
+			WriteMemroy:            c.Bool(FlagWriteMemroMemroy),
+			IdleKeepSecs:           c.Int(FlagIdleKeepSecs),
+			CleanTmpFilesDayAgo:    cleanTmpFilesDayAgo,
+			SearchToolchain:        c.Bool(FlagSearchToolchain),
+			IgnoreHttpStatus:       c.Bool(FlagIgnoreHttpStatus),
+			ResultCacheList:        c.StringSlice(FlagResultCacheList),
+			ResultCacheType:        c.Int(FlagResultCacheType),
+			ResultCacheTriggleSecs: resultCacheTriggleSecs,
 		},
 
 		Transport: dcType.BoosterTransport{
@@ -308,7 +335,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			ServerHost:             ServerHost,
 			Timeout:                5 * time.Second,
 			HeartBeatTick:          5 * time.Second,
-			InspectTaskTick:        100 * time.Millisecond,
+			InspectTaskTick:        1000 * time.Millisecond,
 			TaskPreparingTimeout:   time.Duration(waitResourceSeconds) * time.Second,
 			PrintTaskInfoEveryTime: 5,
 			CommitSuicideCheckTick: 5 * time.Second,
@@ -319,7 +346,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			Scheme:  ControllerScheme,
 			IP:      controllerIP,
 			Port:    ControllerPort,
-			Timeout: 5 * time.Second,
+			Timeout: 10 * time.Second,
 			LogDir:  getLogDir(c.String(FlagLogDir)),
 			LogVerbosity: func() int {
 				// debug模式下, --v=3
@@ -341,10 +368,18 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			ResIdleSecsForFree:  resIdleSecsForFree,
 			SendCork:            c.Bool(FlagSendCork),
 			SendFileMemoryLimit: c.Int64(FlagSendFileMemoryLimit),
+			SendMemoryCache:     c.Bool(FlagSendMemoryCache),
 			NetErrorLimit:       netErrLimit,
 			RemoteRetryTimes:    remoteRetryTimes,
 			EnableLink:          c.Bool(FlagEnableLink),
 			EnableLib:           c.Bool(FlagEnableLib),
+			LongTCP:             c.Bool(FlagLongTCP),
+			UseDefaultWorker:    c.Bool(FlagUseDefaultWorker) || c.Bool(FlagBazelNoLauncher),
+			DynamicPort:         withDynamicPort,
+			WorkerOfferSlot:     c.Bool(FlagWorkerOfferSlot),
+			ResultCacheIndexNum: c.Int(FlagResultCacheIndexNum),
+			ResultCacheFileNum:  c.Int(FlagResultCacheFileNum),
+			PreferLocal:         c.Bool(FlagPreferLocal),
 		},
 	}
 
@@ -540,6 +575,20 @@ func getServerFromConfig(c *commandCli.Context) (string, error) {
 	blog.Warnf("booster-command: no server specified, none of --server, user home config, or global config")
 	return "", fmt.Errorf("no server specified")
 }
+
+// func getCacheServerHost(c *commandCli.Context) (string, error) {
+// 	if c.IsSet(FlagCacheServer) {
+// 		s := c.String(FlagCacheServer)
+// 		blog.Infof("booster-command: use cache server from command line --cache_server specified: %s", s)
+// 		return s, nil
+// 	}
+
+// 	if c.Bool(FlagTest) {
+// 		return TestCacheServerHost, nil
+// 	}
+
+// 	return ProdCacheServerHost, nil
+// }
 
 func getConfig(path string) (*Config, error) {
 	f, err := os.Open(path)

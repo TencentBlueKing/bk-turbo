@@ -80,7 +80,7 @@ func receiveCommonHead(client *TCPClient) (*protocol.PBHead, error) {
 	// receive head token
 	data, datalen, err := client.ReadData(protocol.TOKENBUFLEN)
 	if err != nil {
-		blog.Warnf("failed to receive head token")
+		blog.Warnf("failed to receive head token with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("succeed to recieve head token %s", string(data))
@@ -142,14 +142,14 @@ func encodeSynctimeReq() ([]protocol.Message, error) {
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -199,7 +199,7 @@ func receiveSynctimeRsp(client *TCPClient) (*protocol.PBBodySyncTimeRsp, error) 
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -219,7 +219,8 @@ func fillOneFile(
 	filefullpath string,
 	buffer []byte,
 	compresstype protocol.CompressType,
-	fileMode uint32) (protocol.Message, int64, error) {
+	fileMode uint32,
+	cache *fileDataCache) (protocol.Message, int64, error) {
 	message := protocol.Message{
 		Messagetype:  protocol.MessageString,
 		Data:         nil,
@@ -237,9 +238,22 @@ func fillOneFile(
 		if os.FileMode(fileMode)&os.ModeSymlink != 0 || os.FileMode(fileMode).IsDir() {
 			data = []byte("EMPTY")
 		} else {
+			// // cache 先只支持lz4
+			if cache != nil && compresstype == protocol.CompressLZ4 {
+				buf, err := cache.Query(filefullpath, true)
+				blog.Infof("got %d buf from cache", len(*buf))
+				if err == nil {
+					message.Data = *buf
+					outlen := len(*buf)
+					return message, int64(outlen), nil
+				}
+
+				return message, 0, err
+			}
+
 			data, err = ioutil.ReadFile(filefullpath)
 			if err != nil {
-				blog.Warnf("failed to read file[%s]", filefullpath)
+				blog.Warnf("failed to read file[%s] with error:%v", filefullpath, err)
 				return message, 0, err
 			}
 		}
@@ -340,9 +354,9 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 					md5, _ = dcFile.Stat(fullpath).Md5()
 				}
 
-				m, compressedsize, err := fillOneFile(f.FilePath, f.Buffer, f.Compresstype, filemode)
+				m, compressedsize, err := fillOneFile(f.FilePath, f.Buffer, f.Compresstype, filemode, nil)
 				if err != nil {
-					blog.Warnf("failed to encode message for file", f.FilePath)
+					blog.Warnf("failed to encode message for file %s with error:%v", f.FilePath, err)
 					continue
 				}
 
@@ -368,7 +382,7 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 
 	bodydata, err := proto.Marshal(&pbbody)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbbody")
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
 		return nil, err
 	}
 	bodymessage := protocol.Message{
@@ -390,14 +404,14 @@ func encodeCommonDispatchReq(req *dcSDK.BKDistCommand) ([]protocol.Message, erro
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -453,7 +467,7 @@ func receiveCommonDispatchRsp(client *TCPClient, sandbox *syscall.Sandbox) (*pro
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -488,7 +502,7 @@ func receiveCommonDispatchRspBuf(
 	if buflen > 0 {
 		data, datalen, err := client.ReadData(int(buflen))
 		if err != nil {
-			blog.Warnf("failed to receive pb buf")
+			blog.Warnf("failed to receive pb buf with error:%v", err)
 			return err
 		}
 
@@ -719,7 +733,7 @@ func receiveCommonDispatchRspWithoutSaveFile(client *TCPClient) (*protocol.PBBod
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -753,7 +767,7 @@ func receiveCommonDispatchRspBufWithoutSaveFile(
 	if buflen > 0 {
 		data, datalen, err := client.ReadData(int(buflen))
 		if err != nil {
-			blog.Warnf("failed to receive pb buf")
+			blog.Warnf("failed to receive pb buf with error:%v", err)
 			return err
 		}
 
@@ -795,7 +809,10 @@ func receiveCommonDispatchRspBufWithoutSaveFile(
 	return nil
 }
 
-func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([]protocol.Message, error) {
+func encodeSendFileReq(
+	req *dcSDK.BKDistFileSender,
+	sandbox *syscall.Sandbox,
+	cache *fileDataCache) ([]protocol.Message, error) {
 	blog.Debugf("encode send files request to message now")
 
 	// save files
@@ -827,6 +844,30 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 		linkTarget := f.LinkTarget
 		modifytime := f.Lastmodifytime
 
+		// TODO : fresh file info here, avoid file info changed
+		if size > 0 {
+			var newlyInfo *dcFile.Info
+			localdir := filepath.Dir(fullpath)
+			// 如果本地路径和远端不一样，则不能用Lstat
+			if localdir != targetrelativepath {
+				newlyInfo = dcFile.Stat(fullpath)
+			} else {
+				newlyInfo = dcFile.Lstat(fullpath)
+			}
+			if !newlyInfo.Exist() {
+				blog.Warnf("file %f not existed when encode send request", fullpath)
+				continue
+			}
+
+			size = newlyInfo.Size()
+			md5 = ""
+			if f.Md5 != "" {
+				md5, _ = newlyInfo.Md5()
+			}
+			filemode = newlyInfo.Mode32()
+			modifytime = newlyInfo.ModifyTime64()
+		}
+
 		if size <= 0 {
 			pbbody.Inputfiles = append(pbbody.Inputfiles, &protocol.PBFileDesc{
 				Fullpath:           &fullpath,
@@ -842,9 +883,9 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 			continue
 		}
 
-		m, compressedsize, err := fillOneFile(fullpath, f.Buffer, f.Compresstype, filemode)
+		m, compressedsize, err := fillOneFile(fullpath, f.Buffer, f.Compresstype, filemode, cache)
 		if err != nil {
-			blog.Warnf("failed to encode message for file", f.FilePath)
+			blog.Warnf("failed to encode message for file with error:%v", f.FilePath, err)
 			continue
 		}
 
@@ -872,7 +913,7 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 
 	bodydata, err := proto.Marshal(&pbbody)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbbody")
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
 		return nil, err
 	}
 	bodymessage := protocol.Message{
@@ -894,14 +935,14 @@ func encodeSendFileReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) ([
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -957,7 +998,7 @@ func receiveSendFileRsp(client *TCPClient) (*protocol.PBBodySendFileRsp, error) 
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -1015,7 +1056,7 @@ func encodeCheckCacheReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) 
 
 	bodydata, err := proto.Marshal(&pbbody)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbbody")
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
 		return nil, err
 	}
 	bodymessage := protocol.Message{
@@ -1038,14 +1079,14 @@ func encodeCheckCacheReq(req *dcSDK.BKDistFileSender, sandbox *syscall.Sandbox) 
 	}
 	headdata, err := proto.Marshal(&pbhead)
 	if err != nil {
-		blog.Warnf("failed to proto.Marshal pbhead")
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
 		return nil, err
 	}
 	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
 
 	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
 	if err != nil {
-		blog.Warnf("failed to format head token")
+		blog.Warnf("failed to format head token with error:%v", err)
 		return nil, err
 	}
 	headtokenmessage := protocol.Message{
@@ -1097,7 +1138,7 @@ func receiveCheckCacheRsp(client *TCPClient) (*protocol.PBBodyCheckCacheRsp, err
 	// receive body
 	data, datalen, err := client.ReadData(int(bodylen))
 	if err != nil {
-		blog.Warnf("failed to receive pbbody")
+		blog.Warnf("failed to receive pbbody with error:%v", err)
 		return nil, err
 	}
 
@@ -1122,4 +1163,698 @@ func decodeCheckCacheRsp(data *protocol.PBBodyCheckCacheRsp) ([]bool, error) {
 	}
 
 	return results, nil
+}
+
+func encodeQuerySlotReq(req *dcSDK.BKQuerySlot) ([]protocol.Message, error) {
+	blog.Debugf("encode query slot request to message now")
+
+	// encode body and file to message
+	pbbody := protocol.PBBodyQuerySlotReq{}
+
+	pbbody.Priority = &req.Priority
+	pbbody.Waittotaltasknum = &req.WaitTotalTaskNum
+	pbbody.Tasktype = &req.TaskType
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
+
+	// encode head
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_QUERYSLOTREQ
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with error:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}
+
+func receiveQuerySlotRsp(client *TCPClient) (*protocol.PBBodyQuerySlotRsp, error) {
+	blog.Debugf("receive query slot response now")
+
+	// receive head
+	head, err := receiveCommonHead(client)
+	if err != nil {
+		return nil, err
+	}
+
+	if head.GetCmdtype() != protocol.PBCmdType_QUERYSLOTRSP {
+		err := fmt.Errorf("unknown cmd type %v", head.GetCmdtype())
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 || buflen < 0 {
+		err := fmt.Errorf("get invalid body length %d, buf len %d", bodylen, buflen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+	blog.Debugf("got bodylen %d buflen %d", bodylen, buflen)
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with error:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodyQuerySlotRsp{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+		return nil, err
+	}
+
+	return &body, nil
+}
+
+func decodeQuerySlotRsp(data *protocol.PBBodyQuerySlotRsp) (*dcSDK.BKQuerySlotResult, error) {
+	blog.Debugf("decode query slot response now")
+
+	results := dcSDK.BKQuerySlotResult{}
+	results.AvailableSlotNum = data.GetAvailableslotnum()
+	results.Refused = *data.Refused
+	results.Message = *data.Message
+
+	return &results, nil
+}
+
+func EncodeSlotRspAck(consumeslotnum int32) ([]protocol.Message, error) {
+	blog.Debugf("encode query slot rsp ack to message now")
+
+	// encode body and file to message
+	pbbody := protocol.PBBodySlotRspAck{}
+	pbbody.Consumeslotnum = &consumeslotnum
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
+
+	// encode head
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_SLOTRSPACK
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with error:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}
+
+// 拿到的结果是压缩后，无需再压缩
+func encodeReportCacheReq(
+	attributes map[string]string,
+	results []*dcSDK.FileDesc) ([]protocol.Message, error) {
+	blog.Debugf("encode report cache request to message now")
+
+	// save files
+	filemessages := make([]protocol.Message, 0)
+	var filebuflen int64
+
+	// encode body and file to message
+	pbbody := protocol.PBBodyReportResultCacheReq{
+		Attributes:  make([]*protocol.PBAttributesEntry, 0),
+		Resultfiles: make([]*protocol.PBFileDesc, 0),
+	}
+
+	for k, v := range attributes {
+		key := k
+		value := v
+		pbbody.Attributes = append(pbbody.Attributes, &protocol.PBAttributesEntry{
+			Key:   &key,
+			Value: &value,
+		})
+	}
+
+	for _, f := range results {
+		comprsstype := protocol.PBCompressType_LZ4
+		if f.Compresstype == protocol.CompressLZO {
+			comprsstype = protocol.PBCompressType_LZO
+		} else if f.Compresstype == protocol.CompressNone {
+			comprsstype = protocol.PBCompressType_NONE
+		}
+
+		fullpath := f.FilePath
+		size := f.FileSize
+		md5 := f.Md5
+		targetrelativepath := f.Targetrelativepath
+		filemode := f.Filemode
+		linkTarget := f.LinkTarget
+		modifytime := f.Lastmodifytime
+
+		m := protocol.Message{
+			Messagetype:  protocol.MessageString,
+			Data:         f.Buffer,
+			Compresstype: protocol.CompressNone,
+		}
+
+		buflen := int64(len(f.Buffer))
+
+		filebase := filepath.Base(fullpath)
+		pbbody.Resultfiles = append(pbbody.Resultfiles, &protocol.PBFileDesc{
+			Fullpath:           &filebase,
+			Size:               &size,
+			Md5:                &md5,
+			Compresstype:       &comprsstype,
+			Compressedsize:     &buflen,
+			Targetrelativepath: &targetrelativepath,
+			Filemode:           &filemode,
+			Linktarget:         []byte(linkTarget),
+			Modifytime:         &modifytime,
+		})
+
+		filemessages = append(filemessages, m)
+		filebuflen += buflen
+	}
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
+
+	// encode head
+	cmdtype := protocol.PBCmdType_REPORTRESULTCACHEREQ
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with error:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	if len(filemessages) > 0 {
+		messages = append(messages, filemessages...)
+	}
+
+	return messages, nil
+}
+
+func receiveReportCacheRsp(client *TCPClient) (*protocol.PBBodyReportResultCacheRsp, error) {
+	blog.Debugf("receive report cache response now")
+
+	// receive head
+	head, err := receiveCommonHead(client)
+	if err != nil {
+		return nil, err
+	}
+
+	if head.GetCmdtype() != protocol.PBCmdType_REPORTRESULTCACHERSP {
+		err := fmt.Errorf("unknown cmd type %v", head.GetCmdtype())
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 || buflen < 0 {
+		err := fmt.Errorf("get invalid body length %d, buf len %d", bodylen, buflen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+	blog.Debugf("got bodylen %d buflen %d", bodylen, buflen)
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with error:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodyReportResultCacheRsp{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+		return nil, err
+	}
+
+	return &body, nil
+}
+
+func decodeReportCacheRsp(r *protocol.PBBodyReportResultCacheRsp) (*dcSDK.BKReportResultCacheResult, error) {
+	blog.Debugf("decode report cache response now")
+
+	result := dcSDK.BKReportResultCacheResult{
+		RetCode:       *r.Retcode,
+		OutputMessage: *r.Outputmessage,
+		ErrorMessage:  *r.Errormessage,
+	}
+
+	return &result, nil
+}
+
+// -------------QueryCacheIndex-----------------------------
+func encodeQueryCacheIndexReq(attributes map[string]string) ([]protocol.Message, error) {
+	blog.Debugf("encode query cache index request to message now")
+
+	var filebuflen int64
+
+	// encode body and file to message
+	pbbody := protocol.PBBodyQueryResultCacheIndexReq{
+		Attributes: make([]*protocol.PBAttributesEntry, 0),
+	}
+
+	for k, v := range attributes {
+		pbbody.Attributes = append(pbbody.Attributes, &protocol.PBAttributesEntry{
+			Key:   &k,
+			Value: &v,
+		})
+	}
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
+
+	// encode head
+	cmdtype := protocol.PBCmdType_QUERYRESULTCACHEINDEXREQ
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with error:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}
+
+func receiveQueryCacheIndexRsp(client *TCPClient) (*protocol.PBBodyQueryResultCacheIndexRsp, error) {
+	blog.Debugf("receive query cache index response now")
+
+	// receive head
+	head, err := receiveCommonHead(client)
+	if err != nil {
+		return nil, err
+	}
+
+	if head.GetCmdtype() != protocol.PBCmdType_QUERYRESULTCACHEINDEXRSP {
+		err := fmt.Errorf("unknown cmd type %v", head.GetCmdtype())
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	bodylen := head.GetBodylen()
+	if bodylen <= 0 {
+		err := fmt.Errorf("get invalid body length %d", bodylen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+	blog.Debugf("got bodylen %d", bodylen)
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with error:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodyQueryResultCacheIndexRsp{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+		return nil, err
+	}
+
+	return &body, nil
+}
+
+func decodeQueryCacheIndexRsp(
+	r *protocol.PBBodyQueryResultCacheIndexRsp) (*dcSDK.BKQueryResultCacheIndexResult, error) {
+	blog.Debugf("decode report cache index response now")
+
+	result := dcSDK.BKQueryResultCacheIndexResult{
+		ResultIndex: make([]byte, 0),
+	}
+
+	if r != nil {
+		data := r.List
+		buflen := len(r.List)
+		originlength := *r.Originlength
+		if *r.Compresstype == protocol.PBCompressType_LZ4 && buflen > 0 && originlength > 0 {
+			dst := make([]byte, originlength)
+			outdata, err := dcUtil.Lz4Uncompress(data, dst)
+			if err == nil {
+				data = outdata
+				blog.Infof("uncompress result cache index data from %d to %d", buflen, originlength)
+			} else {
+				blog.Warnf("failed to uncompress result cache index data: %v", err)
+				return nil, err
+			}
+		}
+		result.ResultIndex = data
+	}
+
+	return &result, nil
+}
+
+// -------------QueryCacheFile-----------------------------
+func encodeQueryCacheFileReq(attributes map[string]string) ([]protocol.Message, error) {
+	blog.Debugf("encode query cache result file request to message now")
+
+	var filebuflen int64
+
+	// encode body and file to message
+	pbbody := protocol.PBBodyQueryResultCacheFileReq{
+		Attributes: make([]*protocol.PBAttributesEntry, 0),
+	}
+
+	for k, v := range attributes {
+		tempk := k
+		tempv := v
+		pbbody.Attributes = append(pbbody.Attributes, &protocol.PBAttributesEntry{
+			Key:   &tempk,
+			Value: &tempv,
+		})
+	}
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody with error:%v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Debugf("encode body[%s] to size %d", pbbody.String(), bodylen)
+
+	// encode head
+	cmdtype := protocol.PBCmdType_QUERYRESULTCACHEFILEREQ
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with error:%v", err)
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with error:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}
+
+func receiveQueryCacheFileRsp(client *TCPClient) (*protocol.PBBodyQueryResultCacheFileRsp, error) {
+	blog.Debugf("receive query cache file response now")
+
+	// receive head
+	head, err := receiveCommonHead(client)
+	if err != nil {
+		return nil, err
+	}
+
+	if head.GetCmdtype() != protocol.PBCmdType_QUERYRESULTCACHEFILERSP {
+		err := fmt.Errorf("unknown cmd type %v", head.GetCmdtype())
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	bodylen := head.GetBodylen()
+	buflen := head.GetBuflen()
+	if bodylen <= 0 {
+		err := fmt.Errorf("get invalid body length %d", bodylen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+	blog.Debugf("got bodylen %d buflen %d", bodylen, buflen)
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody with error:%v", err)
+		return nil, err
+	}
+
+	// TODO : should by cmd type here
+	body := protocol.PBBodyQueryResultCacheFileRsp{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+		return nil, err
+	}
+
+	// receive buf and save to files
+	if buflen > 0 {
+		if err := receiveQueryCacheFileBuf(client, &body, buflen); err != nil {
+			return nil, err
+		}
+	}
+
+	return &body, nil
+}
+
+func receiveQueryCacheFileBuf(
+	client *TCPClient,
+	body *protocol.PBBodyQueryResultCacheFileRsp,
+	buflen int64) error {
+	blog.Debugf("receive query result cache buff")
+
+	// receive buf
+	if buflen > 0 {
+		data, datalen, err := client.ReadData(int(buflen))
+		if err != nil {
+			blog.Warnf("failed to receive pb buf with error:%v", err)
+			return err
+		}
+
+		var bufstartoffset int64
+		var bufendoffset int64
+		for _, rf := range body.Resultfiles {
+			compressedsize := rf.GetCompressedsize()
+			if compressedsize > int64(datalen)-bufendoffset {
+				err := fmt.Errorf("received buf is not complete, expected[%d], left[%d]",
+					compressedsize, int64(datalen)-bufendoffset)
+				blog.Warnf("%v", err)
+				return err
+			}
+			bufstartoffset = bufendoffset
+			bufendoffset += compressedsize
+			rf.Buffer = data[bufstartoffset:bufendoffset]
+		}
+	}
+
+	return nil
+}
+
+func decodeQueryCacheFileRsp(r *protocol.PBBodyQueryResultCacheFileRsp) (*dcSDK.BKQueryResultCacheFileResult, error) {
+	blog.Debugf("decode query cache file response now")
+
+	result := dcSDK.BKQueryResultCacheFileResult{
+		Resultfiles: make([]dcSDK.FileDesc, 0),
+	}
+
+	if r != nil {
+		for _, rf := range r.Resultfiles {
+			result.Resultfiles = append(result.Resultfiles, dcSDK.FileDesc{
+				FilePath:       rf.GetFullpath(),
+				FileSize:       rf.GetSize(),
+				Md5:            rf.GetMd5(),
+				Compresstype:   getCompresstype(rf.GetCompresstype()),
+				Buffer:         rf.GetBuffer(),
+				CompressedSize: rf.GetCompressedsize(),
+				// Targetrelativepath: rf.GetTargetrelativepath(),
+			})
+		}
+	}
+
+	return &result, nil
 }

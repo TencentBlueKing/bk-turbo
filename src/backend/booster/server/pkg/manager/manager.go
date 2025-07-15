@@ -46,7 +46,7 @@ type Manager interface {
 	GetTask(taskID string) (*engine.TaskBasic, engine.TaskExtension, error)
 
 	// UpdateHeartbeat support update heartbeat for unterminated task
-	UpdateHeartbeat(taskID string) error
+	UpdateHeartbeat(taskID string) (engine.TaskStatusType, error)
 }
 
 // TaskCreateParam describe the param struct when creating a new task

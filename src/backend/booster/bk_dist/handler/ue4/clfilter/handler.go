@@ -21,6 +21,7 @@ import (
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/cc"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/cl"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -40,17 +41,38 @@ type TaskCLFilter struct {
 	// file names
 	dependentFile string
 
-	clhandle *cl.TaskCL
+	clhandle  handler.Handler
+	innertype Compiler
 }
 
-// NewTaskCLFilter get a new cl-filter handler
-func NewTaskCLFilter() handler.Handler {
+type Compiler int
 
-	return &TaskCLFilter{
-		sandbox:     &dcSyscall.Sandbox{},
-		tmpFileList: make([]string, 0, 10),
-		clhandle:    cl.NewCL(),
+const (
+	CompilerCL Compiler = iota
+	CompilerClangCl
+)
+
+// NewTaskCLFilter get a new cl-filter handler
+func NewTaskCLFilter(c Compiler) handler.Handler {
+	if c == CompilerCL {
+		return &TaskCLFilter{
+			sandbox:     &dcSyscall.Sandbox{},
+			tmpFileList: make([]string, 0, 10),
+			clhandle:    cl.NewCL(),
+			innertype:   c,
+		}
 	}
+
+	if c == CompilerClangCl {
+		return &TaskCLFilter{
+			sandbox:     &dcSyscall.Sandbox{},
+			tmpFileList: make([]string, 0, 10),
+			clhandle:    cc.NewTaskCC(),
+			innertype:   c,
+		}
+	}
+
+	return nil
 }
 
 // InitSandbox set sandbox to task-cl-filter
@@ -90,6 +112,14 @@ func (cf *TaskCLFilter) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.Pr
 	return nil, nil
 }
 
+func (cf *TaskCLFilter) CanExecuteWithLocalIdleResource(command []string) bool {
+	if cf.clhandle != nil {
+		return cf.clhandle.CanExecuteWithLocalIdleResource(command)
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 防止预处理跑满本机CPU
 func (cf *TaskCLFilter) PreExecuteNeedLock(command []string) bool {
 	return true
@@ -109,7 +139,7 @@ func (cf *TaskCLFilter) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理, 复用cl-handler的逻辑
-func (cf *TaskCLFilter) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cf *TaskCLFilter) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	return cf.preExecute(command)
 }
 
@@ -123,6 +153,24 @@ func (cf *TaskCLFilter) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (cf *TaskCLFilter) NeedRetryOnRemoteFail(command []string) bool {
+	if cf.clhandle != nil {
+		return cf.clhandle.NeedRetryOnRemoteFail(cf.cldArgs)
+	}
+
+	return false
+}
+
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (cf *TaskCLFilter) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	if cf.clhandle != nil {
+		return cf.clhandle.OnRemoteFail(cf.cldArgs)
+	}
+
+	return nil, dcType.ErrorNone
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (cf *TaskCLFilter) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	if cf.clhandle != nil {
@@ -132,7 +180,7 @@ func (cf *TaskCLFilter) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理, 复用cl-handler的逻辑
-func (cf *TaskCLFilter) PostExecute(r *dcSDK.BKDistResult) error {
+func (cf *TaskCLFilter) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	return cf.postExecute(r)
 }
 
@@ -150,8 +198,8 @@ func (cf *TaskCLFilter) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (cf *TaskCLFilter) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (cf *TaskCLFilter) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // FinalExecute 清理临时文件
@@ -161,16 +209,17 @@ func (cf *TaskCLFilter) FinalExecute(args []string) {
 
 // GetFilterRules add file send filter
 func (cf *TaskCLFilter) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
-	return []dcSDK.FilterRuleItem{
-		{
-			Rule:     dcSDK.FilterRuleFileSuffix,
-			Operator: dcSDK.FilterRuleOperatorEqual,
-			Standard: ".pch",
-		},
-	}, nil
+	// return []dcSDK.FilterRuleItem{
+	// 	{
+	// 		Rule:     dcSDK.FilterRuleFileSuffix,
+	// 		Operator: dcSDK.FilterRuleOperatorEqual,
+	// 		Standard: ".pch",
+	// 	},
+	// }, nil
+	return nil, nil
 }
 
-func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("cf: start pre execute for: %v", command)
 
 	// debugRecordFileName(fmt.Sprintf("cl: start pre execute for: %v", command))
@@ -179,7 +228,7 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, erro
 	dependFile, args, err := ensureCompiler(command)
 	if err != nil {
 		blog.Errorf("cf: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	cf.dependentFile = dependFile
@@ -187,29 +236,54 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, erro
 	blog.Infof("cf: after pre execute, got depend file: [%s], cl cmd:[%s]", cf.dependentFile, cf.cldArgs)
 
 	cf.clhandle.InitSandbox(cf.sandbox)
-	cf.clhandle.SetDepend(cf.dependentFile)
+	if cf.innertype == CompilerCL {
+		realhandle, ok := cf.clhandle.(*cl.TaskCL)
+		if ok {
+			realhandle.SetDepend(cf.dependentFile)
+		}
+	} else if cf.innertype == CompilerClangCl {
+		realhandle, ok := cf.clhandle.(*cc.TaskCC)
+		if ok {
+			realhandle.SetDepend(cf.dependentFile)
+		}
+	}
 
 	return cf.clhandle.PreExecute(args)
 }
 
-func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) error {
+func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("cf: start post execute for: %v", cf.originArgs)
 
-	err := cf.clhandle.PostExecute(r)
-	if err != nil {
-		return err
+	var bkerr dcType.BKDistCommonError
+	if cf.innertype == CompilerCL {
+		realhandle, ok := cf.clhandle.(*cl.TaskCL)
+		if ok {
+			bkerr = realhandle.PostExecuteByCLFilter(r)
+			if bkerr.Error != nil {
+				return bkerr
+			}
+		}
+	} else if cf.innertype == CompilerClangCl {
+		realhandle, ok := cf.clhandle.(*cc.TaskCC)
+		if ok {
+			bkerr = realhandle.PostExecute(r)
+			if bkerr.Error != nil {
+				return bkerr
+			}
+		}
 	}
 
 	// save include to txt file
 	blog.Debugf("cf: ready parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
-	output, err := cf.parseOutput(string(r.Results[0].OutputMessage))
+	filteredout, err := cf.parseOutput(string(r.Results[0].OutputMessage))
 	if err != nil {
-		return err
+		blog.Warnf("cf: parse output(%s) with error:%v", r.Results[0].OutputMessage, err)
+		return dcType.ErrorUnknown
 	}
 
-	r.Results[0].OutputMessage = []byte(output)
+	r.Results[0].OutputMessage = []byte(filteredout)
 	blog.Debugf("cf: after parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
-	return nil
+	return dcType.ErrorNone
 }
 
 func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
@@ -281,4 +355,21 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 	}
 
 	return strings.Join(output, ""), nil
+}
+
+// SupportResultCache check whether this command support result cache
+func (cf *TaskCLFilter) SupportResultCache(command []string) int {
+	if cf.clhandle != nil {
+		return cf.clhandle.SupportResultCache(command)
+	}
+
+	return 0
+}
+
+func (cf *TaskCLFilter) GetResultCacheKey(command []string) string {
+	if cf.clhandle != nil {
+		return cf.clhandle.GetResultCacheKey(command)
+	}
+
+	return ""
 }

@@ -125,6 +125,36 @@ func (c *Example) PostExecuteNeedLock(*dcSDK.BKDistResult) bool {
 func (c *Example) FinalExecute([]string) {
 }
 
+// LocalLockWeight Implement handler.Handler interface methods
+func (c *Example) LocalLockWeight(command []string) int32 {
+	return 1
+}
+
+// NeedRemoteResource Implement handler.Handler interface methods
+func (c *Example) NeedRemoteResource(command []string) bool {
+	return false
+}
+
+// OnRemoteFail Implement handler.Handler interface methods
+func (c *Example) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, error) {
+	return nil, nil
+}
+
+// PostLockWeight Implement handler.Handler interface methods
+func (c *Example) PostLockWeight(result *dcSDK.BKDistResult) int32 {
+	return 0
+}
+
+// PreLockWeight Implement handler.Handler interface methods
+func (c *Example) PreLockWeight(command []string) int32 {
+	return 0
+}
+
+// RemoteRetryTimes Implement handler.Handler interface methods
+func (c *Example) RemoteRetryTimes() int {
+	return 0
+}
+
 func getPreloadConfig(configPath string) (*dcSDK.PreloadConfig, error) {
 	f, err := os.Open(configPath)
 	if err != nil {

@@ -25,6 +25,15 @@ import (
 	"github.com/emicklei/go-restful"
 )
 
+var (
+	gHttpConnCache *types.HttpConnCache
+)
+
+func init() {
+	gHttpConnCache = types.NewHttpConnCache()
+	go gHttpConnCache.Check()
+}
+
 func available(_ *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &AvailableResp{Pid: os.Getpid()}})
 }
@@ -464,7 +473,7 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 	r := &LocalTaskExecuteResp{}
 
 	if workID == "" {
-		blog.Errorf("api: executeLocalTask get work_id from path empty")
+		blog.Infof("api: executeLocalTask get work_id from path empty")
 		r.Write2Resp(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam, Message: "work_id empty"})
 		return
 	}
@@ -476,6 +485,9 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 		r.Write2Resp(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam, Message: err.Error()})
 		return
 	}
+
+	// TODO : 需要关注http的连接状态
+	config.InitHttpConnStatus(req, gHttpConnCache, nil, 0)
 
 	result, err := defaultManager.ExecuteLocalTask(workID, config)
 	if err != nil {
@@ -504,7 +516,10 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 	r.Write2Resp(&api.RestResponse{Resp: resp})
 }
 
-func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data []byte, s *websocket.Session) error {
+func callbackOfLocalExecute(req *restful.Request,
+	id websocket.MessageID,
+	data []byte,
+	s *websocket.Session) error {
 	workID := req.PathParameter(pathParamWorkID)
 	r := &LocalTaskExecuteResp{}
 
@@ -525,6 +540,9 @@ func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data [
 		// ret won't be nil
 		return ret.Err
 	}
+
+	// TODO : 需要关注http的连接状态
+	config.InitHttpConnStatus(req, gHttpConnCache, s, 20)
 
 	result, err := defaultManager.ExecuteLocalTask(workID, config)
 	if err != nil {
@@ -580,6 +598,7 @@ func getWorkRegisterConfig(req *restful.Request) (*types.WorkRegisterConfig, err
 	config := &types.WorkRegisterConfig{
 		BatchMode:        param.BatchMode,
 		ServerHost:       param.ServerHost,
+		ResultCacheList:  param.ResultCacheList,
 		SpecificHostList: param.SpecificHostList,
 		NeedApply:        param.NeedApply,
 		Apply:            param.Apply,
@@ -888,6 +907,8 @@ func getLocalTaskExecuteRequest(req *restful.Request) (*types.LocalTaskExecuteRe
 		Commands:     param.Commands,
 		Environments: param.Environments,
 		Stats:        param.Stats,
+		CommandType:  param.CommandType,
+		Attributes:   param.Attributes,
 	}
 
 	if config.Stats == nil {
@@ -913,6 +934,7 @@ func getLocalTaskExecuteRequestFromWebSocket(data []byte) (*types.LocalTaskExecu
 		Commands:     param.Commands,
 		Environments: param.Environments,
 		Stats:        param.Stats,
+		Attributes:   param.Attributes,
 	}
 
 	if config.Stats == nil {

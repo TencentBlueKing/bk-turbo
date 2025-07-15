@@ -257,7 +257,8 @@ func (o *operator) getTaskGroup(clusterID, namespace, name string, info *op.Serv
 
 				blog.Warnf(
 					"crm: there is still a taskgroup(%s) in status(%s), "+
-						"server status will be set to staging by force", taskGroup.Name, taskGroup.Status)
+						"server status will be changed from %s to staging by force",
+					taskGroup.Name, taskGroup.Status, info.Status.String())
 				info.Status = op.ServiceStatusStaging
 			}
 			continue
@@ -366,6 +367,13 @@ func (o *operator) request(method, uri string, header http.Header, data []byte) 
 	client := o.getClient()
 	before := time.Now().Local()
 
+	defer func() {
+		now := time.Now().Local()
+		if before.Add(1 * time.Second).Before(now) {
+			blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
+		}
+	}()
+
 	// add auth token in header
 	if header == nil {
 		header = http.Header{}
@@ -392,9 +400,9 @@ func (o *operator) request(method, uri string, header http.Header, data []byte) 
 
 	now := time.Now().Local()
 	blog.V(5).Infof("crm: operator request [%s] %s for record: %s", method, uri, now.Sub(before).String())
-	if before.Add(1 * time.Second).Before(now) {
-		blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
-	}
+	// if before.Add(1 * time.Second).Before(now) {
+	// 	blog.Warnf("crm: operator request [%s] %s for too long: %s", method, uri, now.Sub(before).String())
+	// }
 
 	if r.StatusCode != http.StatusOK {
 		err = fmt.Errorf("crm: failed to request, http(%d)%s: %s", r.StatusCode, r.Status, uri)

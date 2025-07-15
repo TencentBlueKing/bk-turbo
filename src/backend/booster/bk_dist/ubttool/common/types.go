@@ -15,11 +15,19 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
+var (
+	ControllerScheme = "http"
+	ControllerIP     = "127.0.0.1"
+	ControllerPort   = 30117
+)
+
 // Flags to desc flag of this tool
 type Flags struct {
 	ActionChainFile string
 	ToolChainFile   string
 	MostDepentFirst bool
+	LogLevel        string
+	LogDir          string
 }
 
 // Action to desc single ubt action
@@ -30,6 +38,8 @@ type Action struct {
 	Arg         string   `json:"arg"`
 	Dep         []string `json:"dep"`
 	FollowIndex []string `json:"followindex"` // follower index which depend on this
+	Attributes  []string `json:"attributes"`
+	Adjust      bool     `json:"adjust"`
 	Running     bool     `json:"running"`
 	Finished    bool     `json:"finished"`
 	//其它详细信息

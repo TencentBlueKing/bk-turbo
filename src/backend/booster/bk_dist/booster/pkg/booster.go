@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
-	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcPump "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/pump"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -33,6 +32,7 @@ import (
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/handlermap"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
@@ -53,6 +53,8 @@ const (
 	osWindows = "windows"
 
 	envValueTrue = "true"
+
+	additionToolName = "additionFile"
 )
 
 // ExtraItems describe the info from extra-project-data
@@ -268,6 +270,7 @@ func (b *Booster) getWorkersEnv() map[string]string {
 	if b.work != nil {
 		requiredEnv[env.KeyExecutorControllerWorkID] = b.workID
 	}
+
 	for k, v := range dcSDK.GetControllerConfigToEnv(b.config.Controller) {
 		requiredEnv[k] = v
 	}
@@ -323,6 +326,10 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorPumpLstatByDir] = envValueTrue
 	}
 
+	if b.config.Works.PumpCorrectCap {
+		requiredEnv[env.KeyExecutorPumpCorrectCap] = envValueTrue
+	}
+
 	if b.config.Works.IOTimeoutSecs > 0 {
 		requiredEnv[env.KeyExecutorIOTimeout] = strconv.Itoa(b.config.Works.IOTimeoutSecs)
 	}
@@ -339,6 +346,11 @@ func (b *Booster) getWorkersEnv() map[string]string {
 		requiredEnv[env.KeyExecutorForceLocalKeys] = strings.Join(b.config.Works.ForceLocalList, env.CommonBKEnvSepKey)
 	}
 
+	ccEnsureOwnerVal := env.GetEnv(env.KeyExecutorCCEnsureFileOwnerkey)
+	if ccEnsureOwnerVal != "" {
+		requiredEnv[env.KeyExecutorCCEnsureFileOwnerkey] = ccEnsureOwnerVal
+	}
+
 	if b.config.Works.WriteMemroy {
 		requiredEnv[env.KeyExecutorWriteMemory] = envValueTrue
 	}
@@ -346,6 +358,17 @@ func (b *Booster) getWorkersEnv() map[string]string {
 	if b.config.Works.IdleKeepSecs > 0 {
 		requiredEnv[env.KeyExecutorIdleKeepSecs] = strconv.Itoa(b.config.Works.IdleKeepSecs)
 	}
+
+	if b.config.Works.SearchToolchain {
+		requiredEnv[env.KeyExecutorSearchToolchain] = envValueTrue
+	}
+
+	if b.config.Works.IgnoreHttpStatus {
+		requiredEnv[env.KeyExecutorIgnoreHttpStatus] = envValueTrue
+	}
+
+	requiredEnv[env.KeyExecutorResultCacheType] = strconv.Itoa(b.config.Works.ResultCacheType)
+	requiredEnv[env.KeyExecutorResultCacheTriggleSecs] = strconv.Itoa(b.config.Works.ResultCacheTriggleSecs)
 
 	resultEnv := make(map[string]string, 10)
 	for k, v := range requiredEnv {
@@ -514,6 +537,9 @@ func (b *Booster) run(pCtx context.Context) (int, error) {
 	// support pump check
 	b.checkPump()
 
+	// support tmp file clean
+	b.cleanTmpFiles()
+
 	// no work commands do not register
 	if b.config.Works.NoWork {
 		return b.runWorks(pCtx, nil, b.runNoWorkCommands)
@@ -545,16 +571,21 @@ func (b *Booster) registerWork() error {
 	}
 
 	blog.Debugf("booster: try to find controller or launch it")
-	pid, err := b.controller.EnsureServer()
+	pid, port, err := b.controller.EnsureServer()
 	if err != nil {
 		blog.Errorf("booster: ensure controller failed: %v", err)
 		return err
 	}
-	blog.Infof("booster: success to connect to controller: %s", b.config.Controller.Target())
+
+	blog.Infof("booster: success to connect to controller: %s, real port[%d]", b.config.Controller.Target(), port)
+	os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
+	blog.Infof("booster: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), port)
+	b.config.Controller.Port = port
 
 	b.work, err = b.controller.Register(dcSDK.ControllerRegisterConfig{
 		BatchMode:        b.config.BatchMode,
 		ServerHost:       b.config.Transport.ServerHost,
+		ResultCacheList:  b.config.Works.ResultCacheList,
 		SpecificHostList: b.config.Works.WorkerList,
 		NeedApply:        !(b.config.Works.Local || b.config.Works.Degraded),
 		Apply:            b.GetApplyParam(),
@@ -606,7 +637,7 @@ func (b *Booster) unregisterWork() error {
 	return nil
 }
 
-func (b *Booster) sendAdditionFile() {
+/*func (b *Booster) sendAdditionFile() {
 	if b.config.Works.Local || b.config.Works.Degraded {
 		return
 	}
@@ -641,7 +672,10 @@ func (b *Booster) sendAdditionFile() {
 			AllDistributed:     true,
 		})
 	}
-
+	if len(fds) == 0 {
+		blog.Infof("booster: no addition files found")
+		return
+	}
 	if err := b.work.Job(&dcSDK.ControllerJobStats{
 		Pid:        os.Getpid(),
 		WorkID:     b.workID,
@@ -652,7 +686,7 @@ func (b *Booster) sendAdditionFile() {
 		return
 	}
 	blog.Infof("booster: finish send addition files: %v", b.config.Works.AdditionFiles)
-}
+}*/
 
 func (b *Booster) runWorks(
 	ctx context.Context,
@@ -751,7 +785,7 @@ func (b *Booster) runCommands(ctx context.Context) (code int, err error) {
 	}()
 
 	// send addition files to workers before run commands.
-	b.sendAdditionFile()
+	//b.sendAdditionFile()
 
 	// before run the commands, ensure that environments for workers are set.
 	b.ensureWorkersEnv()
@@ -1222,40 +1256,47 @@ func (b *Booster) request(method, server, uri string, data []byte) ([]byte, bool
 func (b *Booster) setToolChain() error {
 	blog.Debugf("booster: try to set tool chain")
 
-	if b.config.Works.ToolChainJSONFile == "" || b.config.Works.ToolChainJSONFile == "nothing" {
+	if len(b.config.Works.AdditionFiles) == 0 &&
+		(b.config.Works.ToolChainJSONFile == "" || b.config.Works.ToolChainJSONFile == "nothing") {
 		blog.Debugf("booster: tool chain not set, do nothing now")
 		return nil
 	}
-
-	tools, err := resolveToolChainJSON(b.config.Works.ToolChainJSONFile)
-	if err != nil {
-		blog.Warnf("booster: failed to resolve %s with error:%v", b.config.Works.ToolChainJSONFile, err)
-		return err
+	var tools *dcSDK.Toolchain
+	var err error
+	if b.config.Works.ToolChainJSONFile != "" && b.config.Works.ToolChainJSONFile != "nothing" {
+		tools, err = resolveToolChainJSON(b.config.Works.ToolChainJSONFile)
+		if err != nil {
+			blog.Warnf("booster: failed to resolve %s with error:%v", b.config.Works.ToolChainJSONFile, err)
+			return err
+		}
 	}
+	//add addition files to tool chain for all commands
+	if len(b.config.Works.AdditionFiles) != 0 {
+		onechain := dcSDK.OneToolChain{
+			ToolName: additionToolName,
+			ToolKey:  dcSDK.GetAdditionFileKey(),
+		}
 
-	// for _, v := range tools.Toolchains {
-	// 	var data []byte
-	// 	_ = codec.EncJSON(&v, &data)
-	// 	commonconfig := dcSDK.CommonControllerConfig{
-	// 		Configkey: dcSDK.CommonConfigKeyToolChain,
-	// 		WorkerKey: dcSDK.WorkerKeyConfig{
-	// 			BatchMode: b.config.BatchMode,
-	// 			ProjectID: b.config.ProjectID,
-	// 			Scene:     b.config.Type.String(),
-	// 		},
-	// 		Data: data,
-	// 	}
-
-	// 	err = b.controller.SetConfig(&commonconfig)
-	// 	if err != nil {
-	// 		blog.Warnf("booster: failed to set config [%+v] with error:%v", commonconfig, err)
-	// 		return err
-	// 	}
-	// }
-
-	// blog.Debugf("booster: success to set tool chain")
-	// return nil
-
+		for _, f := range b.config.Works.AdditionFiles {
+			absPath, _ := filepath.Abs(f)
+			if onechain.ToolLocalFullPath == "" {
+				onechain.ToolLocalFullPath = f
+				onechain.ToolRemoteRelativePath = filepath.Dir(absPath)
+			} else {
+				onechain.Files = append(onechain.Files, dcSDK.ToolFile{
+					LocalFullPath:      f,
+					RemoteRelativePath: filepath.Dir(absPath),
+				})
+			}
+		}
+		if tools == nil {
+			tools = &dcSDK.Toolchain{
+				Toolchains: []dcSDK.OneToolChain{onechain},
+			}
+		} else {
+			tools.Toolchains = append(tools.Toolchains, onechain)
+		}
+	}
 	return b.setToolChainWithJSON(tools)
 }
 
@@ -1292,7 +1333,7 @@ func (b *Booster) setToolChainWithJSON(tools *dcSDK.Toolchain) error {
 }
 
 func (b *Booster) checkPump() {
-	if b.config.Works.Pump {
+	if b.config.Works.Pump || b.config.Works.PumpCache {
 		pumpdir := b.config.Works.PumpCacheDir
 		if pumpdir == "" {
 			pumpdir = dcUtil.GetPumpCacheDir()
@@ -1300,24 +1341,23 @@ func (b *Booster) checkPump() {
 				blog.Infof("booster: not found pump cache dir, do nothing")
 				return
 			}
-
-			// fresh env of cache dir
-			os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
-			b.config.Works.PumpCacheDir = pumpdir
 		}
+		// fresh env of cache dir
+		os.Setenv(env.GetEnvKey(env.KeyExecutorPumpCacheDir), pumpdir)
+		b.config.Works.PumpCacheDir = pumpdir
 
 		b.checkPumpCache(pumpdir)
 
 		if b.config.Works.PumpSearchLink && runtime.GOOS == "darwin" {
+			dirs := []string{}
 			// 获取默认xcode的路径
 			xcodepath, err := getXcodeIncludeLinkDir()
 			if err != nil || xcodepath == nil {
 				blog.Infof("booster: get default xcode path with error:%v", err)
-				return
+			} else {
+				// 得到所有需要搜索的目录（包括默认xcode和用户指定的）
+				dirs = xcodepath
 			}
-
-			// 得到所有需要搜索的目录（包括默认xcode和用户指定的）
-			dirs := xcodepath
 			dirs = append(dirs, b.config.Works.PumpSearchLinkDir...)
 
 			// 搜索所有symlink
@@ -1338,10 +1378,22 @@ func (b *Booster) checkPumpCache(pumpdir string) {
 		if b.config.Works.PumpCacheRemoveAll {
 			os.RemoveAll(pumpdir)
 		} else {
-			limitsize := int64(b.config.Works.PumpCacheSizeMaxMB * 1024 * 1024)
+			limitsize := int64(b.config.Works.PumpCacheSizeMaxMB) * 1024 * 1024
 			cleanDirByTime(pumpdir, limitsize)
 		}
 	}
+}
+
+func (b *Booster) cleanTmpFiles() {
+	env.SetEnv(env.BoosterType, b.config.Type.String())
+	tmpdir := commonUtil.GetHandlerTmpDir(nil)
+	currentTime := time.Now()
+
+	daysAgo := b.config.Works.CleanTmpFilesDayAgo
+	previousTime := currentTime.AddDate(0, 0, -daysAgo)
+
+	blog.Infof("booster: ready clean tmp dir:%s before the time:%s", tmpdir, previousTime)
+	cleanDirOnlyByTime(tmpdir, previousTime)
 }
 
 // get default xcode link path
@@ -1359,27 +1411,50 @@ func getXcodeIncludeLinkDir() ([]string, error) {
 		return nil, err
 	}
 
-	xcodepath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms/MacOSX.platform/Developer/SDKs")
-	info, err := os.Stat(xcodepath)
-	if info != nil && (err == nil || os.IsExist(err)) {
-		fis, err := ioutil.ReadDir(xcodepath)
-		if err != nil {
-			return nil, err
+	// get all dirs in Platforms
+	platformspath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms")
+	var subdirs []string
+
+	entries, err := os.ReadDir(platformspath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			absPath, err := filepath.Abs(filepath.Join(platformspath, entry.Name()))
+			if err != nil {
+				return nil, err
+			}
+			subdirs = append(subdirs, absPath)
 		}
+	}
 
-		for _, fi := range fis {
-			if fi.Mode()&os.ModeSymlink != 0 {
-				linkfile := filepath.Join(xcodepath, fi.Name())
-				originFile, err := os.Readlink(linkfile)
+	// get all target dirs
+	resultdirs := []string{}
+	for _, v := range subdirs {
+		// xcodepath := filepath.Join(strings.Trim(string(stdout), "\r\n "), "Platforms/MacOSX.platform/Developer/SDKs")
+		xcodepath := filepath.Join(v, "Developer/SDKs")
+		info, err := os.Stat(xcodepath)
+		if info != nil && (err == nil || os.IsExist(err)) {
+			fis, err := ioutil.ReadDir(xcodepath)
+			if err != nil {
+				return nil, err
+			}
 
-				if err != nil {
-					blog.Warnf("booster: readlink %s with error:%v", linkfile, err)
-					continue
-				}
+			for _, fi := range fis {
+				if fi.Mode()&os.ModeSymlink != 0 {
+					linkfile := filepath.Join(xcodepath, fi.Name())
+					originFile, err := os.Readlink(linkfile)
 
-				blog.Infof("booster: Resolved symlink %s to %s", linkfile, originFile)
+					if err != nil {
+						blog.Warnf("booster: readlink %s with error:%v", linkfile, err)
+						continue
+					}
 
-				if strings.HasSuffix(originFile, "MacOSX.sdk") {
+					blog.Infof("booster: Resolved symlink %s to %s", linkfile, originFile)
+
+					// if strings.HasSuffix(originFile, "MacOSX.sdk") {
 					blog.Infof("booster: found target link dir %s", linkfile)
 
 					xcodepath1 := filepath.Join(linkfile, "usr/include")
@@ -1389,13 +1464,17 @@ func getXcodeIncludeLinkDir() ([]string, error) {
 					}
 					xcodepath2 := filepath.Join(originFile, "usr/include")
 
-					return []string{xcodepath1, xcodepath2}, nil
+					resultdirs = append(resultdirs, xcodepath1)
+					resultdirs = append(resultdirs, xcodepath2)
+
+					// return []string{xcodepath1, xcodepath2}, nil
+					// }
 				}
 			}
 		}
 	}
 
-	return nil, nil
+	return resultdirs, nil
 }
 
 func getLinkFile(pumpdir string, xcodepath string) string {

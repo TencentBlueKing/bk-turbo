@@ -12,7 +12,7 @@ package ue4
 import (
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/link"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/linkfilter"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/shader"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler/ue4/ubaagent"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
@@ -46,9 +47,12 @@ const (
 	defaultLinkFilterCompiler         = "link-filter.exe"
 	defaultAstcsse2Compiler           = "astcenc-sse2.exe"
 	defaultAstcCompiler               = "astcenc.exe"
-
-	hookConfigPathDefault  = "bk_default_rules.json"
-	hookConfigPathCCCommon = "bk_cl_rules.json"
+	defaultClangPS5Compiler           = "prospero-clang.exe" // regard as clang
+	defaultClangCLCompiler            = "clang-cl.exe"       // regard as clang
+	defaultUbaAgent                   = "UbaAgent.exe"
+	defaultUbaAgentLinux              = "UbaAgent"
+	hookConfigPathDefault             = "bk_default_rules.json"
+	hookConfigPathCCCommon            = "bk_cl_rules.json"
 )
 
 // NewUE4 get ue4 scene handler
@@ -61,16 +65,19 @@ func NewUE4() (handler.Handler, error) {
 // UE4 定义了ue4场景下的各类子场景总和,
 // 包含了win/mac/linux平台下的c/c++代码编译, 链接, shader编译等
 type UE4 struct {
-	sandbox      *dcSyscall.Sandbox
-	innerhandler handler.Handler
+	sandbox                  *dcSyscall.Sandbox
+	innerhandler             handler.Handler
+	innerhandlersanboxinited bool
 }
 
 // InitSandbox set sandbox to ue4 scene handler
 func (u *UE4) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	u.sandbox = sandbox
-	if u.innerhandler != nil {
-		u.innerhandler.InitSandbox(sandbox)
-	}
+	// if u.innerhandler != nil && !u.innerhandlersanboxinited {
+	// 	u.innerhandler.InitSandbox(sandbox)
+	// 	u.innerhandlersanboxinited = true
+	// }
+	u.initInnerHandleSanbox()
 }
 
 // InitExtra no need
@@ -150,6 +157,21 @@ func (u *UE4) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	}, nil
 }
 
+func (u *UE4) CanExecuteWithLocalIdleResource(command []string) bool {
+	if u.innerhandler == nil {
+		u.initInnerHandle(command)
+	}
+	if u.innerhandler != nil {
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
+		return u.innerhandler.CanExecuteWithLocalIdleResource(command)
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 防止预处理跑满本机CPU
 func (u *UE4) PreExecuteNeedLock(command []string) bool {
 	return true
@@ -166,30 +188,37 @@ func (u *UE4) PreLockWeight(command []string) int32 {
 		u.initInnerHandle(command)
 	}
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.PreLockWeight(command)
 	}
 	return 1
 }
 
 // PreExecute 预处理, 根据不同的command来确定不同的子场景
-func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (u *UE4) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	if command == nil || len(command) == 0 {
-		return nil, fmt.Errorf("command is nil")
+		blog.Warnf("command is nil")
+		return nil, dcType.ErrorUnknown
 	}
 
 	u.initInnerHandle(command)
 
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.PreExecute(command)
 	}
 
-	return nil, fmt.Errorf("not support for command %s", command[0])
+	blog.Warnf("not support for command %s", command[0])
+	return nil, dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf("not support for command %s", command[0]),
+	}
 }
 
 // PreExecute 预处理, 根据不同的command来确定不同的子场景
@@ -199,39 +228,81 @@ func (u *UE4) initInnerHandle(command []string) {
 	}
 
 	if u.innerhandler == nil {
-		if strings.HasSuffix(command[0], defaultCLCompiler) {
-			u.innerhandler = cl.NewTaskCL()
-			blog.Debugf("ue4: innerhandle with cl for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultCLFilterCompiler) {
-			u.innerhandler = clfilter.NewTaskCLFilter()
-			blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultShaderCompiler) ||
-			strings.HasSuffix(command[0], defaultShaderCompilerMac) {
-			u.innerhandler = shader.NewUE4Shader()
-			blog.Debugf("ue4: innerhandle with shader for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultClangCompiler) ||
-			strings.HasSuffix(command[0], defaultClangPlusPlusCompiler) ||
-			strings.HasSuffix(command[0], defaultClangLinuxCompiler) ||
-			strings.HasSuffix(command[0], defaultClangPlusPlusLinuxCompiler) {
-			u.innerhandler = cc.NewTaskCC()
-			blog.Debugf("ue4: innerhandle with cc for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultAstcsse2Compiler) ||
-			strings.HasSuffix(command[0], defaultAstcCompiler) {
-			u.innerhandler = astc.NewTextureCompressor()
-			blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultLinkFilterCompiler) &&
-			env.GetEnv(env.KeyExecutorEnableLink) == "true" {
-			u.innerhandler = linkfilter.NewTaskLinkFilter()
-			blog.Debugf("ue4: innerhandle with linkfilter for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultLibCompiler) &&
-			env.GetEnv(env.KeyExecutorEnableLib) == "true" {
-			u.innerhandler = lib.NewTaskLib()
-			blog.Debugf("ue4: innerhandle with lib for command[%s]", command[0])
-		} else if strings.HasSuffix(command[0], defaultLinkCompiler) &&
-			env.GetEnv(env.KeyExecutorEnableLink) == "true" {
-			u.innerhandler = link.NewTaskLink()
-			blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
+		exe := filepath.Base(command[0])
+		switch exe {
+		case defaultCLCompiler:
+			{
+				u.innerhandler = cl.NewTaskCL()
+				blog.Debugf("ue4: innerhandle with cl for command[%s]", command[0])
+			}
+		case defaultCLFilterCompiler:
+			{
+				for _, v := range command {
+					tempbase := filepath.Base(v)
+					if tempbase == defaultCLCompiler {
+						compiler := clfilter.CompilerCL
+						u.innerhandler = clfilter.NewTaskCLFilter(compiler)
+						blog.Infof("ue4: innerhandle with clfilter(%d) for command[%s]", compiler, command[0])
+						break
+					} else if tempbase == defaultClangCLCompiler {
+						compiler := clfilter.CompilerClangCl
+						u.innerhandler = clfilter.NewTaskCLFilter(compiler)
+						blog.Infof("ue4: innerhandle with clfilter(%d) for command[%s]", compiler, command[0])
+						break
+					}
+				}
+			}
+		case defaultShaderCompiler, defaultShaderCompilerMac:
+			{
+				u.innerhandler = shader.NewUE4Shader()
+				blog.Debugf("ue4: innerhandle with shader for command[%s]", command[0])
+			}
+		case defaultClangCompiler, defaultClangPlusPlusCompiler,
+			defaultClangLinuxCompiler, defaultClangPlusPlusLinuxCompiler,
+			defaultClangPS5Compiler, defaultClangCLCompiler:
+			{
+				u.innerhandler = cc.NewTaskCC()
+				blog.Debugf("ue4: innerhandle with cc for command[%s]", command[0])
+			}
+		case defaultAstcsse2Compiler, defaultAstcCompiler:
+			{
+				u.innerhandler = astc.NewTextureCompressor()
+				blog.Debugf("ue4: innerhandle with clfilter for command[%s]", command[0])
+			}
+		case defaultLinkFilterCompiler:
+			{
+				if env.GetEnv(env.KeyExecutorEnableLink) == "true" {
+					u.innerhandler = linkfilter.NewTaskLinkFilter()
+					blog.Debugf("ue4: innerhandle with linkfilter for command[%s]", command[0])
+				}
+			}
+		case defaultLibCompiler:
+			{
+				if env.GetEnv(env.KeyExecutorEnableLib) == "true" {
+					u.innerhandler = lib.NewTaskLib()
+					blog.Debugf("ue4: innerhandle with lib for command[%s]", command[0])
+				}
+			}
+		case defaultLinkCompiler:
+			{
+				if env.GetEnv(env.KeyExecutorEnableLink) == "true" {
+					u.innerhandler = link.NewTaskLink()
+					blog.Debugf("ue4: innerhandle with link for command[%s]", command[0])
+				}
+			}
+		case defaultUbaAgent, defaultUbaAgentLinux:
+			{
+				u.innerhandler = ubaagent.NewUbaAgent()
+				blog.Debugf("ue4: innerhandle with ubaagent for command[%s]", command[0])
+			}
 		}
+	}
+}
+
+func (u *UE4) initInnerHandleSanbox() {
+	if u.innerhandler != nil && !u.innerhandlersanboxinited && u.sandbox != nil {
+		u.innerhandler.InitSandbox(u.sandbox)
+		u.innerhandlersanboxinited = true
 	}
 }
 
@@ -259,6 +330,24 @@ func (u *UE4) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (u *UE4) NeedRetryOnRemoteFail(command []string) bool {
+	if u.innerhandler != nil {
+		return u.innerhandler.NeedRetryOnRemoteFail(command)
+	}
+
+	return false
+}
+
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (u *UE4) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	if u.innerhandler != nil {
+		return u.innerhandler.OnRemoteFail(command)
+	}
+
+	return nil, dcType.ErrorNone
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (u *UE4) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	if u.innerhandler != nil {
@@ -269,12 +358,13 @@ func (u *UE4) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理
-func (u *UE4) PostExecute(r *dcSDK.BKDistResult) error {
+func (u *UE4) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if u.innerhandler != nil {
 		return u.innerhandler.PostExecute(r)
 	}
 
-	return fmt.Errorf("not support")
+	blog.Warnf("innerhandler is nil when ready post execute")
+	return dcType.ErrorUnknown
 }
 
 // LocalExecuteNeed no need
@@ -293,9 +383,10 @@ func (u *UE4) LocalLockWeight(command []string) int32 {
 	}
 
 	if u.innerhandler != nil {
-		if u.sandbox != nil {
-			u.innerhandler.InitSandbox(u.sandbox.Fork())
-		}
+		// if u.sandbox != nil {
+		// 	u.innerhandler.InitSandbox(u.sandbox.Fork())
+		// }
+		u.initInnerHandleSanbox()
 		return u.innerhandler.LocalLockWeight(command)
 	}
 
@@ -303,12 +394,12 @@ func (u *UE4) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (u *UE4) LocalExecute(command []string) (int, error) {
+func (u *UE4) LocalExecute(command []string) dcType.BKDistCommonError {
 	if u.innerhandler != nil {
 		return u.innerhandler.LocalExecute(command)
 	}
 
-	return 0, nil
+	return dcType.ErrorNone
 }
 
 // FinalExecute 清理临时文件
@@ -316,4 +407,31 @@ func (u *UE4) FinalExecute(args []string) {
 	if u.innerhandler != nil {
 		u.innerhandler.FinalExecute(args)
 	}
+}
+
+// SupportResultCache check whether this command support result cache
+func (u *UE4) SupportResultCache(command []string) int {
+	if u.innerhandler == nil {
+		u.initInnerHandle(command)
+	}
+
+	if u.innerhandler != nil {
+		u.initInnerHandleSanbox()
+		return u.innerhandler.SupportResultCache(command)
+	}
+
+	return 0
+}
+
+func (u *UE4) GetResultCacheKey(command []string) string {
+	if u.innerhandler == nil {
+		u.initInnerHandle(command)
+	}
+
+	if u.innerhandler != nil {
+		u.initInnerHandleSanbox()
+		return u.innerhandler.GetResultCacheKey(command)
+	}
+
+	return ""
 }

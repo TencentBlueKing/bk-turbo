@@ -10,11 +10,13 @@
 package disttask
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -51,6 +53,7 @@ const (
 
 const (
 	queueNameHeaderSymbol = "://"
+	// queueNameSep          = "<|>"
 
 	workerMacLauncherName = "start.sh"
 	workerWinLauncherName = "start.bat"
@@ -107,7 +110,7 @@ type EngineConfig struct {
 	Brokers []config.EngineDisttaskBrokerConfig
 }
 
-//K8sClusterInfo define
+// K8sClusterInfo define
 type K8sClusterInfo struct {
 	K8SCRMClusterID      string
 	K8SCRMCPUPerInstance float64
@@ -411,8 +414,13 @@ func (de *disttaskEngine) createTask(tb *engine.TaskBasic, extra []byte) error {
 
 	crmMgr := de.getCrMgr(tb.Client.QueueName)
 	if crmMgr == nil {
-		blog.Errorf("engine(%s) try creating task(%s) failed: crmMgr is null", EngineName, task.ID)
-		return errors.New("crmMgr is null")
+		if getQueueNameHeader(tb.Client.QueueName) != queueNameHeaderDirectWin {
+			blog.Errorf("engine(%s) try creating task(%s) failed: crmMgr is null", EngineName, task.ID)
+			return errors.New("crmMgr is null")
+		} else {
+			blog.Infof("engine(%s) try creating task(%s) with queue(%s) get null crmmgr",
+				EngineName, task.ID, tb.Client.QueueName)
+		}
 	}
 
 	task.InheritSetting.WorkerVersion = worker.WorkerVersion
@@ -421,15 +429,18 @@ func (de *disttaskEngine) createTask(tb *engine.TaskBasic, extra []byte) error {
 	task.InheritSetting.ExtraWorkerSetting = worker.Extra
 
 	task.Operator.AppName = task.ID
-	task.Operator.Namespace = crmMgr.GetNamespace()
+	if crmMgr != nil {
+		task.Operator.Namespace = crmMgr.GetNamespace()
+		de.setTaskIstResource(task, tb.Client.QueueName)
+	}
 	task.Operator.Image = worker.Image
-	de.setTaskIstResource(task, tb.Client.QueueName)
 	task.Operator.RequestProcessPerUnit = ev.ProcessPerUnit
 
 	if err = de.updateTask(task); err != nil {
 		blog.Errorf("engine(%s) try creating task, update task(%s) failed: %v", EngineName, tb.ID, err)
 		return err
 	}
+
 	blog.Infof("engine(%s) success to create task(%s)", EngineName, tb.ID)
 	return nil
 }
@@ -484,7 +495,45 @@ type ExtraData struct {
 	ExtraVars taskClientExtra `json:"extra_vars,omitempty"`
 }
 
+// 缓存task信息
+var (
+	distTaskCacheLock sync.RWMutex
+	distTaskCache     map[string]*distTask = make(map[string]*distTask, 10000)
+)
+
+func getTaskFromCache(taskid string) (*distTask, bool) {
+	distTaskCacheLock.RLock()
+	task, ok := distTaskCache[taskid]
+	distTaskCacheLock.RUnlock()
+
+	blog.Infof("task_cache engine(%s) get task(%s) from cache:%t", EngineName, taskid, ok)
+	return task, ok
+}
+
+func putTask2Cache(taskid string, task *distTask) {
+	distTaskCacheLock.Lock()
+	distTaskCache[taskid] = task
+	distTaskCacheLock.Unlock()
+
+	blog.Infof("task_cache engine(%s) put task(%s) to cache", EngineName, taskid)
+	return
+}
+
+func deleteTaskFromCache(taskid string) {
+	distTaskCacheLock.Lock()
+	delete(distTaskCache, taskid)
+	distTaskCacheLock.Unlock()
+
+	blog.Infof("task_cache engine(%s) delete task(%s) from cache", EngineName, taskid)
+	return
+}
+
 func (de *disttaskEngine) getTask(taskID string) (*distTask, error) {
+	dt, ok := getTaskFromCache(taskID)
+	if ok && dt != nil {
+		return dt, nil
+	}
+
 	t, err := de.mysql.GetTask(taskID)
 	if err != nil {
 		blog.Errorf("engine(%s) get task(%s) failed: %v", EngineName, taskID, err)
@@ -495,6 +544,9 @@ func (de *disttaskEngine) getTask(taskID string) (*distTask, error) {
 }
 
 func (de *disttaskEngine) updateTask(task *distTask) error {
+	// 加到缓存里面，后续可以直接从缓存取，避免读数据库
+	putTask2Cache(task.ID, task)
+
 	data, err := engine.GetMapExcludeTableTaskBasic(task2Table(task))
 	if err != nil {
 		blog.Errorf("engine(%s) update task(%s), get exclude map failed: %v", EngineName, task.ID, err)
@@ -503,6 +555,18 @@ func (de *disttaskEngine) updateTask(task *distTask) error {
 
 	if err = de.mysql.UpdateTask(task.ID, data); err != nil {
 		blog.Errorf("engine(%s) update task(%s), update failed: %v", EngineName, task.ID, err)
+		return err
+	}
+
+	return nil
+}
+
+func (de *disttaskEngine) partialUpdateTask(task *distTask) error {
+	// 加到缓存里面，后续可以直接从缓存取，避免读数据库
+	putTask2Cache(task.ID, task)
+
+	if err := de.mysql.UpdateTaskPart(task.ID, task2Table(task)); err != nil {
+		blog.Errorf("engine(%s) partial update task(%s), update failed: %v", EngineName, task.ID, err)
 		return err
 	}
 
@@ -522,10 +586,89 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 	}
 
 	if matchDirectResource(queueName) {
-		return de.launchDirectTask(task, tb, queueName)
+		// deal with p2p
+		if containsP2P(queueName) {
+			err = de.launchDirectP2PTask(task, tb, queueName)
+		} else {
+			err = de.launchDirectTask(task, tb, queueName)
+		}
+	} else {
+		blog.Infof("engine(%s) try launch crm task(%s) with queue:%s", EngineName, tb.ID, queueName)
+		err = de.launchCRMTask(task, tb, queueName)
 	}
 
-	return de.launchCRMTask(task, tb, queueName)
+	return err
+}
+
+func (de *disttaskEngine) launchDirectP2PTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
+	blog.Infof("engine(%s) ready to launch direct p2p task(%s) with queue:%s", EngineName, tb.ID, queueName)
+
+	purequeue := getQueueNamePure(queueName)
+	condition := &resourceCondition{
+		queueName: purequeue,
+		leastCPU:  task.InheritSetting.LeastCPU,
+		maxCPU:    task.InheritSetting.RequestCPU,
+	}
+
+	// TODO : resourceSelector 需要改为 p2p 定制的，之前的选择条件不能满足p2p的场景
+	resourceList, err := de.directMgr.GetFreeP2PResource(tb.ID,
+		condition,
+		p2pResourceSelector,
+		purequeue,
+		getPlatform(queueName))
+	// add task into public queue
+	if err == engine.ErrorNoEnoughResources {
+		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
+			de.canGiveToPublicQueue(queueName) {
+			publicQueue.Add(tb)
+		}
+		return err
+	}
+	if err != nil {
+		blog.Errorf("engine(%s) try consuming direct p2p resource, get free resource(%+v) failed: %v",
+			EngineName, condition, err)
+		return err
+	}
+
+	blog.Infof("engine(%s) success to consume resource for direct p2p task(%s)", EngineName, tb.ID)
+
+	// TODO : save worker list to task as succeed
+	workerList := make([]taskWorker, 0, 100)
+	var cpuTotal, memTotal float64 = 0, 0
+	for _, r := range resourceList {
+		message, _ := json.Marshal(r.Base.Labels)
+		workerList = append(workerList, taskWorker{
+			CPU:       r.Resource.CPU,
+			Mem:       r.Resource.Mem,
+			IP:        r.Base.IP,
+			Port:      r.Base.Port,
+			StatsPort: workerDirectStatsPort,
+			Message:   string(message),
+		})
+
+		cpuTotal += r.Resource.CPU
+		memTotal += r.Resource.Mem
+	}
+
+	task.Workers = workerList
+	task.Stats.WorkerCount = len(task.Workers)
+
+	task.Stats.CPUTotal = cpuTotal
+	task.Stats.MemTotal = memTotal
+
+	blog.Infof("direct p2p task(%s) now has workers(%d),CPU(%f),Mem(%f)",
+		task.ID,
+		task.Stats.WorkerCount,
+		cpuTotal,
+		memTotal)
+	if err = de.updateTask(task); err != nil {
+		blog.Errorf("engine(%s) update direct p2p task(%s) failed: %v",
+			EngineName, task.ID, err)
+		return err
+	}
+
+	blog.Infof("engine(%s) success to launch direct p2p task(%s)", EngineName, tb.ID)
+	return nil
 }
 
 func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
@@ -601,12 +744,15 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 }
 
 func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
-	crmMgr := de.getCrMgr(task.InheritSetting.QueueName)
+	// crmMgr := de.getCrMgr(task.InheritSetting.QueueName)
+	crmMgr := de.getCrMgr(queueName)
 	if crmMgr == nil {
 		blog.Errorf("engine(%s) try launching crm task(%s) failed: crmMgr is null", EngineName, tb.ID)
 		return errors.New("crmMgr is null")
 	}
 	var err error
+
+	de.setTaskIstResource(task, queueName)
 
 	envJobInt := int(task.Operator.RequestCPUPerUnit)
 	if task.Operator.RequestProcessPerUnit > 0 {
@@ -648,7 +794,7 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		return err
 	}
 
-	de.setTaskIstResource(task, queueName)
+	// de.setTaskIstResource(task, queueName)
 
 	err = crmMgr.Launch(tb.ID, pureQueueName, func(availableInstance int) (int, error) {
 		if availableInstance < task.Operator.LeastInstance {
@@ -675,10 +821,18 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		return err
 	}
 
-	if err = de.updateTask(task); err != nil {
-		blog.Errorf("engine(%s) try launching crm task, update task(%s) failed: %v", EngineName, tb.ID, err)
-		return err
+	// 这儿的task数据表更新，没有非常重要的字段，不影响后续加速，忽略写db失败的情况
+	// if err = de.updateTask(task); err != nil {
+	// 	blog.Errorf("engine(%s) try launching crm task, update task(%s) failed: %v", EngineName, tb.ID, err)
+	// 	return err
+	// }
+
+	if task.InheritSetting.QueueName != queueName {
+		task.InheritSetting.QueueName = queueName
+		putTask2Cache(task.ID, task)
 	}
+	go de.partialUpdateTask(task)
+
 	blog.Infof("engine(%s) success to launch crm task(%s)", EngineName, tb.ID)
 	return nil
 }
@@ -701,6 +855,10 @@ func (de *disttaskEngine) launchDone(taskID string) (bool, error) {
 	}
 
 	if matchDirectResource(task.InheritSetting.QueueName) {
+		// TODO : deal with p2p
+		if containsP2P(task.InheritSetting.QueueName) {
+			return true, nil
+		}
 		return de.launchDirectDone(task)
 	}
 
@@ -781,8 +939,23 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 		blog.Errorf("engine(%s) try launch crm task(%s) done failed: crmMgr is null", EngineName, task.ID)
 		return false, errors.New("crmMgr is null")
 	}
+
+	var tIsServicePreparingStart, tIsServicePreparingEnd int64
+	var tGetServiceInfoStart, tGetServiceInfoEnd int64
+	defer func() {
+		d1 := tIsServicePreparingEnd - tIsServicePreparingStart
+		d2 := tGetServiceInfoEnd - tGetServiceInfoStart
+		if d1 > 2 || d2 > 2 {
+			blog.Infof("engine(%s) launchCRMDone for task(%s) too long spent %d seconds to IsServicePreparing,"+
+				"%d to GetServiceInfo",
+				EngineName, task.ID, d1, d2)
+		}
+	}()
+
+	tIsServicePreparingStart = time.Now().Unix()
 	// if still preparing, then it's not need to get service info
 	isPreparing, err := crmMgr.IsServicePreparing(task.ID)
+	tIsServicePreparingEnd = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("engine(%s) try checking service info, check if crm service preparing(%s) failed: %v",
 			EngineName, task.ID, err)
@@ -792,7 +965,9 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 		return false, nil
 	}
 
+	tGetServiceInfoStart = time.Now().Unix()
 	info, err := crmMgr.GetServiceInfo(task.ID)
+	tGetServiceInfoEnd = time.Now().Unix()
 	if err != nil {
 		blog.Errorf("engine(%s) try checking service info, get crm info(%s) failed: %v",
 			EngineName, task.ID, err)
@@ -801,8 +976,8 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 
 	workerList := make([]taskWorker, 0, 100)
 	for _, endpoints := range info.AvailableEndpoints {
-		servicePort, _ := endpoints.Ports[portsService]
-		statsPort, _ := endpoints.Ports[portsStats]
+		servicePort := endpoints.Ports[portsService]
+		statsPort := endpoints.Ports[portsStats]
 
 		workerList = append(workerList, taskWorker{
 			CPU:       task.Operator.RequestCPUPerUnit,
@@ -810,6 +985,7 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 			IP:        endpoints.IP,
 			Port:      servicePort,
 			StatsPort: statsPort,
+			Name:      endpoints.Name,
 		})
 	}
 
@@ -880,12 +1056,20 @@ func (de *disttaskEngine) releaseTask(taskID string) error {
 		return err
 	}
 
+	deleteTaskFromCache(taskID)
+
 	if task.InheritSetting.BanAllBooster {
 		blog.Infof("engine(%s) release task(%s) success immediately for banning", EngineName, taskID)
 		return nil
 	}
 
 	if matchDirectResource(task.InheritSetting.QueueName) {
+		// TODO : p2p的也需要通知下，方便资源的管理
+		if containsP2P(task.InheritSetting.QueueName) {
+			return de.releaseP2PDirectTask(task,
+				getPlatform(task.InheritSetting.QueueName),
+				getQueueNamePure(task.InheritSetting.QueueName))
+		}
 		return de.releaseDirectTask(task)
 	}
 
@@ -920,6 +1104,12 @@ func (de *disttaskEngine) releaseDirectTask(task *distTask) error {
 
 	blog.Infof("engine(%s) success to release direct task(%s)", EngineName, task.ID)
 	return nil
+}
+
+func (de *disttaskEngine) releaseP2PDirectTask(task *distTask, platform, groupKey string) error {
+	blog.Infof("engine(%s) try to release p2p direct task(%s)", EngineName, task.ID)
+
+	return de.directMgr.ReleaseP2PResource(task.ID, platform, groupKey)
 }
 
 func (de *disttaskEngine) releaseCRMTask(task *distTask) error {
@@ -1033,6 +1223,11 @@ func (de *disttaskEngine) getCrMgr(queueName string) crm.HandlerWithUser {
 }
 
 func (de *disttaskEngine) canTakeFromPublicQueue(queueName string) bool {
+	// p2p的任务不允许跨组
+	if containsP2P(queueName) {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}
@@ -1051,6 +1246,11 @@ func (de *disttaskEngine) canTakeFromPublicQueue(queueName string) bool {
 }
 
 func (de *disttaskEngine) canGiveToPublicQueue(queueName string) bool {
+	// p2p的任务不允许跨组
+	if containsP2P(queueName) {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}
@@ -1077,7 +1277,7 @@ type Message struct {
 	MessageRecordStats MessageRecordStats `json:"ccache_stats"`
 }
 
-//MessageType define
+// MessageType define
 type MessageType int
 
 const (
@@ -1165,21 +1365,37 @@ func (de *disttaskEngine) sendProjectMessage(projectID string, extra []byte) ([]
 	}
 }
 
-//EmptyJobs define
-var EmptyJobs = compress.ToBase64String([]byte("[]"))
+// EmptyJobs define
+var (
+	EmptyJobs = compress.ToBase64String([]byte("[]"))
+
+	statIDLock sync.RWMutex
+	statID     map[string]int = make(map[string]int, 10000)
+)
+
+func getStatKey(taskid, workid string) string {
+	return fmt.Sprintf("%s|%s", taskid, workid)
+}
+
+func getStatID(taskid, workid string) (int, bool) {
+	statIDLock.RLock()
+	statid, ok := statID[getStatKey(taskid, workid)]
+	statIDLock.RUnlock()
+
+	return statid, ok
+}
+
+func putStatID(taskid, workid string, statid int) {
+	statIDLock.Lock()
+	statID[getStatKey(taskid, workid)] = statid
+	statIDLock.Unlock()
+
+	return
+}
+
+// TODO : statID 暂时没有清理机制，和layer里的task锁，以及资源锁等一样
 
 func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTaskStats) ([]byte, error) {
-	opts := commonMySQL.NewListOptions()
-	opts.Equal("task_id", stats.TaskID)
-	opts.Equal("work_id", stats.WorkID)
-	opts.Limit(1)
-	l, _, err := de.mysql.ListWorkStats(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
-			"get work stats failed: %v", EngineName, projectID, stats.TaskID, stats.WorkID, err)
-		return nil, err
-	}
-
 	data := &TableWorkStats{
 		ProjectID:        projectID,
 		TaskID:           stats.TaskID,
@@ -1197,17 +1413,33 @@ func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTa
 		JobStats:         stats.Jobs,
 	}
 
-	// if work stats exists, just overwrite it.
-	if len(l) != 0 {
-		data.ID = l[0].ID
-		if l[0].JobStats != EmptyJobs {
-			blog.Infof("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
-				"but the job stats already set, skip put", EngineName, projectID, stats.TaskID, stats.WorkID)
-			return nil, nil
+	statid, ok := getStatID(stats.TaskID, stats.WorkID)
+	if ok && statid > 0 {
+		data.ID = statid
+	} else {
+		l, err := de.mysql.GetWorkStats(stats.TaskID, stats.WorkID)
+		if err != nil {
+			blog.Errorf("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
+				"get work stats failed: %v", EngineName, projectID, stats.TaskID, stats.WorkID, err)
+			return nil, err
+		}
+
+		if l != nil {
+			if l.ID > 0 {
+				putStatID(stats.TaskID, stats.WorkID, l.ID)
+			} else {
+				blog.Warnf("engine(%s) got statid(%d) with task(%s) data(%+v)", EngineName, l.ID, stats.TaskID, *l)
+			}
+			data.ID = l.ID
+			if l.JobStats != EmptyJobs {
+				blog.Infof("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
+					"but the job stats already set, skip put", EngineName, projectID, stats.TaskID, stats.WorkID)
+				return nil, nil
+			}
 		}
 	}
 
-	if err = de.mysql.PutWorkStats(data); err != nil {
+	if err := de.mysql.PutWorkStats(data); err != nil {
 		blog.Errorf("engine(%s) try send message task stats for project(%s) taskID(%s) workID(%s), "+
 			"put work stats failed: %v", EngineName, projectID, stats.TaskID, stats.WorkID, err)
 		return nil, err
@@ -1281,6 +1513,10 @@ func matchDirectResource(queueName string) bool {
 	}
 }
 
+func containsP2P(queueName string) bool {
+	return strings.Contains(queueName, "p2p")
+}
+
 func getDirectLaunchCommand(queueName string) string {
 	switch getQueueNameHeader(queueName) {
 	case queueNameHeaderDirectWin:
@@ -1339,7 +1575,7 @@ func getQueueNameHeader(queueName string) queueNameHeader {
 	}
 }
 
-//GetK8sInstanceKey get instance type from queueName
+// GetK8sInstanceKey get instance type from queueName
 func GetK8sInstanceKey(queueName string) *config.InstanceType {
 	header := getQueueNameHeader(queueName)
 	if header == queueNameHeaderK8SDefault || header == queueNameHeaderK8SWin {
@@ -1377,6 +1613,52 @@ func resourceSelector(
 		if cpuTotal >= c.maxCPU {
 			break
 		}
+
+		if agent.Base.Cluster != c.queueName {
+			continue
+		}
+
+		if agent.Resource.CPU <= 0 {
+			continue
+		}
+
+		cpuTotal += agent.Resource.CPU
+		r = append(r, agent)
+		blog.Debugf("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
+			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)
+	}
+
+	if cpuTotal < c.leastCPU {
+		return nil, engine.ErrorNoEnoughResources
+	}
+
+	return r, nil
+}
+
+func p2pResourceSelector(
+	freeAgent []*respack.AgentResourceExternal,
+	condition interface{}) ([]*respack.AgentResourceExternal, error) {
+	if freeAgent == nil || len(freeAgent) == 0 {
+		return nil, engine.ErrorNoEnoughResources
+	}
+
+	c, ok := condition.(*resourceCondition)
+	if !ok {
+		blog.Errorf("engine(%s) get resource condition type error", EngineName)
+		return nil, engine.ErrorInnerEngineError
+	}
+
+	blog.Infof("engine(%s) ready take free resource with condition [%+v] queue[%s], len(free)[%d]",
+		EngineName, condition, c.queueName, len(freeAgent))
+
+	var cpuTotal float64 = 0
+	r := make([]*respack.AgentResourceExternal, 0, 100)
+	for _, agent := range freeAgent {
+		blog.Infof("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
+			"current cpu(%.2f) with queue(%s)",
+			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.queueName)
+
+		// TODO : 返回全部可用列表，后续看怎么优化
 
 		if agent.Base.Cluster != c.queueName {
 			continue

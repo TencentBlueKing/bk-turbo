@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -219,12 +220,39 @@ func cleanDirByTime(dir string, limitsize int64) {
 	}
 }
 
+func cleanDirOnlyByTime(dir string, t time.Time) {
+	f, err := os.Open(dir)
+	if err != nil {
+		blog.Warnf("booster: failed to open dir %s with error:%v", dir, err)
+		return
+	}
+	fis, _ := f.Readdir(-1)
+	f.Close()
+	sort.Sort(ByModTime(fis))
+
+	blog.Infof("booster: dir %s time:%s", dir, t)
+	fullpath := ""
+	for _, fi := range fis {
+		if fi.ModTime().After(t) {
+			break
+		}
+		fullpath = filepath.Join(dir, fi.Name())
+		blog.Infof("booster: ready remove file:%s modify time:%s", fullpath, fi.ModTime())
+		os.RemoveAll(fullpath)
+	}
+}
+
 func searchSymlink(dirPth string, files map[string]string) (err error) {
 	if files == nil {
 		files = make(map[string]string, 100)
 	}
 
 	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error {
+		if err != nil {
+			blog.Infof("booster: search path:%s failed with error:%v", dirPth, err)
+			return err
+		}
+
 		if fi.IsDir() {
 			return nil
 		}

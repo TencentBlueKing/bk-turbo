@@ -41,4 +41,5 @@ var (
 	ErrorInvalidDependFile      = fmt.Errorf("depend file invalid")
 	ErrorNotSupportRemote       = fmt.Errorf("not support to remote execute")
 	ErrorInPumpBlack            = fmt.Errorf("in pump black list")
+	ErrorNotSupportYc           = fmt.Errorf("/Yc must be local")
 )

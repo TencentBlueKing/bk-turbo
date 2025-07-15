@@ -11,8 +11,10 @@ package disttask
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 )
 
 type distTask struct {
@@ -54,6 +56,16 @@ func (dt *distTask) WorkerList() []string {
 	}
 
 	return workers
+}
+
+// GetWorkerNameMap return worker name map
+func (dt *distTask) GetWorkerNameMap() map[string]string {
+	workerNames := make(map[string]string, 0)
+	for _, v := range dt.Workers {
+		workerNames[fmt.Sprintf("%s:%d", v.IP, v.Port)] = v.Name
+	}
+
+	return workerNames
 }
 
 func (dt *distTask) GetRequestInstance() int {
@@ -98,12 +110,33 @@ func (dt *distTask) CustomData(params interface{}) interface{} {
 		JobServer:         jobServer,
 		ExtraWorkerData:   dt.InheritSetting.ExtraWorkerSetting,
 		ExtraProjectData:  dt.InheritSetting.ExtraProjectSetting,
+		SupportAbsPath:    dt.supportAbsPath(),
 	}
 
 	var data []byte
 	_ = codec.EncJSON(dataStruct, &data)
 
 	return data
+}
+
+func (dt *distTask) supportAbsPath() bool {
+	// 如果没有明确指定不支持，则默认认为支持
+	for _, v := range dt.Workers {
+		if v.Message != "" {
+			temp := map[string]string{}
+			codec.DecJSON([]byte(v.Message), &temp)
+			if p, ok := temp[commonTypes.LabelKeySupportAbsPath]; ok {
+				b, err := strconv.ParseBool(p)
+				if err == nil {
+					if !b {
+						return b
+					}
+				}
+			}
+		}
+	}
+
+	return true
 }
 
 // CustomData describe the detail data of dist task.
@@ -114,6 +147,7 @@ type CustomData struct {
 	JobServer         int               `json:"job_server"`
 	ExtraWorkerData   string            `json:"extra_worker_data"`
 	ExtraProjectData  string            `json:"extra_project_data"`
+	SupportAbsPath    bool              `json:"support_abs_path"`
 }
 
 type taskClient struct {
@@ -164,6 +198,7 @@ type taskWorker struct {
 	Port      int
 	StatsPort int
 	Message   string
+	Name      string
 }
 
 type taskInheritSetting struct {
@@ -255,10 +290,14 @@ func table2Task(tableTask *TableTask) *distTask {
 
 func task2Table(task *distTask) *TableTask {
 	var env []byte
-	_ = codec.EncJSON(task.Client.Env, &env)
+	if task.Client.Env != nil {
+		_ = codec.EncJSON(task.Client.Env, &env)
+	}
 
 	var workers []byte
-	_ = codec.EncJSON(task.Workers, &workers)
+	if len(task.Workers) > 0 {
+		_ = codec.EncJSON(task.Workers, &workers)
+	}
 
 	return &TableTask{
 		// task client
@@ -313,7 +352,7 @@ type MessageRecordStats struct {
 	CCacheStats CCacheStats `json:"ccache_stats"`
 }
 
-// dump the struct data into byte
+// Dump the struct data into byte
 func (mrd MessageRecordStats) Dump() []byte {
 	var data []byte
 	_ = codec.EncJSON(mrd, &data)
@@ -337,7 +376,7 @@ type CCacheStats struct {
 	MaxCacheSize              string `json:"max_cache_size"`
 }
 
-// dump the struct data into byte
+// Dump the struct data into byte
 func (cs CCacheStats) Dump() []byte {
 	var data []byte
 	_ = codec.EncJSON(cs, &data)

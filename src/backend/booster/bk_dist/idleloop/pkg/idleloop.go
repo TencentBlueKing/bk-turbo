@@ -88,7 +88,7 @@ func (l *IdleLoop) runCommitSuicideCheck(ctx context.Context) {
 				// 	// kill self
 				// 	_ = p.Kill()
 				// }
-				blog.Infof("booster: commit suicide for parent process %d not existed", l.ppid)
+				blog.Infof("idelloop: commit suicide for parent process %d not existed", l.ppid)
 				blog.CloseLogs()
 				os.Exit(0)
 			}
@@ -102,7 +102,7 @@ func (l *IdleLoop) runCommitSuicideCheck(ctx context.Context) {
 				// 	// kill self
 				// 	_ = p.Kill()
 				// }
-				blog.Infof("booster: commit suicide for grandfather process %d not existed", l.pppid)
+				blog.Infof("idelloop: commit suicide for grandfather process %d not existed", l.pppid)
 				blog.CloseLogs()
 				os.Exit(0)
 			}

@@ -340,6 +340,10 @@ func (erd *etcdRegisterDiscover) watch() {
 	for {
 		select {
 		case resp := <-watchChan:
+			if len(resp.Events) <= 0 {
+				continue
+			}
+
 			blog.Infof("rd: watch resp [%+v]", resp)
 			for _, ev := range resp.Events {
 				blog.Infof("rd: watch event [%s %q : %q]", ev.Type, ev.Kv.Key, ev.Kv.Value)

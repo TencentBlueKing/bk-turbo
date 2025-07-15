@@ -14,6 +14,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -42,10 +43,14 @@ type manager struct {
 
 // NewManager get a new manager instance
 // roleEvent is a channel which receive role message when current server role changed. Manager starts when it is
-//  master and stops when it is not master.
+//
+//	master and stops when it is not master.
+//
 // debug decide if debug mode is set. If true, it will disabled some checks such as keeper checks.
 // queueBriefInfoList contains a list of queue brief info(queue-engine pair). It decide how many workers should be
-//  launched in selector.
+//
+//	launched in selector.
+//
 // engineList contains all engine instances the manager supported, it is used to init the layer cache.
 func NewManager(
 	roleEvent types.RoleChangeEvent,
@@ -217,6 +222,12 @@ func (m *manager) GetTask(taskID string) (*engine.TaskBasic, engine.TaskExtensio
 		return nil, nil, err
 	}
 
+	// 临时对disttask加判断条件，减少数据库操作
+	if tb.Status.BeforeRunning() && tb.Client.EngineName == "disttask" {
+		blog.Infof("manager: get task basic(%s) before starting, do not get exetension", taskID)
+		return tb, nil, nil
+	}
+
 	task, err := egn.GetTaskExtension(taskID)
 	if err != nil {
 		blog.Errorf("manager: try getting task extension, get task(%s) from engine(%s) failed: %v",
@@ -228,18 +239,19 @@ func (m *manager) GetTask(taskID string) (*engine.TaskBasic, engine.TaskExtensio
 }
 
 // UpdateHeartbeat update the task heartbeat.
-func (m *manager) UpdateHeartbeat(taskID string) error {
+func (m *manager) UpdateHeartbeat(taskID string) (engine.TaskStatusType, error) {
 	if !m.running {
 		blog.Errorf("manager: update heartbeat failed: manager is not running")
-		return types.ErrorManagerNotRunning
+		return "", types.ErrorManagerNotRunning
 	}
 
-	if err := m.layer.UpdateHeartbeat(taskID); err != nil {
+	status, err := m.layer.UpdateHeartbeat(taskID)
+	if err != nil {
 		blog.Warnf("manager: try updating heartbeat, get task basic(%s) failed: %v", taskID, err)
-		return err
+		return "", err
 	}
 
-	return nil
+	return status, nil
 }
 
 func (m *manager) start() {
@@ -295,7 +307,7 @@ func (m *manager) recover() error {
 func (m *manager) getTaskBasic(taskID string) (*engine.TaskBasic, error) {
 	tb, err := m.layer.GetTaskBasic(taskID)
 	if err != nil {
-		blog.Errorf("manager: get task basic(%s) failed: %v", taskID, err)
+		//blog.Errorf("manager: get task basic(%s) failed: %v", taskID, err)
 		return nil, err
 	}
 
@@ -307,7 +319,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 
 	pb, egn, err := m.getBasicProject(param.ProjectID)
 	if err != nil {
-		blog.Errorf("manager: try creating task, get project(%s) failed: %v", param.ProjectID, err)
+		blog.Warnf("manager: try creating task, get project(%s) failed: %v", param.ProjectID, err)
 		return nil, err
 	}
 
@@ -328,11 +340,11 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 
 	// lock project when creating task for controlling concurrency
 	m.layer.LockProject(param.ProjectID)
-	defer m.layer.UnLockProject(param.ProjectID)
 
 	if err = m.invalidConcurrency(pb); err != nil {
-		blog.Errorf("manager: try creating task, check concurrency for project(%s) in engine(%s) failed: %v",
+		blog.Warnf("manager: try creating task, check concurrency for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 
@@ -340,10 +352,11 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	if err != nil {
 		blog.Errorf("manager: try creating task, generate taskID for project(%s) in engine(%s) failed: %v",
 			param.ProjectID, pb.EngineName.String(), err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 
-	m.layer.LockTask(taskID)
+	m.layer.LockTask(taskID, "createTask_of_manager")
 	defer m.layer.UnLockTask(taskID)
 
 	tb := &engine.TaskBasic{
@@ -375,14 +388,36 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	}
 	if err = tb.Check(); err != nil {
 		blog.Errorf("manager: create task basic(%s) check failed: %v", taskID, err)
+		m.layer.UnLockProject(param.ProjectID)
 		return nil, err
 	}
 	tb.Status.Init()
 	tb.Status.Message = messageTaskInit
+	//creat task to cache, if task exsited, return error
+	if err = m.layer.InsertTB(tb); err != nil {
+		blog.Errorf("manager: create task basic(%s) insert db failed: %v", taskID, err)
+		m.layer.UnLockProject(param.ProjectID)
+		return nil, err
+	}
+	m.layer.UnLockProject(param.ProjectID)
 
-	if err = m.layer.InitTaskBasic(tb); err != nil {
+	ok, err = engine.CheckTaskIDValid(egn, taskID)
+	if !ok {
+		if err == nil {
+			err = fmt.Errorf("task %s is already exsit in db", taskID)
+		}
+		blog.Errorf("manager: check task valid(%s) for project(%s) in engine(%s) failed: %v",
+			taskID, param.ProjectID, pb.EngineName.String(), err)
+		//check task id failed, now task not in db, delete task from cache directly
+		m.layer.DeleteTB(tb)
+		return nil, err
+	}
+
+	if err = m.layer.CreateTaskBasic(tb); err != nil {
 		blog.Errorf("manager: create task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
+		//insert task to db failed, delete task from cache directly
+		m.layer.DeleteTB(tb)
 		return nil, err
 	}
 	if err = egn.CreateTaskExtension(tb, []byte(param.Extra)); err != nil {
@@ -393,7 +428,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	tb.Status.Create()
 	tb.Status.Message = messageTaskStaging
 
-	if err = m.layer.UpdateTaskBasic(tb); err != nil {
+	if err = m.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("manager: update task basic(%s) for project(%s) in engine(%s) failed: %v",
 			taskID, param.ProjectID, pb.EngineName.String(), err)
 		return nil, err
@@ -407,14 +442,51 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	return tb, nil
 }
 
+func tryGetTaskID(data []byte) string {
+	re := regexp.MustCompile(`"task_id":"([^"]+)"`)
+	matches1 := re.FindStringSubmatch(string(data))
+	if len(matches1) > 1 {
+		return matches1[1]
+	}
+
+	return ""
+}
+
+func (m *manager) tryGetEgnFromMessage(data []byte) (engine.Engine, error) {
+	taskID := tryGetTaskID(data)
+	if taskID == "" {
+		blog.Infof("manager: failed to get taskid(%s) from message data[%s]", taskID, data)
+		return nil, nil
+	}
+	blog.Infof("manager: succeed to get taskid(%s) from message data", taskID)
+
+	tb, err := m.getTaskBasic(taskID)
+	if err != nil {
+		blog.Infof("manager: failed to get tb(%s) from message data with err:%v", taskID, err)
+		return nil, err
+	}
+
+	egn, err := m.layer.GetEngineByTypeName(tb.Client.EngineName)
+	if err != nil {
+		blog.Infof("manager: failed to get egn(%s) from message data with err:%v", taskID, err)
+		return nil, err
+	}
+
+	return egn, err
+}
+
 func (m *manager) sendProjectMessage(projectID string, data []byte) ([]byte, error) {
 	m.layer.LockProject(projectID)
 	defer m.layer.UnLockProject(projectID)
 
-	_, egn, err := m.getBasicProject(projectID)
-	if err != nil {
-		blog.Errorf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
-		return nil, err
+	// TODO : 对统计上报特殊处理下，尽量减少数据库查询
+	egn, err := m.tryGetEgnFromMessage(data)
+	if egn == nil {
+		_, egn, err = m.getBasicProject(projectID)
+		if err != nil {
+			blog.Warnf("manager: try sending project message, get project(%s) failed: %v", projectID, err)
+			return nil, err
+		}
 	}
 
 	var result []byte
@@ -429,7 +501,7 @@ func (m *manager) sendProjectMessage(projectID string, data []byte) ([]byte, err
 }
 
 func (m *manager) sendTaskMessage(taskID string, data []byte) ([]byte, error) {
-	m.layer.LockTask(taskID)
+	m.layer.LockTask(taskID, "sendTaskMessage_of_manager")
 	defer m.layer.UnLockTask(taskID)
 
 	tb, err := m.layer.GetTaskBasic(taskID)
@@ -459,12 +531,12 @@ func (m *manager) sendTaskMessage(taskID string, data []byte) ([]byte, error) {
 func (m *manager) releaseTask(param *mgr.TaskReleaseParam) error {
 	blog.Infof("manager: release task(%s), will make it to terminated status finish/failed, %+v",
 		param.TaskID, param)
-	m.layer.LockTask(param.TaskID)
+	m.layer.LockTask(param.TaskID, "releaseTask_of_manager")
 	defer m.layer.UnLockTask(param.TaskID)
 
 	tb, err := m.layer.GetTaskBasic(param.TaskID)
 	if err != nil {
-		blog.Errorf("manager: try releasing task, get task basic(%s) failed: %v",
+		blog.Warnf("manager: try releasing task, get task basic(%s) failed: %v",
 			param.TaskID, err)
 		return err
 	}
@@ -500,10 +572,14 @@ func (m *manager) releaseTask(param *mgr.TaskReleaseParam) error {
 			param.TaskID, tb.Client.EngineName.String(), err)
 	}
 
-	if err = m.layer.UpdateTaskBasic(tb); err != nil {
+	if err = m.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("manager: update basic task(%s) failed: %v", param.TaskID, err)
 		return err
 	}
+
+	// notify next step immediately
+	// don't care whether TaskStatusFailed or TaskStatusFinish, just let cleaner to know
+	m.onTaskStatus(tb, engine.TaskStatusFinish)
 
 	blog.Infof("manager: success to set task(%s) terminated, waiting for cleaner releasing", param.TaskID)
 	return nil
@@ -527,7 +603,7 @@ func (m *manager) getBasicProject(projectID string) (*engine.ProjectBasic, engin
 		return pb, egn, nil
 	}
 
-	blog.Errorf("manager: get project(%s) no found", projectID)
+	blog.Warnf("manager: get project(%s) no found", projectID)
 	return nil, nil, engine.ErrorProjectNoFound
 }
 
@@ -601,8 +677,6 @@ func (m *manager) invalidConcurrency(pb *engine.ProjectBasic) error {
 	}
 
 	if currentCCY >= ccy {
-		blog.Errorf("manager: project(%s) has current concurrency(%d) and is over limit(%d)",
-			pb.ProjectID, currentCCY, ccy)
 		return fmt.Errorf("%v for [project_id: %s] current(%d) over limit(%d)",
 			types.ErrorConcurrencyLimit, pb.ProjectID, currentCCY, ccy)
 	}
@@ -611,20 +685,7 @@ func (m *manager) invalidConcurrency(pb *engine.ProjectBasic) error {
 }
 
 func (m *manager) generateTaskID(egn engine.Engine, projectID string) (string, error) {
-	for i := 0; i < 3; i++ {
-		taskID := generateTaskID(egn.Name().String(), projectID)
-
-		ok, err := engine.CheckTaskIDValid(egn, taskID)
-		if err != nil {
-			return "", err
-		}
-
-		if ok {
-			return taskID, nil
-		}
-	}
-
-	return "", types.ErrorGenerateTaskIDFailed
+	return generateTaskID(egn.Name().String(), projectID), nil
 }
 
 func generateTaskID(egnName string, projectID string) string {
@@ -632,7 +693,7 @@ func generateTaskID(egnName string, projectID string) string {
 		taskIDFormat, egnName, projectID, time.Now().Unix(), strings.ToLower(util.RandomString(taskIDRandomLength)))
 }
 
-//IsOldTaskType check if the task id type is old
+// IsOldTaskType check if the task id type is old
 func IsOldTaskType(id string) bool {
 	idx := strings.LastIndex(id, "-")
 	if idx == len(id)-taskIDRandomLength-1 { //old task Id
@@ -663,6 +724,10 @@ func (m *manager) onTaskStatus(tb *engine.TaskBasic, curstatus engine.TaskStatus
 		// notify tracker
 		blog.Infof("manager: task(%s) current status %s, ready notify traker", tb.ID, curstatus)
 		m.tracker.OnTaskStatus(tb, curstatus)
+	case engine.TaskStatusFinish:
+		// notify cleaner
+		blog.Infof("manager: task(%s) finished, ready notify cleaner", tb.ID)
+		m.cleaner.OnTaskStatus(tb, curstatus)
 	default:
 		blog.Infof("manager: task(%s) current status %s, do nothing", tb.ID, curstatus)
 	}

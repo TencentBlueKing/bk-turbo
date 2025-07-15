@@ -135,8 +135,12 @@ func (c *Custom) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 单个任务的预处理, 如c/c++编译的pre-process, 决定了分发到远程处理的任务信息
-func (c *Custom) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (c *Custom) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	return c.innerHandler.PreExecute(command)
+}
+
+func (c *Custom) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
 }
 
 // PreExecuteNeedLock 决定是否需要在执行PreExecute之前获取一个pre-lock
@@ -155,7 +159,7 @@ func (c *Custom) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute 自定义本地执行
-func (c *Custom) LocalExecute(command []string) (int, error) {
+func (c *Custom) LocalExecute(command []string) dcType.BKDistCommonError {
 	return c.innerHandler.LocalExecute(command)
 }
 
@@ -169,13 +173,23 @@ func (c *Custom) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (c *Custom) NeedRetryOnRemoteFail(command []string) bool {
+	return false
+}
+
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (c *Custom) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (c *Custom) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	return 1
 }
 
 // PostExecute 单个任务的后置处理, 需要处理远程任务执行的结果
-func (c *Custom) PostExecute(result *dcSDK.BKDistResult) error {
+func (c *Custom) PostExecute(result *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	return c.innerHandler.PostExecute(result)
 }
 
@@ -187,4 +201,13 @@ func (c *Custom) PostExecuteNeedLock(result *dcSDK.BKDistResult) bool {
 // FinalExecute 收尾工作, 无论如何都会执行的步骤, 例如清理临时文件
 func (c *Custom) FinalExecute(command []string) {
 	c.innerHandler.FinalExecute(command)
+}
+
+// SupportResultCache check whether this command support result cache
+func (c *Custom) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (c *Custom) GetResultCacheKey(command []string) string {
+	return ""
 }

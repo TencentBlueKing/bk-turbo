@@ -13,6 +13,7 @@ import (
 	"time"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
 )
@@ -28,7 +29,9 @@ type Handler interface {
 		body interface{},
 		receivedtime time.Time,
 		basedir string,
-		cmdreplacerules []dcConfig.CmdReplaceRule) error
+		cmdreplacerules []dcConfig.CmdReplaceRule,
+		id *longtcp.MessageID,
+		s *longtcp.Session) error
 }
 
 var handlemap map[dcProtocol.PBCmdType]Handler
@@ -36,11 +39,14 @@ var handlemap map[dcProtocol.PBCmdType]Handler
 // InitHandlers init handlers
 func InitHandlers() {
 	handlemap = map[dcProtocol.PBCmdType]Handler{
-		dcProtocol.PBCmdType_DISPATCHTASKREQ: NewHandle4DispatchReq(),
-		dcProtocol.PBCmdType_SYNCTIMEREQ:     NewHandle4SyncTime(),
-		dcProtocol.PBCmdType_SENDFILEREQ:     NewHandle4SendFile(),
-		dcProtocol.PBCmdType_CHECKCACHEREQ:   NewHandle4FileCache(),
-		dcProtocol.PBCmdType_UNKNOWN:         NewHandle4Unknown(),
+		dcProtocol.PBCmdType_DISPATCHTASKREQ:          NewHandle4DispatchReq(),
+		dcProtocol.PBCmdType_SYNCTIMEREQ:              NewHandle4SyncTime(),
+		dcProtocol.PBCmdType_SENDFILEREQ:              NewHandle4SendFile(),
+		dcProtocol.PBCmdType_CHECKCACHEREQ:            NewHandle4FileCache(),
+		dcProtocol.PBCmdType_REPORTRESULTCACHEREQ:     NewHandle4ReportResultCache(),
+		dcProtocol.PBCmdType_QUERYRESULTCACHEINDEXREQ: NewHandle4QueryResultCacheIndex(),
+		dcProtocol.PBCmdType_QUERYRESULTCACHEFILEREQ:  NewHandle4QueryResultCacheFile(),
+		dcProtocol.PBCmdType_UNKNOWN:                  NewHandle4Unknown(),
 	}
 }
 

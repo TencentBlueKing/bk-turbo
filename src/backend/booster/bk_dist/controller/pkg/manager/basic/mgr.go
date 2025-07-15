@@ -12,10 +12,12 @@ package basic
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -29,6 +31,10 @@ const (
 type toolchainCache struct {
 	toolchain *types.ToolChain
 	files     *[]dcSDK.FileDesc
+
+	// TODO : support relative path
+	relativeFiles   *[]dcSDK.FileDesc
+	relativeKeyPath string
 }
 
 // NewMgr get a new BasicMgr
@@ -36,13 +42,14 @@ func NewMgr(pCtx context.Context, work *types.Work) types.BasicMgr {
 	ctx, _ := context.WithCancel(pCtx)
 
 	return &Mgr{
-		ctx:               ctx,
-		work:              work,
-		settings:          &types.WorkSettings{},
-		info:              types.NewInitWorkInfo(work.ID()),
-		waitWorkReadyTick: 100 * time.Millisecond,
-		analysisStatus:    types.NewWorkAnalysisStatus(),
-		toolchainMap:      make(map[string]toolchainCache, 1),
+		ctx:                  ctx,
+		work:                 work,
+		settings:             &types.WorkSettings{},
+		info:                 types.NewInitWorkInfo(work.ID()),
+		waitWorkReadyTick:    100 * time.Millisecond,
+		analysisStatus:       types.NewWorkAnalysisStatus(),
+		toolchainMap:         make(map[string]toolchainCache, 1),
+		searchToolChainCache: make(map[string]bool, 10),
 	}
 }
 
@@ -64,9 +71,15 @@ type Mgr struct {
 	toolchainLock sync.RWMutex
 	toolchainMap  map[string]toolchainCache
 
+	searchToolchainLock sync.RWMutex
+
 	aliveTask int64
 
 	registeredCounter int32
+
+	searchToolChainCache map[string]bool
+
+	resultcachelist []string
 }
 
 // Alive return the current alive task number
@@ -157,6 +170,12 @@ func (m *Mgr) Register(config *types.WorkRegisterConfig) error {
 	m.info.SetProjectID(config.Apply.ProjectID)
 	m.info.SetScene(config.Apply.Scene)
 
+	// 新加bazelNoLauncher状态
+	bazelNoLauncher := strings.Contains(config.Apply.Extra, command.FlagBazelNoLauncher)
+	m.info.SetBazelNoLauncher(bazelNoLauncher)
+	blog.Infof("basic: work(%s) project(%s) scene(%s) set bazelNoLauncher to %v",
+		m.work.ID(), config.Apply.ProjectID, config.Apply.Scene, bazelNoLauncher)
+
 	m.work.Resource().SetServerHost(config.ServerHost)
 	if len(config.SpecificHostList) > 0 {
 		m.work.Resource().SetSpecificHosts(config.SpecificHostList)
@@ -166,7 +185,13 @@ func (m *Mgr) Register(config *types.WorkRegisterConfig) error {
 		}
 	}
 
+	m.resultcachelist = config.ResultCacheList
+
 	return nil
+}
+
+func (m *Mgr) GetCacheServer() []string {
+	return m.resultcachelist
 }
 
 func (m *Mgr) ApplyResource(config *types.WorkRegisterConfig) error {
@@ -231,13 +256,13 @@ func (m *Mgr) handleUnregisteredProcess(config *types.WorkUnregisterConfig) {
 	}
 
 	if !m.settings.Degraded {
-		if err := m.work.Resource().SendStats(false); err != nil {
-			blog.Errorf("basic: handle unregistered process for work(%s), send stats failed: %v",
+		if err := m.work.Resource().Release(config.Release); err != nil {
+			blog.Errorf("basic: handle unregistered process for work(%s), try to release resource failed: %v",
 				m.info.WorkID(), err)
 		}
 
-		if err := m.work.Resource().Release(config.Release); err != nil {
-			blog.Errorf("basic: handle unregistered process for work(%s), try to release resource failed: %v",
+		if err := m.work.Resource().SendStats(false); err != nil {
+			blog.Errorf("basic: handle unregistered process for work(%s), send stats failed: %v",
 				m.info.WorkID(), err)
 		}
 	}
@@ -270,7 +295,10 @@ func (m *Mgr) Start() error {
 	m.work.Local().Start()
 	m.work.Remote().Start()
 
-	go m.syncBriefStats()
+	if m.work.Basic().Info().ProjectID() != "" {
+		go m.syncBriefStats()
+	}
+
 	return nil
 }
 
@@ -419,11 +447,22 @@ func (m *Mgr) SetToolChain(toolchain *types.ToolChain) error {
 	blog.Infof("basic: add tool chain with key:%s [%d] files total size[%d] to cache",
 		toolchain.ToolKey, len(newfiles), totalsize)
 	m.toolchainMap[toolchain.ToolKey] = toolchainCache{
-		toolchain: toolchain,
-		files:     &newfiles,
+		toolchain:       toolchain,
+		files:           &newfiles,
+		relativeFiles:   getRelativeFiles(newfiles),
+		relativeKeyPath: getRelativeToolChainRemotePath(toolchain.ToolRemoteRelativePath),
 	}
 
 	return nil
+}
+
+// IsToolChainExsited return if toolchain files exsited
+func (m *Mgr) IsToolChainExsited(key string) bool {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	_, ok := m.toolchainMap[key]
+	return ok
 }
 
 // GetToolChainFiles return the toolchain files
@@ -439,6 +478,19 @@ func (m *Mgr) GetToolChainFiles(key string) ([]dcSDK.FileDesc, int64, error) {
 	return *(v.files), v.toolchain.Timestamp, nil
 }
 
+// GetToolChainRelativeFiles return the toolchain p2p files
+func (m *Mgr) GetToolChainRelativeFiles(key string) ([]dcSDK.FileDesc, int64, error) {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	v, ok := m.toolchainMap[key]
+	if !ok {
+		return nil, 0, fmt.Errorf("not found tool chain for key:%s", key)
+	}
+
+	return *(v.relativeFiles), v.toolchain.Timestamp, nil
+}
+
 // GetToolChainRemotePath return the toolchain remote path according to provided key
 func (m *Mgr) GetToolChainRemotePath(key string) (string, error) {
 	m.toolchainLock.RLock()
@@ -452,6 +504,19 @@ func (m *Mgr) GetToolChainRemotePath(key string) (string, error) {
 	return v.toolchain.ToolRemoteRelativePath, nil
 }
 
+// GetToolChainRelativeRemotePath return the toolchain remote relatieve path according to provided key
+func (m *Mgr) GetToolChainRelativeRemotePath(key string) (string, error) {
+	m.toolchainLock.RLock()
+	defer m.toolchainLock.RUnlock()
+
+	v, ok := m.toolchainMap[key]
+	if !ok {
+		return "", fmt.Errorf("not found tool chain for key:%s", key)
+	}
+
+	return v.relativeKeyPath, nil
+}
+
 // GetToolChainTimestamp return the toolchain timestamp according to provided key
 func (m *Mgr) GetToolChainTimestamp(key string) (int64, error) {
 	m.toolchainLock.RLock()
@@ -463,4 +528,25 @@ func (m *Mgr) GetToolChainTimestamp(key string) (int64, error) {
 	}
 
 	return v.toolchain.Timestamp, nil
+}
+
+// SearchToolChain search toolchain files by cmd, ensure only execute once
+func (m *Mgr) SearchToolChain(cmd, path string) error {
+	m.searchToolchainLock.Lock()
+	defer m.searchToolchainLock.Unlock()
+
+	if _, ok := m.searchToolChainCache[cmd]; ok {
+		blog.Infof("basic: toolchain with key:%s search before, do nothing", cmd)
+		return nil
+	}
+
+	m.searchToolChainCache[cmd] = true
+
+	// TODO : search toolchain with cmd now
+	toolchain, err := searchToolChain(cmd, path)
+	if err == nil && toolchain != nil {
+		m.SetToolChain(toolchain)
+	}
+
+	return nil
 }

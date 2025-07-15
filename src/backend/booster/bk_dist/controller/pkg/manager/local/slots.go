@@ -67,12 +67,14 @@ func newResource(maxSlots int, usageLimit map[dcSDK.JobUsage]int) *resource {
 	}
 }
 
-type chanResult chan struct{}
+// type chanResult chan struct{}
+type chanResult chan bool
 
 type chanPair struct {
 	jobUsage dcSDK.JobUsage
 	result   chanResult
 	weight   int32
+	wait     bool
 }
 
 type chanChanPair chan chanPair
@@ -131,7 +133,7 @@ func (lr *resource) Lock(usage dcSDK.JobUsage, weight int32) bool {
 	if weight > 1 {
 		realweight = weight
 	}
-	msg := chanPair{jobUsage: usage, weight: realweight, result: make(chanResult, 1)}
+	msg := chanPair{jobUsage: usage, weight: realweight, result: make(chanResult, 1), wait: true}
 	lr.lockChan <- msg
 
 	select {
@@ -141,6 +143,30 @@ func (lr *resource) Lock(usage dcSDK.JobUsage, weight int32) bool {
 	// wait result
 	case <-msg.result:
 		return true
+	}
+}
+
+// Lock get an usage lock, success with true, failed with false
+func (lr *resource) TryLock(usage dcSDK.JobUsage, weight int32) (bool, error) {
+	if !lr.handling {
+		blog.Infof("local: failed to lock for resource not handling")
+		return false, types.ErrWorkIsNotWorking
+	}
+
+	var realweight int32 = 1
+	if weight > 1 {
+		realweight = weight
+	}
+	msg := chanPair{jobUsage: usage, weight: realweight, result: make(chanResult, 1), wait: false}
+	lr.lockChan <- msg
+
+	select {
+	case <-lr.ctx.Done():
+		return false, types.ErrWorkIsNotWorking
+
+	// wait result
+	case ok := <-msg.result:
+		return ok, nil
 	}
 }
 
@@ -154,7 +180,7 @@ func (lr *resource) Unlock(usage dcSDK.JobUsage, weight int32) {
 	if weight > 1 {
 		realweight = weight
 	}
-	msg := chanPair{jobUsage: usage, weight: realweight, result: nil}
+	msg := chanPair{jobUsage: usage, weight: realweight, result: nil, wait: true}
 	lr.unlockChan <- msg
 }
 
@@ -234,14 +260,19 @@ func (lr *resource) getSlot(pairChan chanPair) {
 		if lr.isIdle(set) {
 			set.occupied += int(pairChan.weight)
 			lr.occupiedSlots += int(pairChan.weight)
-			pairChan.result <- struct{}{}
+			// pairChan.result <- struct{}{}
+			pairChan.result <- true
 			satisfied = true
 		}
 	}
 
 	if !satisfied {
-		l := lr.getList(usage)
-		l.PushBack(pairChan)
+		if !pairChan.wait { // trylock
+			pairChan.result <- false
+		} else { // lock
+			l := lr.getList(usage)
+			l.PushBack(pairChan)
+		}
 	}
 }
 
@@ -276,7 +307,8 @@ func (lr *resource) putSlot(pairChan chanPair) {
 					lr.occupiedSlots += int(tempchan.weight)
 
 					// awake this task
-					tempchan.result <- struct{}{}
+					// tempchan.result <- struct{}{}
+					tempchan.result <- true
 
 					// delete this element
 					selectedlist.Remove(e)

@@ -73,7 +73,7 @@ const (
 	AttributeKeyPlatform = "Platform"
 )
 
-//CheckQueueKey describe the function that get queue key from attributes
+// CheckQueueKey describe the function that get queue key from attributes
 func (param *BcsLaunchParam) CheckQueueKey(instanceType config.InstanceType) bool {
 	platform, city := getInstanceKey(param.AttributeCondition)
 	if instanceType.Group == city && instanceType.Platform == platform {
@@ -104,7 +104,8 @@ type NodeInfo struct {
 	Disabled bool
 }
 
-func (ni *NodeInfo) figureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
+// FigureAvailableInstanceFromFree 根据节点剩余资源计算可分配实例数
+func (ni *NodeInfo) FigureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
 	if cpuPerInstance == 0 || memPerInstance == 0 || diskPerInstance == 0 {
 		return 0
 	}
@@ -132,24 +133,137 @@ func (ni *NodeInfo) valid() bool {
 	return ni.CPUTotal >= 0 && ni.MemTotal >= 0 && ni.DiskTotal >= 0
 }
 
-// NewNodeInfoPool get a new node info pool
-func NewNodeInfoPool(cpu, mem, disk float64, istTypes []config.InstanceType) *NodeInfoPool {
-	nip := NodeInfoPool{
-		cpuPerInstance:  cpu,
-		memPerInstance:  mem,
-		diskPerInstance: disk,
-		nodeBlockMap:    make(map[string]*NodeInfoBlock, 1000),
+type noReadyInfoDetail struct {
+	caller string
+	start  time.Time
+	num    int32
+}
+
+type noReadyInfoBlock struct {
+	blockkey string
+	total    int32
+	details  map[string]*noReadyInfoDetail
+}
+
+var (
+	noReadyInfoLock sync.RWMutex
+	noReadyInfo     map[string]*noReadyInfoBlock = make(map[string]*noReadyInfoBlock, 10)
+)
+
+func addNoReadyInfo(blockkey, caller string, num int32) {
+	noReadyInfoLock.Lock()
+	defer noReadyInfoLock.Unlock()
+
+	block, ok := noReadyInfo[blockkey]
+	var detail *noReadyInfoDetail
+	var ok1 bool
+	if ok {
+		// 如果block已存在，更新或删除detail信息
+		detail, ok1 = block.details[caller]
+		if ok1 {
+			detail.num += num
+			block.total += num
+
+			if detail.num == 0 {
+				delete(block.details, caller)
+			}
+		} else {
+			// 如果num为负数且caller不存在，记录错误并返回
+			if num <= 0 {
+				blog.Errorf("bcs: block(%s) caller(%s) noready num(%d) less than 0, do nothing", blockkey, caller, num)
+				return
+			}
+			// 创建新的detail并添加到block中
+			detail = &noReadyInfoDetail{
+				caller: caller,
+				start:  time.Now(),
+				num:    num,
+			}
+			block.details[caller] = detail
+			block.total += num
+		}
+	} else {
+		// 如果block不存在且num为负数，记录错误并返回
+		if num <= 0 {
+			blog.Errorf("bcs: block(%s) caller(%s) noready num(%d) less than 0, do nothing", blockkey, caller, num)
+			return
+		}
+
+		// 如果block不存在且num>0，创建新的block和detail
+		detail = &noReadyInfoDetail{
+			caller: caller,
+			start:  time.Now(),
+			num:    num,
+		}
+		block = &noReadyInfoBlock{
+			blockkey: blockkey,
+			total:    0,
+			details:  make(map[string]*noReadyInfoDetail, 10),
+		}
+		block.details[caller] = detail
+		block.total += num
+		noReadyInfo[blockkey] = block
 	}
-	for _, istItem := range istTypes {
+
+	blog.Infof("bcs: block(%s) total noready:%d after add %d by caller(%s)",
+		blockkey, block.total, num, caller)
+}
+
+// PrintNoReadyInfo print all no ready info
+func PrintNoReadyInfo() {
+	noReadyInfoLock.RLock()
+	defer noReadyInfoLock.RUnlock()
+
+	allinfo := ""
+	for _, v := range noReadyInfo {
+		allinfo += fmt.Sprintf("%s %d:[", v.blockkey, v.total)
+		for _, d := range v.details {
+			if d.num == 0 {
+				continue
+			}
+			allinfo += fmt.Sprintf("%s:%d %v | ", d.caller, d.num, d.start)
+		}
+		allinfo += "];"
+	}
+
+	blog.Infof("bcs: all noready info: %s", allinfo)
+}
+
+// NewNodeInfoPool get a new node info pool
+func NewNodeInfoPool(conf *config.ContainerResourceConfig) *NodeInfoPool {
+	nip := NodeInfoPool{
+		cpuPerInstance:       conf.BcsCPUPerInstance,
+		memPerInstance:       conf.BcsMemPerInstance,
+		cpuPerInstanceOffset: conf.BcsCPUPerInstanceOffset,
+		memPerInstanceOffset: conf.BcsMemPerInstanceOffset,
+		diskPerInstance:      1,
+		nodeBlockMap:         make(map[string]*NodeInfoBlock, 1000),
+	}
+	for _, istItem := range conf.InstanceType {
 		condition := map[string]string{
 			AttributeKeyCity:     istItem.Group,
 			AttributeKeyPlatform: istItem.Platform,
 		}
 		key := getBlockKey(condition)
-		nip.nodeBlockMap[key] = &NodeInfoBlock{
-			CPUPerInstance: istItem.CPUPerInstance,
-			MemPerInstance: istItem.MemPerInstance,
+		newBlock := NodeInfoBlock{
+			CPUPerInstance:       conf.BcsCPUPerInstance,
+			MemPerInstance:       conf.BcsMemPerInstance,
+			CPUPerInstanceOffset: conf.BcsCPUPerInstanceOffset,
+			MemPerInstanceOffset: conf.BcsMemPerInstanceOffset,
 		}
+		if istItem.CPUPerInstance > 0.0 {
+			newBlock.CPUPerInstance = istItem.CPUPerInstance
+		}
+		if istItem.MemPerInstance > 0.0 {
+			newBlock.MemPerInstance = istItem.MemPerInstance
+		}
+		if istItem.CPUPerInstanceOffset > 0.0 && istItem.CPUPerInstanceOffset < istItem.CPUPerInstance {
+			newBlock.CPUPerInstanceOffset = istItem.CPUPerInstanceOffset
+		}
+		if istItem.MemPerInstanceOffset > 0.0 && istItem.MemPerInstanceOffset < istItem.MemPerInstance {
+			newBlock.MemPerInstanceOffset = istItem.MemPerInstanceOffset
+		}
+		nip.nodeBlockMap[key] = &newBlock
 	}
 	return &nip
 }
@@ -158,22 +272,26 @@ func NewNodeInfoPool(cpu, mem, disk float64, istTypes []config.InstanceType) *No
 type NodeInfoPool struct {
 	sync.Mutex
 
-	cpuPerInstance  float64
-	memPerInstance  float64
-	diskPerInstance float64
-	lastUpdateTime  time.Time
+	cpuPerInstance       float64
+	memPerInstance       float64
+	cpuPerInstanceOffset float64
+	memPerInstanceOffset float64
+	diskPerInstance      float64
+	lastUpdateTime       time.Time
 
 	nodeBlockMap map[string]*NodeInfoBlock
 }
 
 // RecoverNoReadyBlock 对给定区域key的资源, 加上noReady个未就绪标记
 // 一般用于在系统恢复时, 从数据库同步之前未就绪的数据信息
-func (nip *NodeInfoPool) RecoverNoReadyBlock(key string, noReady int) {
+func (nip *NodeInfoPool) RecoverNoReadyBlock(key string, noReady int, caller string) {
 	if _, ok := nip.nodeBlockMap[key]; !ok {
 		nip.nodeBlockMap[key] = &NodeInfoBlock{}
 	}
 
 	nip.nodeBlockMap[key].noReadyInstance += noReady
+
+	addNoReadyInfo(key, caller, int32(noReady))
 }
 
 // GetStats get status message
@@ -198,17 +316,20 @@ func (nip *NodeInfoPool) GetStats() string {
 		}
 
 		message += fmt.Sprintf(
-			"\nCity: %s[cpuPerInstance: %.2f, memPerInstance:%.2f], available-instance: %d, report-instance: %d, noready-instance: %d "+
+			"\nCity: %s[cpuPerInstance:%.2f,cpuPerIstOffset:%.2f,memPerInstance:%.2f,memPerIstOffset:%.2f], available-instance: %d, report-instance: %d, noready-instance: %d "+
 				"CPU-Left: %s, MEM-Left: %s",
 			city,
 			block.CPUPerInstance,
+			block.CPUPerInstanceOffset,
 			block.MemPerInstance,
+			block.MemPerInstanceOffset,
 			block.AvailableInstance-block.noReadyInstance,
 			block.AvailableInstance, block.noReadyInstance,
 			cpuLeftStr,
 			memLeftStr,
 		)
 	}
+
 	return message
 }
 
@@ -243,9 +364,11 @@ func (nip *NodeInfoPool) GetLastUpdateTime() time.Time {
 	return nip.lastUpdateTime
 }
 
-func (nip *NodeInfoPool) getNodeInstance(key string) (float64, float64) {
+func (nip *NodeInfoPool) getNodeInstance(key string) (float64, float64, float64, float64) {
 	cpuPerInstance := nip.cpuPerInstance
 	memPerInstance := nip.memPerInstance
+	cpuPerInstanceOffset := nip.cpuPerInstanceOffset
+	memPerInstanceOffset := nip.memPerInstanceOffset
 	if _, ok := nip.nodeBlockMap[key]; ok {
 		if nip.nodeBlockMap[key].CPUPerInstance > 0.0 {
 			cpuPerInstance = nip.nodeBlockMap[key].CPUPerInstance
@@ -253,8 +376,14 @@ func (nip *NodeInfoPool) getNodeInstance(key string) (float64, float64) {
 		if nip.nodeBlockMap[key].MemPerInstance > 0.0 {
 			memPerInstance = nip.nodeBlockMap[key].MemPerInstance
 		}
+		if nip.nodeBlockMap[key].CPUPerInstanceOffset > 0.0 {
+			cpuPerInstanceOffset = nip.nodeBlockMap[key].CPUPerInstanceOffset
+		}
+		if nip.nodeBlockMap[key].MemPerInstanceOffset > 0.0 {
+			memPerInstanceOffset = nip.nodeBlockMap[key].MemPerInstanceOffset
+		}
 	}
-	return cpuPerInstance, memPerInstance
+	return cpuPerInstance, memPerInstance, cpuPerInstanceOffset, memPerInstanceOffset
 }
 
 // UpdateResources 更新资源数据, 给定从operators获取的节点信息列表, 将其信息与当前的资源信息进行整合同步
@@ -274,7 +403,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		}
 
 		if !NodeInfo.valid() {
-			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f", NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
+			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f",
+				NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
 			continue
 		}
 
@@ -294,14 +424,17 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		newBlock.MemLeft += NodeInfo.MemLeft
 		newBlock.CPULeft += NodeInfo.CPULeft
 		//inherit the instance model if exist
-		cpuPerInstance, memPerInstance := nip.getNodeInstance(key)
-		newBlock.AvailableInstance += NodeInfo.figureAvailableInstanceFromFree(
+		cpuPerInstance, memPerInstance, cpuPerInstanceOffset, memPerInstanceOffset := nip.getNodeInstance(key)
+		newBlock.AvailableInstance += NodeInfo.FigureAvailableInstanceFromFree(
 			cpuPerInstance,
 			memPerInstance,
 			nip.diskPerInstance,
 		)
 		newBlock.CPUPerInstance = cpuPerInstance
 		newBlock.MemPerInstance = memPerInstance
+		newBlock.CPUPerInstanceOffset = cpuPerInstanceOffset
+		newBlock.MemPerInstanceOffset = memPerInstanceOffset
+
 		// inherit the no-ready instance records
 		if _, ok := nip.nodeBlockMap[key]; ok {
 			newBlock.noReadyInstance = nip.nodeBlockMap[key].noReadyInstance
@@ -326,6 +459,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		nodeBlock.CPULeft = newBlock.CPULeft
 		nodeBlock.CPUPerInstance = newBlock.CPUPerInstance
 		nodeBlock.MemPerInstance = newBlock.MemPerInstance
+		nodeBlock.CPUPerInstanceOffset = newBlock.CPUPerInstanceOffset
+		nodeBlock.MemPerInstanceOffset = newBlock.MemPerInstanceOffset
 		nodeBlock.AvailableInstance = newBlock.AvailableInstance
 		nodeBlock.noReadyInstance = newBlock.noReadyInstance
 	}
@@ -337,7 +472,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 // GetFreeInstances 在资源池中尝试获取可用的instance, 给定需求条件condition和资源数量函数function
 func (nip *NodeInfoPool) GetFreeInstances(
 	condition map[string]string,
-	function InstanceFilterFunction) (int, string, error) {
+	function InstanceFilterFunction,
+	caller string) (int, string, error) {
 
 	nip.Lock()
 	defer nip.Unlock()
@@ -358,6 +494,7 @@ func (nip *NodeInfoPool) GetFreeInstances(
 	}
 
 	nodeBlock.noReadyInstance += need
+	addNoReadyInfo(key, caller, int32(need))
 	blog.V(5).Infof(
 		"crm: get free instances consume %d instances from %s, current stats: report %d, no-ready: %d",
 		need, key, nodeBlock.AvailableInstance, nodeBlock.noReadyInstance,
@@ -366,7 +503,7 @@ func (nip *NodeInfoPool) GetFreeInstances(
 }
 
 // ReleaseNoReadyInstance 消除给定区域的noReady计数, 表示这部分已经ready或已经释放
-func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
+func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int, caller string) {
 	nip.Lock()
 	defer nip.Unlock()
 
@@ -376,6 +513,7 @@ func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
 	}
 
 	nodeBlock.noReadyInstance -= instance
+	addNoReadyInfo(key, caller, int32(instance*-1))
 	blog.V(5).Infof("crm: release %d no-ready instance from %s, current stats no-ready: %d",
 		instance, key, nodeBlock.noReadyInstance)
 }
@@ -383,19 +521,20 @@ func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
 // NodeInfoBlock 描述了一个特定区域的资源信息, 通常由多个区域组成一个完整的资源池NodeInfoPool
 // 例如 shenzhen区, shanghai区, projectA区等等, 同一个NodeInfoBlock内的资源是统一处理的, 拥有共同的noReady计数
 type NodeInfoBlock struct {
-	DiskTotal      float64
-	MemTotal       float64
-	CPUTotal       float64
-	DiskUsed       float64
-	MemUsed        float64
-	CPUUsed        float64
-	DiskLeft       float64
-	MemLeft        float64
-	CPULeft        float64
-	CPUPerInstance float64
-	MemPerInstance float64
-
-	AvailableInstance int
+	DiskTotal            float64
+	MemTotal             float64
+	CPUTotal             float64
+	DiskUsed             float64
+	MemUsed              float64
+	CPUUsed              float64
+	DiskLeft             float64
+	MemLeft              float64
+	CPULeft              float64
+	CPUPerInstance       float64
+	MemPerInstance       float64
+	CPUPerInstanceOffset float64
+	MemPerInstanceOffset float64
+	AvailableInstance    int
 
 	noReadyInstance int
 }
@@ -437,6 +576,7 @@ var serviceStatusMap = map[ServiceStatus]string{
 type Endpoint struct {
 	IP    string
 	Ports map[string]int
+	Name  string
 }
 
 func getInstanceKey(attributes map[string]string) (string, string) {

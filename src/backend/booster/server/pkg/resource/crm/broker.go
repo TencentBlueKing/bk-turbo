@@ -20,6 +20,10 @@ import (
 	op "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
 )
 
+const (
+	waitTime4Create = 4 * time.Minute
+)
+
 // NewBrokerSet get a new, empty broker set.
 func NewBrokerSet() *BrokerSet {
 	return &BrokerSet{
@@ -99,12 +103,12 @@ func (bs *BrokerSet) Apply(
 }
 
 // BrokerParam describe the params of one broker, contains the following fields:
-// - Param resource param, use to launch broker resource automatically
-// - Instance decide how many instances in one broker resource
-// - FitFunc a function receive the broker resource param and request resource param,
-// - ReleaseLoop indicate whether release resource with loop until succeed
-// - IdleKeepSeconds to set wait seconds before release idle resource
-//  check if the broker can serve this request.
+//   - Param resource param, use to launch broker resource automatically
+//   - Instance decide how many instances in one broker resource
+//   - FitFunc a function receive the broker resource param and request resource param,
+//   - ReleaseLoop indicate whether release resource with loop until succeed
+//   - IdleKeepSeconds to set wait seconds before release idle resource
+//     check if the broker can serve this request.
 type BrokerParam struct {
 	Param           ResourceParam
 	Instance        int
@@ -150,10 +154,10 @@ type freeResourceInfo struct {
 }
 
 // Broker maintains a type of pre-launch-server, it has following features:
-// - When someone call the Broker for Applying, the Broker check if it matches the conditions,
-//   if so, give the caller the running server, and kicked the server out from its pool.
-// - When the number of running servers in its pool is less or more than expected, the Broker launch or release servers
-//   to match the expect number.
+//   - When someone call the Broker for Applying, the Broker check if it matches the conditions,
+//     if so, give the caller the running server, and kicked the server out from its pool.
+//   - When the number of running servers in its pool is less or more than expected,
+//     the Broker launch or release servers to match the expect number.
 type Broker struct {
 	name         string
 	user         string
@@ -359,7 +363,8 @@ func (b *Broker) launch() error {
 		if availableInstance >= b.param.Instance {
 			return b.param.Instance, nil
 		}
-
+		blog.Warnf("crm broker: failed to launch resource(%s) for broker(%s) with user(%s), need (%d) instances"+
+			", only (%d) available", brokerID, b.name, b.user, b.param.Instance, availableInstance)
 		return 0, ErrorBrokerNotEnoughResources
 	}, false)
 	if err == ErrorBrokerNotEnoughResources {
@@ -464,16 +469,29 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 		// but we will only put resource which all succeed to free pool,
 		// so we need check resource's all instance status here
 		instanceok := false
-		info, err := b.mgr.getServiceInfo(resourceID, b.user)
-		if err == nil && info != nil {
-			if len(info.AvailableEndpoints) > (b.param.Instance / 2) {
-				instanceok = true
+		retryTimes := 3
+		retryInterval := 5 * time.Second
+		for i := 1; i <= retryTimes; i++ {
+			info, err := b.mgr.getServiceInfo(resourceID, b.user)
+			if err == nil && info != nil {
+				if len(info.AvailableEndpoints) > (b.param.Instance / 2) {
+					instanceok = true
+				} else {
+					blog.Warnf("crm broker: track %s from broker(%s), available endpoints(%d) less than half of required(%d)",
+						resourceID, b.name, len(info.AvailableEndpoints), b.param.Instance/2)
+				}
+				break
+			} else {
+				blog.Warnf("crm broker: track %s retry times(%d/%d) from broker(%s), get serviceinfo failed: %v",
+					resourceID, i, retryTimes, b.name, err)
 			}
+			time.Sleep(retryInterval)
 		}
 
 		if !instanceok {
-			blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s), not found expected %d instances, release it",
-				resourceID, b.name, b.user, b.param.Instance)
+			blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s), not found "+
+				"expected %d instances after %f seconds, release it",
+				resourceID, b.name, b.user, b.param.Instance, time.Since(startTime).Seconds())
 			// release this resource
 			err = b.mgr.release(resource.resourceID, b.user)
 			if err != nil {
@@ -501,8 +519,8 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 
 	// dirty data which created as init but no one launch it.
 	// if a broker is in deploying status for more then 2min, then release it.
-	if resource.status == resourceStatusInit ||
-		(resource.status == resourceStatusDeploying && time.Now().Local().After(startTime.Add(2*time.Minute))) {
+	if (resource.status == resourceStatusInit || resource.status == resourceStatusDeploying) &&
+		time.Now().Local().After(startTime.Add(waitTime4Create)) {
 		blog.Infof("crm broker: clean dirty resource(%s) in status(%s) from broker(%s) with user(%s)",
 			resourceID, resource.status.String(), b.name, b.user)
 		err = b.mgr.release(resource.resourceID, b.user)
@@ -517,7 +535,7 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 		return true
 	}
 
-	if resource.status != resourceStatusDeploying {
+	if resource.status != resourceStatusDeploying && resource.status != resourceStatusInit {
 		blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s) has status(%s), no need track",
 			resourceID, b.name, b.user, resource.status.String())
 		return true
@@ -552,7 +570,8 @@ func (b *Broker) doWatchFree(keepseconds int) {
 	b.freeResourceLock.Lock()
 	defer b.freeResourceLock.Unlock()
 
-	blog.Infof("crm broker: watch %d free resources for broker(%s) currentNum %d", len(b.freeResources), b.name, b.currentNum)
+	blog.Infof("crm broker: watch %d free resources for broker(%s) currentNum %d",
+		len(b.freeResources), b.name, b.currentNum)
 
 	for id, info := range b.freeResources {
 
@@ -606,7 +625,8 @@ func (b *Broker) doReleaseLoop() {
 	b.releasePoolLock.Lock()
 	defer b.releasePoolLock.Unlock()
 
-	blog.Infof("crm broker: do release %d resources for broker(%s) currentNum %d", len(b.releasePool), b.name, b.currentNum)
+	blog.Infof("crm broker: do release %d resources for broker(%s) currentNum %d",
+		len(b.releasePool), b.name, b.currentNum)
 
 	for id := range b.releasePool {
 		// release

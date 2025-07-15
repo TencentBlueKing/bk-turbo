@@ -12,7 +12,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/resultcache"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -26,6 +28,29 @@ func main() {
 	}
 
 	c.Parse()
+	if !filepath.IsAbs(c.ResultCacheDir) {
+		newabs, err := filepath.Abs(c.ResultCacheDir)
+		if err == nil {
+			c.ResultCacheDir = newabs
+		}
+	}
+	config.GlobalResultCacheDir = c.ResultCacheDir
+	config.GlobalMaxFileNumber = c.MaxResultFileNumber
+	config.GlobalMaxIndexNumber = c.MaxResultIndexNumber
+	if c.ResultCache {
+		resultcache.GetInstance(config.GlobalResultCacheDir,
+			config.GlobalMaxFileNumber,
+			config.GlobalMaxIndexNumber)
+	}
+
+	if !filepath.IsAbs(c.LogConfig.LogDir) {
+		newabs, err := filepath.Abs(c.LogConfig.LogDir)
+		if err == nil {
+			c.LogConfig.LogDir = newabs
+		}
+	}
+
+	fmt.Printf("ready init log with dir:%s\n", c.LogConfig.LogDir)
 	blog.InitLogs(c.LogConfig)
 	defer blog.CloseLogs()
 

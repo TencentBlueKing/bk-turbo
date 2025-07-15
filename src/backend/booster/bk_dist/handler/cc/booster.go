@@ -49,25 +49,53 @@ const (
 	ccacheName   = "ccache"
 )
 
-var bazelActionConstOptions = map[string]bool{
-	// env.KeyExecutorHookPreloadLibraryLinux:             true,
-	// env.KeyExecutorHookPreloadLibraryMacos:             true,
-	env.GetEnvKey(env.KeyExecutorHookConfigContent):    true,
-	env.GetEnvKey(env.KeyExecutorHookConfigContentRaw): true,
-	env.GetEnvKey(env.BoosterType):                     true,
-	env.GetEnvKey(env.KeyExecutorIOTimeout):            true,
+// change bazelActionConstOptions from map to array, to keep sequence for bazel
+var bazelActionConstOptions = []string{
+	env.GetEnvKey(env.KeyExecutorHookConfigContent),
+	env.GetEnvKey(env.KeyExecutorHookConfigContentRaw),
+	env.GetEnvKey(env.BoosterType),
+	env.GetEnvKey(env.KeyExecutorIOTimeout),
+	env.GetEnvKey(env.KeyExecutorForceLocalKeys),
+	env.GetEnvKey(env.KeyExecutorCCEnsureFileOwnerkey),
+	env.GetEnvKey(env.KeyExecutorResultCacheType),
+	env.GetEnvKey(env.KeyExecutorResultCacheTriggleSecs),
 }
 
 func appendPreload() error {
 	switch runtime.GOOS {
 	case "linux":
-		bazelActionConstOptions[env.KeyExecutorHookPreloadLibraryLinux] = true
+		bazelActionConstOptions = append(bazelActionConstOptions, env.KeyExecutorHookPreloadLibraryLinux)
 	case "darwin":
-		bazelActionConstOptions[env.KeyExecutorHookPreloadLibraryMacos] = true
+		bazelActionConstOptions = append(bazelActionConstOptions, env.KeyExecutorHookPreloadLibraryMacos)
 	default:
 		blog.Warnf("booster: What os is this?", runtime.GOOS)
 	}
 
+	return nil
+}
+
+func (cc *TaskCC) appendCcache(config dcType.BoosterConfig) error {
+	if cc.ccacheEnable && config.Works.BazelNoLauncher {
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCacheNoCPP2)
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCachePrefix)
+		bazelActionConstOptions = append(bazelActionConstOptions, envCCachePrefixCPP)
+	}
+	return nil
+}
+
+func (cc *TaskCC) appendPump(config dcType.BoosterConfig) error {
+	if config.Works.PumpCache {
+		bazelActionConstOptions = append(bazelActionConstOptions, env.GetEnvKey(env.KeyExecutorPumpCache))
+		// 这个是p2p里面需要判断的，先忽略
+		// bazelActionConstOptions = append(bazelActionConstOptions, env.GetEnvKey(env.KeyWorkerSupportAbsPath)）
+	}
+	return nil
+}
+
+func (cc *TaskCC) appendSearchToolchain(config dcType.BoosterConfig) error {
+	if config.Works.SearchToolchain {
+		bazelActionConstOptions = append(bazelActionConstOptions, env.GetEnvKey(env.KeyExecutorSearchToolchain))
+	}
 	return nil
 }
 
@@ -96,6 +124,14 @@ func (cc *TaskCC) InitExtra(extra []byte) {
 	// 兼容不同版本的协议
 	cc.ccacheEnable = projectData.CCacheEnable || projectData.CCacheEnabled
 	blog.Infof("booster: cc handler ccache enable: %t", cc.ccacheEnable)
+
+}
+
+func (cc *TaskCC) getCacheLog() string {
+	if cc.ccacheEnable {
+		return "ccache enabled"
+	}
+	return "ccache disabled"
 }
 
 // ResultExtra generate the extra result data to upload stats
@@ -133,30 +169,37 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 		}
 
 		originArgs += " " + strings.Join(additions, " ")
+		blog.Info("booster: [%s | %s]render bazel args: %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), originArgs)
 		return originArgs
 	}
 
 	appendPreload()
+	cc.appendCcache(config)
+	cc.appendPump(config)
+	cc.appendSearchToolchain(config)
 
-	if config.Works.BazelPlus || config.Works.Bazel4Plus {
+	if config.Works.BazelPlus || config.Works.Bazel4Plus || config.Works.BazelNoLauncher {
 		additions := make([]string, 0, 10)
-		for k, v := range config.Works.Environments {
-			if _, ok := bazelActionConstOptions[k]; !ok {
+		for _, bkey := range bazelActionConstOptions {
+			v, ok := config.Works.Environments[bkey]
+			if !ok {
 				continue
 			}
 
-			additions = append(additions, wrapActionOptions("action_env", k, v))
-			if config.Works.Bazel4Plus {
-				additions = append(additions, wrapActionOptions("host_action_env", k, v))
+			additions = append(additions, wrapActionOptions("action_env", bkey, v))
+			if config.Works.Bazel4Plus || config.Works.BazelNoLauncher {
+				additions = append(additions, wrapActionOptions("host_action_env", bkey, v))
 			}
 		}
 
 		if len(additions) > 0 {
 			originArgs += " " + strings.Join(additions, " ")
 		}
+		blog.Info("booster:[%s | %s] render bazel args: %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), originArgs)
 		return originArgs
-	}
 
+	}
+	blog.Info("booster: [%s | %s] render args: %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), originArgs)
 	return originArgs
 }
 
@@ -185,12 +228,14 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 
 	if config.Works.Launcher {
 		profile := dcConfig.GetRunFile(config.Works.RunDir, "tbs_env.profile")
+		blog.Info("booster: [%s | %s] add %s to outputEnvSourceFile, work environments will write into it", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), profile)
 		config.Works.OutputEnvSourceFile = append(config.Works.OutputEnvSourceFile, profile)
 		config.Works.Environments[env.GetEnvKey(env.KeyExecutorEnvProfile)] = profile
 
 		targetDir := dcConfig.GetRunFile(config.Works.RunDir, "")
+		blog.Info("booster: [%s | %s] copy launcher files from %s to %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), launcherTemplateDir, targetDir)
 		if err := cp.Copy(launcherTemplateDir+"/", targetDir); err != nil {
-			blog.Warnf("booster: copy launcher files from %s to %s failed: %v",
+			blog.Warnf("booster: [%s | %s] copy launcher files from %s to %s failed: %v", cc.getCacheLog(), config.Works.GetBazelTypeInfo(),
 				launcherTemplateDir, targetDir, err)
 		}
 
@@ -201,26 +246,28 @@ func (cc *TaskCC) PreWork(config *dcType.BoosterConfig) error {
 		}
 
 		target := dcConfig.GetRunFile(config.Works.RunDir, launcherFile)
+		blog.Info("booster: [%s | %s] replace (%s) with (%s) in launcher file %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), launcherMark, launcher, target)
 		if err := replaceFileContent(target, launcherMark, launcher); err != nil {
-			blog.Warnf("booster: replace launcher file content in %s failed: %v", target, err)
+			blog.Warnf("booster: [%s | %s] replace launcher file content in %s failed: %v", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), target, err)
 		}
 	}
 
 	if config.Works.BazelPlus || config.Works.Bazel4Plus {
 		source := dcConfig.GetFile(hookConfigPathCCLauncher)
 		if config.Works.HookConfigPath != "" {
+			blog.Info("booster: [%s | %s] hookConfigPath already exsited, get hook config from %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo())
 			source = config.Works.HookConfigPath
 		}
 
 		target := dcConfig.GetRunFile(config.Works.RunDir, hookConfigPathCCLauncher)
-
+		blog.Info("booster: [%s | %s] copy launcher hook config from %s to %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), source, target)
 		if err := cp.Copy(source, target); err != nil {
-			blog.Warnf("booster: copy launcher hook config from %s to %s failed: %v", source, target, err)
+			blog.Warnf("booster: [%s | %s] copy launcher hook config from %s to %s failed: %v", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), source, target, err)
 		}
-
+		blog.Info("booster: [%s | %s] replace launcher hook config in %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), target)
 		if err := replaceFileContent(
 			target, launcherHookMark, dcConfig.GetRunFile(config.Works.RunDir, launcherFile)); err != nil {
-			blog.Warnf("booster: replace launcher file content in %s failed: %v", target, err)
+			blog.Warnf("booster: [%s | %s] replace launcher file content in %s failed: %v", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), target, err)
 		}
 
 		config.Works.HookConfigPath = target
@@ -247,24 +294,34 @@ func (cc *TaskCC) PostWork(config *dcType.BoosterConfig) error {
 
 // GetPreloadConfig 获取preload配置
 func (cc *TaskCC) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.PreloadConfig, error) {
-	return getPreloadConfig(cc.getPreLoadConfigPath(config))
+	configPath := cc.getPreLoadConfigPath(config)
+	return getPreloadConfig(configPath)
 }
 
 func (cc *TaskCC) getPreLoadConfigPath(config dcType.BoosterConfig) string {
 	if config.Works.HookConfigPath != "" {
+		blog.Info("booster: [%s | %s] hookConfigPath already exsited, get preload config from %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), config.Works.HookConfigPath)
 		return config.Works.HookConfigPath
 	}
-
+	var configPath string
 	// degrade will not contain the CC
 	if config.Works.Degraded {
 		if cc.ccacheEnable {
-			return dcConfig.GetFile(hookConfigPathCCOnlyCache)
+			configPath = dcConfig.GetFile(hookConfigPathCCOnlyCache)
+			blog.Info("booster: [work degraded | %s | %s], get preload config from %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), configPath)
+			return configPath
 		}
-		return dcConfig.GetFile(hookConfigPathDefault)
+		configPath = dcConfig.GetFile(hookConfigPathDefault)
+		blog.Info("booster: [work degraded | %s | %s], get preload config from %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), configPath)
+		return configPath
 	}
 
 	if cc.ccacheEnable {
-		return dcConfig.GetFile(hookConfigPathCCOnlyCache)
+		configPath = dcConfig.GetFile(hookConfigPathCCOnlyCache)
+		blog.Info("booster: [%s | %s], get preload config from %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), configPath)
+		return configPath
 	}
-	return dcConfig.GetFile(hookConfigPathCCCommon)
+	configPath = dcConfig.GetFile(hookConfigPathCCCommon)
+	blog.Info("booster: [%s | %s], get preload config from %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), configPath)
+	return configPath
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	dcConfig "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -36,7 +37,7 @@ func (h *Handle4SendFile) ReceiveBody(client *protocol.TCPClient,
 	basedir string,
 	c chan<- string) (interface{}, error) {
 	// recieve body
-	req, err := protocol.ReceiveBKSendFile(client, head, basedir, FilepathMapping, c, defaultCM)
+	req, err := protocol.ReceiveBKSendFile(client, head, basedir, FilepathMapping, c, DefaultCM)
 	if err != nil {
 		blog.Errorf("failed to receive dispatch req body error:%v", err)
 		return nil, err
@@ -52,7 +53,9 @@ func (h *Handle4SendFile) Handle(client *protocol.TCPClient,
 	body interface{},
 	receivedtime time.Time,
 	basedir string,
-	cmdreplacerules []dcConfig.CmdReplaceRule) error {
+	cmdreplacerules []dcConfig.CmdReplaceRule,
+	id *longtcp.MessageID,
+	s *longtcp.Session) error {
 	blog.Infof("handle with base dir:%s", basedir)
 	defer func() {
 		blog.Infof("handle out for base dir:%s", basedir)
@@ -74,7 +77,16 @@ func (h *Handle4SendFile) Handle(client *protocol.TCPClient,
 	blog.Infof("succeed to encode send file response to messages")
 
 	// send response
-	err = protocol.SendMessages(client, &messages)
+	if client != nil {
+		err = protocol.SendMessages(client, &messages)
+	} else {
+		rspdata := [][]byte{}
+		for _, m := range messages {
+			rspdata = append(rspdata, m.Data)
+		}
+		ret := s.SendWithID(*id, rspdata, false)
+		err = ret.Err
+	}
 	if err != nil {
 		blog.Errorf("failed to send messages for error:%v", err)
 	}

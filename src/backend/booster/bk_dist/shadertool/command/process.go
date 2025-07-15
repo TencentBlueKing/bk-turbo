@@ -14,9 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/pkg"
@@ -28,6 +26,7 @@ import (
 
 // mainProcess do the make process:
 func mainProcess(c *commandCli.Context) error {
+	common.FreshEnvFromProjectSetting()
 	initialLogDir(getLogDir(c.String(FlagLogDir)))
 	common.SetLogLevel(c.String(FlagLog))
 
@@ -60,6 +59,8 @@ func sysSignalHandler(cancel context.CancelFunc, handle *pkg.ShaderTool) {
 		// handle.Clean()
 		handle.ReleaseResource()
 
+		blog.CloseLogs()
+
 		// catch control-C and should return code 130(128+0x2)
 		if sig == syscall.SIGINT {
 			os.Exit(130)
@@ -76,26 +77,15 @@ func sysSignalHandler(cancel context.CancelFunc, handle *pkg.ShaderTool) {
 
 func newCustomProcess(c *commandCli.Context) *pkg.ShaderTool {
 	return pkg.NewShaderTool(&common.Flags{
-		ToolDir:       c.String(FlagToolDir),
-		JobDir:        c.String(FlagJobDir),
-		JobJSONPrefix: c.String(FlagJobJSONPrefix),
-		JobStartIndex: int32(c.Int(FlagJobStartIndex)),
-		CommitSuicide: c.Bool(FlagCommitSuicide),
-		Port:          int32(c.Int(FlagPort)),
-	}, sdk.ControllerConfig{
-		NoLocal: false,
-		Scheme:  ControllerScheme,
-		IP:      ControllerIP,
-		Port:    ControllerPort,
-		Timeout: 5 * time.Second,
-		LogDir:  getLogDir(c.String(FlagLogDir)),
-		LogVerbosity: func() int {
-			// debug模式下, --v=3
-			if c.String(FlagLog) == dcUtil.PrintDebug.String() {
-				return 3
-			}
-			return 0
-		}(),
+		ToolDir:         c.String(FlagToolDir),
+		JobDir:          c.String(FlagJobDir),
+		JobJSONPrefix:   c.String(FlagJobJSONPrefix),
+		JobStartIndex:   int32(c.Int(FlagJobStartIndex)),
+		CommitSuicide:   c.Bool(FlagCommitSuicide),
+		Port:            int32(c.Int(FlagPort)),
+		LogLevel:        c.String(FlagLog),
+		LogDir:          getLogDir(c.String(FlagLogDir)),
+		ProcessInfoFile: c.String(FlagProcessInfoFile),
 	})
 }
 

@@ -12,6 +12,8 @@ package link
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
@@ -94,6 +96,14 @@ func (l *TaskLink) GetPreloadConfig(config dcType.BoosterConfig) (*dcSDK.Preload
 	return nil, nil
 }
 
+func (l *TaskLink) CanExecuteWithLocalIdleResource(command []string) bool {
+	if l.sandbox.Env.GetEnv(env.KeyExecutorUELinkNotUseLocal) == "true" {
+		return false
+	}
+
+	return true
+}
+
 // PreExecuteNeedLock 没有在本地执行的预处理步骤, 无需pre-lock
 func (l *TaskLink) PreExecuteNeedLock(command []string) bool {
 	return false
@@ -110,7 +120,7 @@ func (l *TaskLink) PreLockWeight(command []string) int32 {
 }
 
 // PreExecute 预处理
-func (l *TaskLink) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (l *TaskLink) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	return l.preExecute(command)
 }
 
@@ -121,7 +131,17 @@ func (l *TaskLink) NeedRemoteResource(command []string) bool {
 
 // RemoteRetryTimes will return the remote retry times
 func (l *TaskLink) RemoteRetryTimes() int {
-	return 0
+	return 1
+}
+
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (l *TaskLink) NeedRetryOnRemoteFail(command []string) bool {
+	return false
+}
+
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (l *TaskLink) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
 }
 
 // PostLockWeight decide post-execute lock weight, default 1
@@ -130,7 +150,7 @@ func (l *TaskLink) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 }
 
 // PostExecute 后置处理
-func (l *TaskLink) PostExecute(r *dcSDK.BKDistResult) error {
+func (l *TaskLink) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	return l.postExecute(r)
 }
 
@@ -141,12 +161,20 @@ func (l *TaskLink) LocalExecuteNeed(command []string) bool {
 
 // LocalLockWeight decide local-execute lock weight, default 1
 func (l *TaskLink) LocalLockWeight(command []string) int32 {
+	envvalue := l.sandbox.Env.GetEnv(env.KeyExecutorUELinkLocalCPUWeight)
+	if envvalue != "" {
+		w, err := strconv.Atoi(envvalue)
+		if err == nil && w > 0 && w <= runtime.NumCPU() {
+			return int32(w)
+		}
+	}
+
 	return 1
 }
 
 // LocalExecute no need
-func (l *TaskLink) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (l *TaskLink) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // FinalExecute no need
@@ -158,20 +186,35 @@ func (l *TaskLink) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
-func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (l *TaskLink) workerSupportAbsPath() bool {
+	v := l.sandbox.Env.GetEnv(env.KeyWorkerSupportAbsPath)
+	if v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return true
+}
+
+func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("link: start pre execute for: %v", command)
+
+	if !l.workerSupportAbsPath() {
+		blog.Infof("link: remote worker do not support absolute path")
+		return nil, dcType.ErrorUnknown
+	}
 
 	l.originArgs = command
 	responseFile, args, err := ensureCompiler(command)
 	if err != nil {
 		blog.Errorf("link: pre execute ensure compiler failed %v: %v", args, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	for _, v := range ForceLocalFileKeys {
 		if strings.Contains(responseFile, v) {
 			blog.Errorf("link: pre execute found response %s is in force local list, do not deal now", responseFile)
-			return nil, fmt.Errorf("response file %s is in force local list", responseFile)
+			return nil, dcType.ErrorPreForceLocal
 		}
 	}
 
@@ -184,7 +227,7 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	if err = l.scan(args); err != nil {
 		blog.Warnf("link: scan command[%v] with error : %v", command, err)
-		return nil, err
+		return nil, dcType.ErrorUnknown
 	}
 
 	// add response file as input
@@ -198,7 +241,7 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		if !existed {
 			err := fmt.Errorf("input file %s not existed", v)
 			blog.Errorf("%v", err)
-			return nil, err
+			return nil, dcType.ErrorUnknown
 		}
 
 		// generate the input files for pre-process file
@@ -220,18 +263,19 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 	if err == nil {
 		addDir := filepath.Dir(mtpath)
 
-		tempInputs := make([]string, 0, 4)
+		tempInputs := make([]string, 0, 5)
 		tempInputs = append(tempInputs, mtpath)
 		tempInputs = append(tempInputs, filepath.Join(addDir, "midlrtmd.dll"))
 		tempInputs = append(tempInputs, filepath.Join(addDir, "rc.exe"))
 		tempInputs = append(tempInputs, filepath.Join(addDir, "rcdll.dll"))
+		tempInputs = append(tempInputs, filepath.Join(addDir, "ServicingCommon.dll"))
 		blog.Debugf("link: found additional files:%v", tempInputs)
 
 		for _, v := range tempInputs {
 			existed, fileSize, modifyTime, fileMode := dcFile.Stat(v).Batch()
 			if !existed {
 				err := fmt.Errorf("input tool file %s not existed", v)
-				blog.Errorf("%v", err)
+				blog.Infof("%v", err)
 				// return nil, err
 				continue
 			}
@@ -342,21 +386,28 @@ func (l *TaskLink) preExecute(command []string) (*dcSDK.BKDistCommand, error) {
 
 	blog.Debugf("link: after pre,full command[%v]", req)
 
-	return &req, nil
+	return &req, dcType.ErrorNone
 }
 
-func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
+func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	blog.Infof("link: start post execute for: %v", l.originArgs)
 	if r == nil || len(r.Results) == 0 {
-		return ErrorInvalidParam
+		blog.Warnf("link: parameter is invalid")
+		return dcType.BKDistCommonError{
+			Code:  dcType.UnknowCode,
+			Error: fmt.Errorf("parameter is invalid"),
+		}
 	}
 
 	if len(r.Results[0].ResultFiles) > 0 {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f); err != nil {
-					blog.Errorf("link: failed to save file [%s]", f.FilePath)
-					return err
+					blog.Errorf("link: failed to save file [%s] with error:%v", f.FilePath, err)
+					return dcType.BKDistCommonError{
+						Code:  dcType.UnknowCode,
+						Error: err,
+					}
 				}
 			}
 		}
@@ -364,13 +415,18 @@ func (l *TaskLink) postExecute(r *dcSDK.BKDistResult) error {
 
 	if r.Results[0].RetCode == 0 {
 		blog.Infof("link: success done post execute for: %v", l.originArgs)
-		return nil
+		return dcType.ErrorNone
 	}
 
-	return fmt.Errorf("link: failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("link: failed to remote execute, retcode %d, error message:%s, output message:%s",
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
+
+	return dcType.BKDistCommonError{
+		Code:  dcType.UnknowCode,
+		Error: fmt.Errorf(string(r.Results[0].ErrorMessage)),
+	}
 }
 
 func (l *TaskLink) scan(args []string) error {
@@ -390,4 +446,13 @@ func (l *TaskLink) scan(args []string) error {
 
 	blog.Debugf("link: scan success for enter args: %v", args)
 	return nil
+}
+
+// SupportResultCache check whether this command support result cache
+func (l *TaskLink) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (l *TaskLink) GetResultCacheKey(command []string) string {
+	return ""
 }

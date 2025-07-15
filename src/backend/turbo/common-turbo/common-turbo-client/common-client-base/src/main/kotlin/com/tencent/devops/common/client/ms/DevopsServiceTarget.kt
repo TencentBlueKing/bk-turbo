@@ -33,7 +33,7 @@ class DevopsServiceTarget<T> constructor(
 ) : ThirdServiceTarget<T>(serviceName, type, rootPath) {
 
     override fun url(): String {
-        return "http://$rootPath/ms/$serviceName/api"
+        return "$rootPath/ms/$serviceName/api"
     }
 
 }

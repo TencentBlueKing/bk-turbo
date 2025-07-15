@@ -125,6 +125,14 @@ func initDCCActions() {
 		Params:  nil,
 		Handler: api.NoLimit(distcc.DeleteGcc),
 	})
+
+	// distcc summary statistics
+	api.RegisterV1Action(api.Action{
+		Verb:    "GET",
+		Path:    "/distcc/resource/summary",
+		Params:  nil,
+		Handler: api.NoLimit(distcc.Summary),
+	})
 }
 
 func initFBActions() {
@@ -277,7 +285,7 @@ func initDistTaskActions() {
 		Handler: api.NoLimit(disttask.ListWorkStats),
 	})
 
-	// disttask task
+	// disttask project
 	api.RegisterV1Action(api.Action{
 		Verb:    "GET",
 		Path:    "/disttask/resource/project",
@@ -347,6 +355,20 @@ func initDistTaskActions() {
 		Path:    "/disttask/resource/worker/{worker_version}/scene/{scene}",
 		Params:  nil,
 		Handler: api.NoLimit(disttask.DeleteWorker),
+	})
+
+	// disttask summary statistics
+	api.RegisterV1Action(api.Action{
+		Verb:    "GET",
+		Path:    "/disttask/resource/summary",
+		Params:  nil,
+		Handler: api.NoLimit(disttask.Summary),
+	})
+	api.RegisterV1Action(api.Action{
+		Verb:    "GET",
+		Path:    "/disttask/resource/summary/groupbyuser/scene/{scene}",
+		Params:  nil,
+		Handler: api.NoLimit(disttask.SummaryByUser),
 	})
 }
 

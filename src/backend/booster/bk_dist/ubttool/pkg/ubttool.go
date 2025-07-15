@@ -24,15 +24,17 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/pkg"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api"
 	v1 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/api/v1"
+
+	// "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/command"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	shaderToolComm "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
 
@@ -47,15 +49,22 @@ const (
 	ActionDescMaxSize = 50
 
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
+
+	UbaAgentTemplate      = "bk_uba_action_template_ubt.json"
+	UbaTemplateToolKey    = "${tool_key}"
+	UbaTemplateToolKeyDir = "${tool_key_dir}"
+	UbaTemplateHostIP     = "${host_ip}"
 )
 
 // NewUBTTool get a new UBTTool
-func NewUBTTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *UBTTool {
-	blog.Infof("UBTTool: new ubt tool with config:%+v,flags:%+v", config, *flagsparam)
+// func NewUBTTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *UBTTool {
+func NewUBTTool(flagsparam *common.Flags) *UBTTool {
+	// blog.Infof("UBTTool: new ubt tool with config:%+v,flags:%+v", config, *flagsparam)
+	blog.Infof("UBTTool: new ubt tool with flags:%+v", *flagsparam)
 
 	return &UBTTool{
-		flags:          flagsparam,
-		controller:     v1.NewSDK(config),
+		flags: flagsparam,
+		// controller:     v1.NewSDK(config),
 		allactions:     []common.Action{},
 		readyactions:   []common.Action{},
 		finishednumber: 0,
@@ -63,7 +72,7 @@ func NewUBTTool(flagsparam *common.Flags, config dcSDK.ControllerConfig) *UBTToo
 		maxjobs:        0,
 		finished:       false,
 		actionchan:     nil,
-		executor:       NewExecutor(),
+		// executor:       NewExecutor(),
 		moduleselected: make(map[string]int, 0),
 	}
 }
@@ -116,12 +125,20 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 	}
 
 	blog.Infof("UBTTool: try to find controller or launch it")
-	_, err = h.controller.EnsureServer()
+	// support dinamic listen port
+	var port int
+	_, port, err = h.controller.EnsureServer()
 	if err != nil {
 		blog.Errorf("UBTTool: ensure controller failed: %v", err)
 		return 1, err
 	}
-	blog.Infof("UBTTool: success to connect to controller")
+
+	blog.Infof("UBTTool: success to connect to controller with port[%d]", port)
+	os.Setenv(env.GetEnvKey(env.KeyExecutorControllerPort), strconv.Itoa(port))
+	blog.Infof("UBTTool: set env %s=%d]", env.GetEnvKey(env.KeyExecutorControllerPort), port)
+
+	// executor依赖动态端口
+	h.executor = NewExecutor()
 
 	if !h.executor.Valid() {
 		blog.Errorf("UBTTool: ensure controller failed: %v", ErrorInvalidWorkID)
@@ -136,6 +153,66 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 	}
 
 	return 0, nil
+}
+
+// 过滤ip，客户端判断不保险，最好是能够从server拿到ip
+func isIPValid(ip string) bool {
+	if strings.HasPrefix(ip, "192.") ||
+		strings.HasPrefix(ip, "172.") ||
+		strings.HasPrefix(ip, "127.") {
+		return false
+	}
+
+	return true
+}
+
+func (h *UBTTool) adjustActions4UBAAgent(all *common.UE4Action) {
+	if strings.HasSuffix(h.flags.ActionChainFile, UbaAgentTemplate) {
+		blog.Debugf("UBTTool: ready adjust for %s", UbaAgentTemplate)
+
+		data, err := os.ReadFile(h.flags.ToolChainFile)
+		if err != nil {
+			blog.Errorf("failed to read tool chain json file %s with error %v", h.flags.ToolChainFile, err)
+			return
+		}
+
+		var t dcSDK.Toolchain
+		if err = codec.DecJSON(data, &t); err != nil {
+			blog.Errorf("failed to decode json content[%s] failed: %v", string(data), err)
+			return
+		}
+
+		if len(t.Toolchains) == 0 {
+			blog.Errorf("tool chain is empty")
+			return
+		}
+
+		for i := range all.Actions {
+			if all.Actions[i].Cmd == UbaTemplateToolKey {
+				all.Actions[i].Cmd = t.Toolchains[0].ToolKey
+			}
+
+			if all.Actions[i].Workdir == UbaTemplateToolKeyDir {
+				all.Actions[i].Workdir = filepath.Dir(t.Toolchains[0].ToolKey)
+			}
+
+			ips := util.GetIPAddress()
+			if len(ips) > 0 {
+				ip := ips[0]
+				for _, ipstr := range ips {
+					if isIPValid(ipstr) {
+						ip = ipstr
+						break
+					}
+				}
+				if strings.ContainsAny(all.Actions[i].Arg, UbaTemplateHostIP) {
+					all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateHostIP, ip, -1)
+				}
+			}
+		}
+
+		blog.Infof("after adjust,actions: %v", *all)
+	}
 }
 
 func (h *UBTTool) runActions() error {
@@ -153,6 +230,9 @@ func (h *UBTTool) runActions() error {
 	}
 	// for debug
 	blog.Debugf("UBTTool: all actions:%+v", all)
+
+	// support uba agent template
+	h.adjustActions4UBAAgent(all)
 
 	// execute actions here
 	h.allactions = all.Actions
@@ -181,8 +261,6 @@ func (h *UBTTool) runActions() error {
 
 // execute actions got from ready queue
 func (h *UBTTool) executeActions() error {
-	blog.Infof("UBTTool: try to run actions")
-
 	h.maxjobs = DefaultJobs
 
 	// get max jobs from env
@@ -199,7 +277,7 @@ func (h *UBTTool) executeActions() error {
 	// h.dump()
 
 	// execute actions no more than max jobs
-	blog.Infof("UBTTool: try to run actions with %d jobs", h.maxjobs)
+	blog.Infof("UBTTool: try to run actions up to %d jobs", h.maxjobs)
 	h.actionchan = make(chan common.Actionresult, h.maxjobs)
 
 	// execute first batch actions
@@ -215,7 +293,7 @@ func (h *UBTTool) executeActions() error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("UBTTool: got action result:%+v", r)
-			if r.Exitcode != 0 || r.Err != nil {
+			if (r.Exitcode != 0 || r.Err != nil) && !h.settings.ContinueOnError {
 				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("UBTTool: %v", err)
 				return err
@@ -286,7 +364,9 @@ func (h *UBTTool) analyzeActions(actions []common.Action) error {
 		targetsuffix := []string{}
 		needAnalyzeArg := true
 		switch exe {
-		case "cl.exe", "cl-filter.exe", "clang.exe", "clang++.exe", "clang", "clang++":
+		case "cl.exe", "cl-filter.exe", "clang.exe",
+			"clang++.exe", "clang", "clang++",
+			"prospero-clang.exe", "clang-cl.exe":
 			targetsuffix = []string{".cpp", ".c", ".response\"", ".response"}
 			actions[i].IsCompile = true
 			break
@@ -413,9 +493,21 @@ func (h *UBTTool) selectReadyAction() int {
 func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.Actionresult) error {
 	blog.Infof("UBTTool: ready execute actions:%+v", action)
 
+	blog.Infof("UBTTool: raw cmd:[%s %s]", action.Cmd, action.Arg)
+
+	commandType := dcType.CommandDefault
 	fullargs := []string{action.Cmd}
-	args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
-	fullargs = append(fullargs, args...)
+	if strings.HasSuffix(action.Cmd, "cmd.exe") || strings.HasSuffix(action.Cmd, "Cmd.exe") {
+		fullargs = append(fullargs, action.Arg)
+	} else if (strings.HasSuffix(action.Cmd, "ispc.exe") || strings.HasSuffix(action.Cmd, "Ispc.exe")) && len(action.Arg) > dcType.MaxWindowsCommandLength {
+		fullargs = append(fullargs, action.Arg)
+		commandType = dcType.CommandInFile
+	} else {
+		args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
+		fullargs = append(fullargs, args...)
+	}
+
+	blog.Infof("UBTTool: sent cmd:[%s]", strings.Join(fullargs, " "))
 
 	//exitcode, err := h.executor.Run(fullargs, action.Workdir)
 	// try again if failed after sleep some time
@@ -424,7 +516,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 	waitsecs := 5
 	var err error
 	for try := 0; try < 3; try++ {
-		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir)
+		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir, commandType, action.Attributes)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("UBTTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
@@ -561,7 +653,36 @@ func (h *UBTTool) dump() {
 	blog.Infof("UBTTool: -------------------dump end-----------------------")
 }
 
-//---------------------------------to support set tool chain----------------------------------------------------------
+// ---------------------------------to support set tool chain----------------------------------------------------------
+func (h *UBTTool) getControllerConfig() dcSDK.ControllerConfig {
+	return dcSDK.ControllerConfig{
+		NoLocal: false,
+		Scheme:  common.ControllerScheme,
+		IP:      common.ControllerIP,
+		Port:    common.ControllerPort,
+		Timeout: 5 * time.Second,
+		LogDir:  h.flags.LogDir,
+		LogVerbosity: func() int {
+			// debug模式下, --v=3
+			if h.flags.LogLevel == dcUtil.PrintDebug.String() {
+				return 3
+			}
+			return 0
+		}(),
+		RemainTime:          h.settings.ControllerIdleRunSeconds,
+		NoWait:              h.settings.ControllerNoBatchWait,
+		SendCork:            h.settings.ControllerSendCork,
+		SendFileMemoryLimit: h.settings.ControllerSendFileMemoryLimit,
+		NetErrorLimit:       h.settings.ControllerNetErrorLimit,
+		RemoteRetryTimes:    h.settings.ControllerRemoteRetryTimes,
+		EnableLink:          h.settings.ControllerEnableLink,
+		EnableLib:           h.settings.ControllerEnableLib,
+		LongTCP:             h.settings.ControllerLongTCP,
+		DynamicPort:         h.settings.ControllerDynamicPort,
+		PreferLocal:         h.settings.ControllerPreferLocal,
+	}
+}
+
 func (h *UBTTool) initsettings() error {
 	var err error
 	h.projectSettingFile, err = h.getProjectSettingFile()
@@ -587,6 +708,8 @@ func (h *UBTTool) initsettings() error {
 		}
 	}
 	os.Setenv(DevOPSProcessTreeKillKey, "true")
+
+	h.controller = v1.NewSDK(h.getControllerConfig())
 
 	return nil
 }
@@ -662,6 +785,7 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 			MaxLocalPreJobs:   h.settings.MaxLocalPreJobs,
 			MaxLocalExeJobs:   h.settings.MaxLocalExeJobs,
 			MaxLocalPostJobs:  h.settings.MaxLocalPostJobs,
+			ResultCacheList:   h.settings.ResultCacheList,
 		},
 
 		Transport: dcType.BoosterTransport{
@@ -674,7 +798,8 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 			CommitSuicideCheckTick: 5 * time.Second,
 		},
 
-		Controller: sdk.ControllerConfig{
+		// got controller listen port from local file
+		Controller: dcSDK.ControllerConfig{
 			NoLocal: false,
 			Scheme:  shaderToolComm.ControllerScheme,
 			IP:      shaderToolComm.ControllerIP,

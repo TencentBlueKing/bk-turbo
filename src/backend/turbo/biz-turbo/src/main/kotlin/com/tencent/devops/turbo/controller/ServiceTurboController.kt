@@ -4,6 +4,7 @@ import com.tencent.devops.api.pojo.Response
 import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.turbo.api.IServiceTurboController
+import com.tencent.devops.turbo.pojo.TurboPlanModel
 import com.tencent.devops.turbo.pojo.TurboRecordModel
 import com.tencent.devops.turbo.service.TurboAuthService
 import com.tencent.devops.turbo.service.TurboPlanService
@@ -65,5 +66,13 @@ class ServiceTurboController @Autowired constructor(
             throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.getTurboPlanDetailByPlanId(planId))
+    }
+
+    override fun addNewTurboPlan(projectId: String, userId: String, turboPlanModel: TurboPlanModel): Response<String?> {
+        // 判断是否是管理员
+        if (!turboAuthService.getAuthResult(projectId, userId)) {
+            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+        }
+        return Response.success(turboPlanService.addNewTurboPlan(turboPlanModel, userId))
     }
 }

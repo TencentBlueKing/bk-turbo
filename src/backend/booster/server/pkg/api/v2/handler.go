@@ -10,16 +10,20 @@
 package v2
 
 import (
+	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/manager"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 
 	"github.com/emicklei/go-restful"
 )
@@ -40,7 +44,11 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 
 	tb, err := defaultManager.CreateTask(param)
 	if err != nil {
-		blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		if err == engine.ErrorProjectNoFound || strings.Contains(err.Error(), types.ErrorConcurrencyLimit.Error()) {
+			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		} else {
+			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		}
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrApplyResourceFailed, Message: err.Error()})
 		return
 	}
@@ -89,7 +97,7 @@ func SendMessage(req *restful.Request, resp *restful.Response) {
 			return
 		}
 		if data, err = defaultManager.SendProjectMessage(param.ProjectID, []byte(param.Extra)); err != nil {
-			blog.Errorf("send message: send project(%s) message to engine failed, url(%s) message(%s): %v",
+			blog.Warnf("send message: send project(%s) message to engine failed, url(%s) message(%s): %v",
 				param.ProjectID, req.Request.URL.String(), param.Extra, err)
 			api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrSendMessageFailed, Message: err.Error()})
 			return
@@ -135,10 +143,12 @@ func UpdateHeartbeat(req *restful.Request, resp *restful.Response) {
 	}
 
 	blog.Infof("update heartbeat: try to update task(%s) heartbeat", taskID)
-	if err = defaultManager.UpdateHeartbeat(taskID); err != nil {
+	status, err := defaultManager.UpdateHeartbeat(taskID)
+	if err != nil {
 		blog.Warnf("update heartbeat: update task(%s) heartbeat failed, url(%s): %v",
 			taskID, req.Request.URL.String(), err)
-		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrUpdateHeartbeatFailed, Message: err.Error()})
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrUpdateHeartbeatFailed,
+			Message: api.ServerErrUpdateHeartbeatFailed.String() + ":" + err.Error()})
 		return
 	}
 
@@ -146,6 +156,7 @@ func UpdateHeartbeat(req *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &RespHeartbeat{
 		TaskID: taskID,
 		Type:   HeartBeatPong.String(),
+		Status: status,
 	}})
 }
 
@@ -162,6 +173,11 @@ func ReleaseResource(req *restful.Request, resp *restful.Response) {
 	if err = defaultManager.ReleaseTask(param); err != nil {
 		blog.Errorf("release resource: release task(%s) failed, url(%s): %v",
 			param.TaskID, req.Request.URL.String(), err)
+
+		if err == engine.ErrorUnterminatedTaskNoFound || err == types.ErrorTaskAlreadyTerminated {
+			api.ReturnRest(&api.RestResponse{Resp: resp, Message: err.Error()})
+			return
+		}
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReleaseResourceFailed, Message: err.Error()})
 		return
 	}
@@ -201,7 +217,7 @@ func getApplyParam(req *restful.Request) (*manager.TaskCreateParam, error) {
 	}
 
 	param := &manager.TaskCreateParam{
-		ProjectID:     types.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene),
+		ProjectID:     commonTypes.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene),
 		BuildID:       protocol.BuildID,
 		ClientVersion: protocol.ClientVersion,
 		ClientCPU:     protocol.ClientCPU,
@@ -231,7 +247,7 @@ func getMessageParam(req *restful.Request) (*ParamMessage, error) {
 	if protocol.Type == "" {
 		protocol.Type = MessageTask
 	}
-	protocol.ProjectID = types.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene)
+	protocol.ProjectID = commonTypes.GetProjectIDWithScene(protocol.ProjectID, protocol.Scene)
 
 	blog.Debugf("get message param: get message: %s", string(body))
 	return &protocol, nil
@@ -254,13 +270,23 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 		}
 	}
 
+	hostlist := []string{}
+	hostNameMap := map[string]string{}
+	extra := ""
+	if te != nil {
+		hostlist = te.WorkerList()
+		hostNameMap = te.GetWorkerNameMap()
+		extra = string(te.Dump())
+	}
+
 	return &RespTaskInfo{
 		TaskID:      tb.ID,
 		Status:      tb.Status.Status,
-		HostList:    te.WorkerList(),
+		HostList:    hostlist,
+		HostNameMap: hostNameMap,
 		QueueNumber: rank,
 		Message:     tb.Status.Message,
-		Extra:       string(te.Dump()),
+		Extra:       extra,
 	}, nil
 }
 
@@ -303,4 +329,72 @@ func getReleaseParam(req *restful.Request) (*manager.TaskReleaseParam, error) {
 
 	blog.Infof("get release param: %s", string(body))
 	return param, nil
+}
+
+// QueryWorkerUpgradeInfo handle the http request for querying worker upgrade info
+func QueryWorkerUpgradeInfo(req *restful.Request, resp *restful.Response) {
+	conf := "./conf/worker_upgrade.json"
+	data, err := ioutil.ReadFile(conf)
+	if err != nil {
+		blog.Warnf("get conf: %s failed with error:%v", conf, err)
+		data = []byte("")
+	}
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: data})
+}
+
+// QueryCacheList handle the http request for querying cache list
+func QueryCacheList(req *restful.Request, resp *restful.Response) {
+	projectID := req.QueryParameter(queryProjectIDKey)
+	if projectID == "" {
+		blog.Errorf("query cache list: url(%s): projectID not specified", req.Request.URL.String())
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrInvalidParam,
+			Message: "project_id no specific"})
+		return
+	}
+
+	// 打开JSON文件
+	file, err := os.Open(cacheListFile)
+	if err != nil {
+		blog.Errorf("query cache list: url(%s) open %s with error:%v",
+			req.Request.URL.String(), cacheListFile, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReadJSONFailed,
+			Message: "not found cache list"})
+		return
+	}
+	defer file.Close()
+
+	// 读取文件内容
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		blog.Errorf("query cache list: url(%s) read %s with error:%v",
+			req.Request.URL.String(), cacheListFile, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReadJSONFailed,
+			Message: "not found cache list"})
+		return
+	}
+
+	// 解析JSON到结构体
+	var config CacheConfigList
+	err = json.Unmarshal(bytes, &config)
+	if err != nil {
+		blog.Errorf("query cache list: url(%s) Unmarshal %s with error:%v",
+			req.Request.URL.String(), cacheListFile, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReadJSONFailed,
+			Message: "not found cache list"})
+		return
+	}
+
+	// 过滤
+	configfilter := make(map[string]CacheConfig)
+	v, ok := config[projectID]
+	if ok {
+		configfilter[projectID] = v
+	} else {
+		v, ok = config[cacheDefaultProjectID]
+		if ok {
+			configfilter[cacheDefaultProjectID] = v
+		}
+	}
+
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: configfilter})
 }

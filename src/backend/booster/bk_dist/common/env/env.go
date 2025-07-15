@@ -36,6 +36,7 @@ const (
 	KeyExecutorSkipSeparating          = "SKIP_SEPARATING"
 	KeyExecutorSkipLocalRetry          = "SKIP_LOCAL_RETRY"
 	KeyExecutorIOTimeout               = "IO_TIMEOUT"
+	KeyExecutorIOTimeout4UBA           = "IO_TIMEOUT_4_UBA"
 	KeyExecutorToolchainPathMap        = "TOOLCHAIN_PATH_MAP"
 	KeyExecutorEnableLib               = "ENABLE_LIB"
 	KeyExecutorEnableLink              = "ENABLE_LINK"
@@ -53,7 +54,9 @@ const (
 	KeyExecutorPumpSearchLink          = "PUMP_SEARCH_LINK"
 	KeyExecutorPumpSearchLinkResult    = "PUMP_SEARCH_LINK_RESULT"
 	KeyExecutorPumpLstatByDir          = "PUMP_LSTAT_BY_DIR"
+	KeyExecutorPumpCorrectCap          = "PUMP_CORRECT_CAP"
 	KeyExecutorForceLocalKeys          = "FORCE_LOCAL_KEYS"
+	KeyExecutorCCEnsureFileOwnerkey    = "CC_ENSURE_OWNER"
 	KeyExecutorEnvProfile              = "ENV_PROFILE"
 	KeyExecutorWorkerSideCache         = "WORKER_SIDE_CACHE"
 	KeyExecutorLocalRecord             = "LOCAL_RECORD"
@@ -61,6 +64,22 @@ const (
 	KeyExecutorIdleKeepSecs            = "IDLE_KEEP_SECS"
 	KeyExecutorTotalActionNum          = "TOTAL_ACTION_NUM"
 	KeyExecutorUseWebSocket            = "USE_WEBSOCKET"
+	KeyExecutorNewShader               = "NEW_SHADER"
+	KeyExecutorSearchToolchain         = "SEARCH_TOOLCHAIN"
+	KeyExecutorUECLNotUseLocal         = "UE_CL_NOT_USE_LOCAL"
+	KeyExecutorUECCNotUseLocal         = "UE_CC_NOT_USE_LOCAL"
+	KeyExecutorUELibNotUseLocal        = "UE_LIB_NOT_USE_LOCAL"
+	KeyExecutorUELinkNotUseLocal       = "UE_LINK_NOT_USE_LOCAL"
+	KeyExecutorUEShaderNotUseLocal     = "UE_SHADER_NOT_USE_LOCAL"
+	KeyExecutorUECLLocalCPUWeight      = "UE_CL_LOCAL_CPU_WEIGHT"
+	KeyExecutorUECCLocalCPUWeight      = "UE_CC_LOCAL_CPU_WEIGHT"
+	KeyExecutorUELibLocalCPUWeight     = "UE_LIB_LOCAL_CPU_WEIGHT"
+	KeyExecutorUELinkLocalCPUWeight    = "UE_LINK_LOCAL_CPU_WEIGHT"
+	KeyExecutorUEShaderLocalCPUWeight  = "UE_SHADER_LOCAL_CPU_WEIGHT"
+	KeyExecutorIgnoreHttpStatus        = "IGNORE_HTTP_STATUS"
+	KeyExecutorResultCacheType         = "RESULT_CACHE_TYPE"
+	KeyExecutorResultCacheTriggleSecs  = "RESULT_CACHE_TRIGGLE_SECS"
+	KeyExecutorHasResultIndex          = "HAS_RESULT_INDEX"
 
 	KeyUserDefinedLogLevel         = "USER_DEFINED_LOG_LEVEL"
 	KeyUserDefinedExecutorLogLevel = "USER_DEFINED_EXECUTOR_LOG_LEVEL"
@@ -78,15 +97,17 @@ const (
 	// for ubt tool
 	KeyCommonUE4MaxJobs = "UE4_MAX_JOBS"
 
-	KeyWorkerPort          = "PORT_4_WORKER"        // port for worker,default is 30811
-	KeyWorkerMaxProcess    = "MAX_PROCESS_4_WORKER" // max process number, default is 8
-	KeyWorkerMaxJobs       = "MAX_JOBS_4_WORKER"    // max parallel jobs
-	KeyWorkerWhiteIP       = "WHITE_IP"             // such as "192.168.0.1 192.168.0.2 192.168.0.3 0.0.0.0"
-	KeyWorkerCacheEnable   = "CACHE_ENABLE"
-	KeyWorkerCacheDir      = "CACHE_DIR"
-	KeyWorkerCachePoolSize = "CACHE_POOL_SIZE"
-	KeyWorkerCacheMinSize  = "CACHE_MIN_SIZE"
-	KeyWorkerMemPerJob     = "MEM_PER_JOB_4_WORKER" // memory per job
+	KeyWorkerPort           = "PORT_4_WORKER"        // port for worker,default is 30811
+	KeyWorkerMaxProcess     = "MAX_PROCESS_4_WORKER" // max process number, default is 8
+	KeyWorkerMaxJobs        = "MAX_JOBS_4_WORKER"    // max parallel jobs
+	KeyWorkerWhiteIP        = "WHITE_IP"             // such as "192.168.0.1 192.168.0.2 192.168.0.3 0.0.0.0"
+	KeyWorkerCacheEnable    = "CACHE_ENABLE"
+	KeyWorkerCacheDir       = "CACHE_DIR"
+	KeyWorkerCachePoolSize  = "CACHE_POOL_SIZE"
+	KeyWorkerCacheMinSize   = "CACHE_MIN_SIZE"
+	KeyWorkerMemPerJob      = "MEM_PER_JOB_4_WORKER" // memory per job
+	KeyWorkerSupportAbsPath = "SUPPORT_ABS_PATH"     // whether support abs path
+	KeyWorkerWithRootEnv    = "WITH_ROOT_ENV"
 
 	KeyCustomSetting = "CUSTOM_SETTINGS"
 

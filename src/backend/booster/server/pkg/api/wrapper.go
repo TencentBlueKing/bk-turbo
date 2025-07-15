@@ -55,13 +55,22 @@ func process(f restful.RouteFunction, opts ProcessType) func(req *restful.Reques
 				req.Request.Header.Set(HeaderRemote, req.Request.RemoteAddr)
 			}
 		}
-		blog.Infof("Receive %s %s?%s From %s",
-			req.Request.Method, req.Request.URL.Path, req.Request.URL.RawQuery, req.Request.Header.Get(HeaderRemote))
+		blog.Infof("Receive %s %s%s?%s From %s",
+			req.Request.Method,
+			req.Request.Host,
+			req.Request.URL.Path,
+			req.Request.URL.RawQuery,
+			req.Request.Header.Get(HeaderRemote))
 
 		switch opts {
 		case ProcessNoLimit:
 			f(req, resp)
 		case ProcessMasterOnly:
+			if GetAPIResource() == nil || GetAPIResource().Rd == nil {
+				blog.Infof("global resource not init, do nothing now")
+				return
+			}
+
 			isMaster, leader, err := GetAPIResource().Rd.IsMaster()
 
 			if err != nil {
@@ -98,6 +107,21 @@ const (
 
 // redirect is like a proxy, it requests to the other node and return the data from that one.
 func redirect(uri string, req *restful.Request, resp *restful.Response) {
+	// adjust port if necessary
+	port := ""
+	if req.Request.Host != "" {
+		fields := strings.Split(req.Request.Host, ":")
+		if len(fields) == 2 {
+			port = strings.TrimSuffix(fields[1], "/")
+		}
+	}
+	if port != "" {
+		fields := strings.Split(uri, ":")
+		if len(fields) == 3 && fields[2] != port {
+			uri = fmt.Sprintf("%s:%s:%s", fields[0], fields[1], port)
+		}
+	}
+
 	uri += req.Request.URL.Path + "?" + req.Request.URL.RawQuery
 
 	blog.Infof("redirect to uri: %s %s", req.Request.Method, uri)

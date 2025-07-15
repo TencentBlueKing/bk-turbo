@@ -18,7 +18,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/longtcp"
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -26,6 +28,8 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/compress"
 	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
+	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
@@ -51,6 +55,7 @@ func NewMgr(pCtx context.Context, work *types.Work) types.ResourceMgr {
 		// maybe should adjust cool time
 		applyCoolSeconds: 10,
 		newlyTaskID:      "",
+		conf:             work.Config(),
 	}
 
 	mgr.RegisterCallback(mgr.callback4ResChanged)
@@ -64,6 +69,7 @@ const (
 	inspectDistributeTaskURI      = "v2/build/task?task_id=%s"
 	heartbeatURI                  = "v2/build/heartbeat"
 	messageURI                    = "v2/build/message"
+	cacheListURI                  = "v2/build/cachelist?project_id=%s"
 )
 
 // Mgr describe the resource manager
@@ -99,6 +105,8 @@ type Mgr struct {
 	applyLastFailTime int64
 
 	newlyTaskID string
+
+	conf *config.ServerConfig
 }
 
 // IsApplyFinished check whether apply finished
@@ -107,6 +115,41 @@ func (m *Mgr) IsApplyFinished() bool {
 	defer m.applylock.RUnlock()
 
 	return m.applystatus != ResourceApplying
+}
+
+// SupportAbsPath 假定server返回的资源都是相同类型的，或者全部支持，或者全部不支持
+func (m *Mgr) SupportAbsPath() bool {
+	m.reslock.RLock()
+	defer m.reslock.RUnlock()
+
+	// 如果没有资源，保险起见，返回false，防止覆盖了worker上的文件
+	if !m.HasAvailableWorkers() {
+		return false
+	}
+
+	// 默认支持，只有明确不支持的才返回false
+	for _, v := range m.resources {
+		if v.taskInfo == nil {
+			continue
+		}
+		blog.Infof("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
+		if strings.Contains(v.taskInfo.Extra, commonTypes.LabelKeySupportAbsPath) {
+			blog.Infof("resource: ready decode extra to temp map")
+			temp := map[string]interface{}{}
+			codec.DecJSON([]byte(v.taskInfo.Extra), &temp)
+			blog.Infof("resource: got temp map:%v", temp)
+			if p, ok := temp[commonTypes.LabelKeySupportAbsPath]; ok {
+				b, ok := p.(bool)
+				if ok {
+					if !b {
+						return b
+					}
+				}
+			}
+		}
+	}
+
+	return true
 }
 
 // HasAvailableWorkers check if there are available ready workers
@@ -210,7 +253,6 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					Compresstype: dcProtocol.CompressLZ4,
 					Protocol:     "tcp",
 				}
-
 				hosts = append(hosts, host)
 			}
 		}
@@ -264,6 +306,11 @@ func (m *Mgr) Apply(req *v2.ParamApply, force bool) (*v2.RespTaskInfo, error) {
 	if req == nil {
 		err := fmt.Errorf("param is nil")
 		blog.Errorf("resource: apply dist-resource failed for work(%s) error:%v", m.work.ID(), err)
+		return nil, err
+	}
+	if req.ProjectID == "" {
+		err := fmt.Errorf("projectId is nil")
+		blog.Warnf("resource: apply dist-resource failed for work(%s) error:%v", m.work.ID(), err)
 		return nil, err
 	}
 
@@ -345,6 +392,7 @@ func (m *Mgr) Release(req *v2.ParamRelease) error {
 		if r.canRelease() {
 			resourcechanged = true
 			r.status = ResourceReleasing
+			m.cleanLongTCP(r)
 			err := m.sendReleaseReq(req, r)
 			if err != nil {
 				r.status = ResourceReleaseFailed
@@ -382,6 +430,7 @@ func (m *Mgr) releaseOne(req *v2.ParamRelease, r *Res) error {
 	}
 
 	r.status = ResourceReleasing
+	m.cleanLongTCP(r)
 	err := m.sendReleaseReq(req, r)
 	if err != nil {
 		r.status = ResourceReleaseFailed
@@ -393,6 +442,38 @@ func (m *Mgr) releaseOne(req *v2.ParamRelease, r *Res) error {
 	r.status = ResourceReleaseSucceed
 	// should remove from array ???
 
+	return nil
+}
+
+func (m *Mgr) cleanLongTCP(r *Res) error {
+	if m.conf.LongTCP {
+		if r != nil && r.taskInfo != nil {
+			blog.Infof("resource: try to clean long tcp for task(%s) work(%s)", r.taskid, m.work.ID())
+
+			// 长连接池释放可能比较慢，改成并行
+			var wg sync.WaitGroup
+			for _, v := range r.taskInfo.HostList {
+				wg.Add(1)
+				go func(v string) {
+					defer wg.Done()
+					hostField := strings.Split(v, "/")
+					if len(hostField) > 1 {
+						server := hostField[0]
+						ip := ""
+						port := 0
+						i := strings.LastIndex(server, ":")
+						if i > 0 && i < len(server)-1 {
+							ip = server[:i]
+							port, _ = strconv.Atoi(server[i+1:])
+						}
+						longtcp.CleanGlobalSessionPool(ip, int32(port))
+					}
+				}(v)
+			}
+
+			wg.Wait()
+		}
+	}
 	return nil
 }
 
@@ -508,17 +589,17 @@ func (m *Mgr) SendStats(brief bool) error {
 	_ = codec.EncJSON(message, &data)
 
 	if _, _, err := m.request("POST", m.serverHost, messageURI, data); err != nil {
-		blog.Errorf("resource: send stats(detail %v) to server for task(%s) work(%s) failed: %v",
+		blog.Errorf("resource: send stats(brief %v) to server for task(%s) work(%s) failed: %v",
 			brief, taskID, workID, err)
 		return err
 	}
 
-	blog.Infof("resource: success to send stats detail %v to server for task(%s) work(%s)",
+	blog.Infof("resource: success to send stats brief %v to server for task(%s) work(%s)",
 		brief, taskID, workID)
 	return nil
 }
 
-// send stats and reset after sent, if brief true, then will not send the job stats
+// SendAndResetStats send stats and reset after sent, if brief true, then will not send the job stats
 // !! this will call m.work.Lock() , to avoid dead lock
 func (m *Mgr) SendAndResetStats(brief bool, resapplytimes []int64) error {
 
@@ -621,6 +702,56 @@ func (m *Mgr) sendStatsData(data *[]byte) error {
 	return nil
 }
 
+func (m *Mgr) heartBeatCanStop(taskId string, respHeartbeat *v2.RespHeartbeat, err error) bool {
+	if err == nil {
+		if respHeartbeat.Status.Terminated() {
+			blog.Info("resource: task(%s) work(%s) status %s,can stop heartbeat", taskId, m.work.ID(), respHeartbeat.Status)
+			return true
+		}
+	} else {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+		// if requestOK but return error(not encode error), we should release resource right now
+		if strings.Contains(err.Error(), api.ServerErrUpdateHeartbeatFailed.String()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
+	resp, requestOK, respErr := m.request("POST", m.serverHost, heartbeatURI, heartbeatData)
+	if !requestOK {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), respErr)
+		return
+	}
+	var respHeartbeat v2.RespHeartbeat
+	if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
+		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+		return
+	}
+
+	if m.heartBeatCanStop(taskId, &respHeartbeat, respErr) {
+		resourcechanged := false
+		m.reslock.Lock()
+		defer func() {
+			m.reslock.Unlock()
+			if resourcechanged {
+				m.onResChanged()
+			}
+		}()
+
+		for _, r := range m.resources {
+			if r.taskid == taskId {
+				blog.Info("resource: task(%s) work(%s) maybe in terminated status,  stop heartbeat right now", taskId, m.work.ID())
+				r.status = ResourceReleaseSucceed
+				resourcechanged = true
+				break
+			}
+		}
+	}
+}
+
 func (m *Mgr) heartbeat() {
 	blog.Infof("resource: run heartbeat tick for work: %s", m.work.ID())
 	ctx, _ := context.WithCancel(m.ctx)
@@ -638,13 +769,10 @@ func (m *Mgr) heartbeat() {
 			m.reslock.RLock()
 			for _, r := range m.resources {
 				if r.needHeartBeat() {
-					go func(data []byte) {
-						if _, _, err := m.request("POST", m.serverHost, heartbeatURI, data); err != nil {
-							blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", r.taskid, m.work.ID(), err)
-						}
-					}(r.heartbeatData())
+					go m.dealHeartBeat(r.taskid, r.heartbeatData())
 				}
 			}
+
 			m.reslock.RUnlock()
 		}
 	}
@@ -696,8 +824,9 @@ func (m *Mgr) inspectInfo(taskID string) {
 				m.addRes(&info, s)
 
 				m.updateApplyEndStatus(s == ResourceApplySucceed)
-				blog.Infof("resource: success to apply resources and get host(%d): %v",
-					len(info.HostList), info.HostList)
+				blog.Infof("resource: success to apply resources and get host(%d): %v, message:%s",
+					len(info.HostList), info.HostList, info.Message)
+				blog.Infof("resource: success to apply resources %v", info)
 				return
 
 			case engine.TaskStatusFinish, engine.TaskStatusFailed:
@@ -845,7 +974,8 @@ func (m *Mgr) addRes(info *v2.RespTaskInfo, status Status) error {
 		}
 	}
 
-	blog.Warnf("resource: add task:%s status(%s) work:%s but not found taskid in resources?", info.TaskID, status.String(), m.work.ID())
+	blog.Warnf("resource: add task:%s status(%s) work:%s but not found taskid in resources?",
+		info.TaskID, status.String(), m.work.ID())
 	m.resources = append(m.resources, &Res{
 		taskid:   info.TaskID,
 		status:   status,
@@ -949,4 +1079,25 @@ func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, er
 	}
 
 	return by, true, nil
+}
+
+// GetCacheList will get cache list from tbs-server
+func (m *Mgr) GetCacheList(projectid string) (*v2.CacheConfigList, error) {
+	blog.Infof("resource: try to get cache list for projectid(%s)", projectid)
+
+	data, _, err := m.request("GET", m.serverHost,
+		fmt.Sprintf(cacheListURI, projectid), nil)
+	if err != nil {
+		blog.Errorf("resource: get cache list with projectid(%s) with error: %v", projectid, err)
+		return nil, err
+	}
+
+	var info v2.CacheConfigList
+	if err = codec.DecJSON(data, &info); err != nil {
+		blog.Errorf("resource: get cache list with projectid(%s) with error: %v", projectid, err)
+		return nil, err
+	}
+
+	blog.Infof("resource: got cache list:%v for projectid(%s)", info, projectid)
+	return &info, nil
 }

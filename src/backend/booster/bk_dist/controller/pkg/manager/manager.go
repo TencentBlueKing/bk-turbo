@@ -14,10 +14,12 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
@@ -99,6 +101,10 @@ func (m *mgr) RegisterWork(config *types.WorkRegisterConfig) (*types.WorkInfo, b
 		if work := m.worksPool.find(config.Apply.ProjectID, config.Apply.Scene, config.BatchMode); work != nil {
 			work.Lock()
 			info := work.Basic().Info()
+			bazelNoLauncher := strings.Contains(config.Apply.Extra, command.FlagBazelNoLauncher)
+			info.SetBazelNoLauncher(bazelNoLauncher)
+			blog.Infof("mgr: work(%s) project(%s) scene(%s) update bazelNoLauncher to %v",
+				work.ID(), config.Apply.ProjectID, config.Apply.Scene, bazelNoLauncher)
 			if info.CanBeHeartbeat() {
 				defer work.Unlock()
 				_ = work.Basic().Heartbeat()
@@ -363,10 +369,24 @@ func (m *mgr) ExecuteLocalTask(
 	blog.Infof("mgr: try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
 		workID, req.Pid, req.Environments, req.Commands)
 
-	work, err := m.worksPool.getWork(workID)
-	if err != nil {
-		blog.Errorf("mgr: get work(%s) failed: %v", workID, err)
-		return nil, err
+	var work *types.Work
+	var err error
+	if workID == dcSDK.EmptyWorkerID {
+		if m.conf.UseDefaultWorker {
+			work, err = m.worksPool.getFirstBazelNoLauncherWork()
+			if err != nil {
+				blog.Errorf("mgr: get first work failed: %v", err)
+				return nil, err
+			}
+		} else {
+			return nil, types.ErrWorkIDEmpty
+		}
+	} else {
+		work, err = m.worksPool.getWork(workID)
+		if err != nil {
+			blog.Errorf("mgr: get work(%s) failed: %v", workID, err)
+			return nil, err
+		}
 	}
 
 	if !work.Basic().Info().IsWorking() {
@@ -387,11 +407,25 @@ func (m *mgr) ExecuteLocalTask(
 	dcSDK.StatsTimeNow(&req.Stats.EnterTime)
 	defer dcSDK.StatsTimeNow(&req.Stats.LeaveTime)
 	work.Basic().UpdateJobStats(req.Stats)
-	withlocalresource := m.checkRunWithLocalResource(work)
-	if withlocalresource {
-		defer m.decLocalResourceTask()
+
+	// TODO : 是否转本地执行的判断，下放到basic执行，结合handle的信息
+	//        另外，本地锁需要加上本地权重
+	// withlocalresource := m.checkRunWithLocalResource(work)
+	// if withlocalresource {
+	// 	defer m.decLocalResourceTask()
+	// }
+	var resExecMode string
+	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() string {
+		resExecMode = m.selectResourceExecutionMode(work)
+		if resExecMode != types.WaitResourceMode {
+			blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got mode %v",
+				workID, req.Pid, resExecMode)
+		}
+		return resExecMode
+	})
+	if resExecMode == types.LocalResourceMode {
+		m.decLocalResourceTask()
 	}
-	result, err := work.Local().ExecuteTask(req, globalWork, withlocalresource)
 	if err != nil {
 		if result == nil {
 			result = &types.LocalTaskExecuteResult{Result: &dcSDK.LocalTaskResult{
@@ -801,6 +835,24 @@ func sdkToolChain2Types(sdkToolChain *dcSDK.OneToolChain) *types.ToolChain {
 	}
 }
 
+func (m *mgr) canUseLocalIdleResource() bool {
+	return m.conf.UseLocalCPUPercent > 0 && m.conf.UseLocalCPUPercent <= 100
+}
+
+func (m *mgr) selectResourceExecutionMode(work *types.Work) string {
+	if m.checkRunWithLocalResource(work) {
+		return types.LocalResourceMode
+	}
+	//TODO: 此处取waitingList长度未加锁，因此存在并发读问题，后续如需要可优化
+	// 检查远程资源等待队列是否过长
+	if work.Remote().WaitingListLen() > work.Remote().TotalSlots()/10 {
+		blog.Debugf("mgr: remote resource waiting list len %d is too long, wait resource for work:%s",
+			work.Remote().WaitingListLen(), work.ID())
+		return types.WaitResourceMode
+	}
+	return types.RemoteResourceMode
+}
+
 func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	if m.conf.UseLocalCPUPercent <= 0 || m.conf.UseLocalCPUPercent > 100 {
 		return false
@@ -813,6 +865,11 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	maxidlenum := runtime.NumCPU() - 2
 	allowidlenum := maxidlenum * m.conf.UseLocalCPUPercent / 100
 	runninglocalresourcetask := atomic.LoadInt32(&m.localResourceTaskNum)
+	if m.conf.LocalSlots-2 < allowidlenum {
+		blog.Infof("mgr localresource check: local slots(%d) less than allow cpu num(%d) for work: %s",
+			m.conf.LocalSlots-2, allowidlenum, work.Basic().Info().WorkID())
+		allowidlenum = m.conf.LocalSlots - 2
+	}
 	if runninglocalresourcetask >= int32(allowidlenum) {
 		blog.Infof("mgr localresource check: running local resource task: %d,"+
 			"max allow idle num:%d for work: %s",
@@ -825,8 +882,14 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 	remotetotal := work.Remote().TotalSlots()
 	blog.Infof("mgr localresource check: prepared task: %d,total remote slots:%d for work: %s",
 		prepared, remotetotal, work.Basic().Info().WorkID())
-	if prepared < int32(remotetotal) {
-		return false
+
+	// if not set prefer local , check prepared task to use remote resource first
+	if !m.conf.PreferLocal {
+		if prepared < int32(remotetotal) { //check prepared task, if remote enough, not allow execute with local resource
+			blog.Infof("mgr localresource check: remote resources are sufficient and not prefer local for work: %s",
+				work.Basic().Info().WorkID())
+			return false
+		}
 	}
 
 	// check local idle cpu
@@ -860,6 +923,7 @@ func (m *mgr) checkRunWithLocalResource(work *types.Work) bool {
 		work.Basic().Info().WorkID())
 
 	atomic.AddInt32(&m.localResourceTaskNum, 1)
+
 	return true
 }
 
@@ -870,6 +934,16 @@ func (m *mgr) decLocalResourceTask() {
 // Get first workid
 func (m *mgr) GetFirstWorkID() (string, error) {
 	work, err := m.worksPool.getFirstWork()
+	if err == nil {
+		return work.ID(), nil
+	} else {
+		return "", err
+	}
+}
+
+// Get first bazel workid
+func (m *mgr) GetFirstBazelNoLauncherWorkID() (string, error) {
+	work, err := m.worksPool.getFirstBazelNoLauncherWork()
 	if err == nil {
 		return work.ID(), nil
 	} else {

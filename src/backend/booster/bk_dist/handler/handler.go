@@ -40,6 +40,10 @@ type Handler interface {
 	// GetFilterRules return files which will be used by multi-executor, send only once
 	GetFilterRules() ([]dcSDK.FilterRuleItem, error)
 
+	// CanExecuteWithLocalIdleResource return whether can execute this with local idle resource,
+	// true by default
+	CanExecuteWithLocalIdleResource(command []string) bool
+
 	// PreExecuteNeedLock decide whether executor should lock before pre execution
 	PreExecuteNeedLock(command []string) bool
 
@@ -47,7 +51,7 @@ type Handler interface {
 	PreLockWeight(command []string) int32
 
 	// PreExecute will be called before task is distributed
-	PreExecute(command []string) (*dcSDK.BKDistCommand, error)
+	PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError)
 
 	// LocalExecuteNeed decide whether executor should execute local command
 	LocalExecuteNeed(command []string) bool
@@ -56,13 +60,19 @@ type Handler interface {
 	LocalLockWeight(command []string) int32
 
 	// LocalExecute will execute this command by handler
-	LocalExecute(command []string) (int, error)
+	LocalExecute(command []string) dcType.BKDistCommonError
 
 	// NeedRemoteResource check whether this command need remote resource
 	NeedRemoteResource(command []string) bool
 
 	// RemoteRetryTimes will return the remote retry times
 	RemoteRetryTimes() int
+
+	// NeedRetryOnRemoteFail check whether need retry on remote fail
+	NeedRetryOnRemoteFail(command []string) bool
+
+	// OnRemoteFail give chance to try other way if failed to remote execute
+	OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError)
 
 	// PostExecuteNeedLock decide whether executor should lock before post execution
 	PostExecuteNeedLock(result *dcSDK.BKDistResult) bool
@@ -71,8 +81,18 @@ type Handler interface {
 	PostLockWeight(result *dcSDK.BKDistResult) int32
 
 	// PostExecute will be called after task is distributed and executed
-	PostExecute(result *dcSDK.BKDistResult) error
+	PostExecute(result *dcSDK.BKDistResult) dcType.BKDistCommonError
 
 	// FinalExecute chance to finalize for handler, must be safe to call in goroutines
 	FinalExecute(command []string)
+
+	// SupportResultCache check whether this command support result cache
+	// 0 : do not support
+	// 1 : support local cache
+	// 2 : support remote cache
+	// 3 : support both local and remote cache
+	SupportResultCache(command []string) int
+
+	// GetResultCacheKey return the key of result cache
+	GetResultCacheKey(command []string) string
 }

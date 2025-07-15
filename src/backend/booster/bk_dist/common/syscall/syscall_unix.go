@@ -1,5 +1,5 @@
-//go:build linux || darwin
-// +build linux darwin
+//go:build linux
+// +build linux
 
 /*
  * Copyright (c) 2021 THL A29 Limited, a Tencent company. All rights reserved
@@ -61,7 +61,11 @@ func RunServer(command string) error {
 // GetSysProcAttr set process group id to a new id,
 // in case of the signals sent to the caller affect the process as well
 func GetSysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{Setpgid: true, Pgid: 0}
+	return &syscall.SysProcAttr{
+		Setpgid: true,
+		Pgid:    0,
+		// Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+	}
 }
 
 // GetCallerAndOptions return the caller and options in unix
@@ -115,6 +119,14 @@ func (s *Sandbox) GetAbsPath(path string) string {
 func (s *Sandbox) ExecScripts(src string) (int, error) {
 	caller, options := GetCallerAndOptions()
 	return s.ExecCommand(caller, options, src)
+}
+
+func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
+	return 1, fmt.Errorf("not support")
+}
+
+func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
+	return 1, fmt.Errorf("not support")
 }
 
 // ExecScriptsWithMessage run the scripts and return the output
@@ -303,7 +315,7 @@ func GetConsoleCP() int {
 	return 0
 }
 
-//AddPath2Env add path to env
+// AddPath2Env add path to env
 func AddPath2Env(p string) {
 	path := os.Getenv("PATH")
 	newpath := fmt.Sprintf("%s:%s", p, path)
@@ -323,4 +335,12 @@ func RedirectStderror(f string) error {
 	}
 
 	return nil
+}
+
+func NeedSearchToolchain(input *env.Sandbox) bool {
+	if input != nil {
+		return input.GetEnv(env.KeyExecutorSearchToolchain) != ""
+	}
+
+	return env.GetEnv(env.KeyExecutorSearchToolchain) != ""
 }

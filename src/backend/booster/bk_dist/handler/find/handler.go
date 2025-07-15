@@ -21,6 +21,7 @@ import (
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/handler"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
 )
@@ -50,9 +51,10 @@ func NewFinder() (handler.Handler, error) {
 // 3. do PreWork before all process begin
 // 4. do the Command from user, when the user command running, multiple "find" commands brings up.
 // 5. in each "find" command:
-//      - do PreExecute
-//      - run command (in local or remote)
-//      - do PostExecute
+//   - do PreExecute
+//   - run command (in local or remote)
+//   - do PostExecute
+//
 // 6. do PostWork after all process finish
 //
 // Particularly, MParallel.exe is recommended to used to manage the parallel process for "find" commands.
@@ -70,8 +72,8 @@ func NewFinder() (handler.Handler, error) {
 // test1.txt:23          ----------TEST1.TXT: 23
 //
 // test2.txt: foobar     ----------TEST2.TXT:
-//                       foobar
 //
+//	foobar
 type Finder struct {
 	sandbox    *dcSyscall.Sandbox
 	inputFiles []string
@@ -150,6 +152,10 @@ func (c *Finder) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 	return nil, nil
 }
 
+func (c *Finder) CanExecuteWithLocalIdleResource(command []string) bool {
+	return true
+}
+
 // PreExecuteNeedLock decide whether should lock when executor do the pre-process
 func (c *Finder) PreExecuteNeedLock(command []string) bool {
 	return false
@@ -171,8 +177,8 @@ func (c *Finder) LocalLockWeight(command []string) int32 {
 }
 
 // LocalExecute no need
-func (c *Finder) LocalExecute(command []string) (int, error) {
-	return 0, nil
+func (c *Finder) LocalExecute(command []string) dcType.BKDistCommonError {
+	return dcType.ErrorNone
 }
 
 // PreLockWeight decide pre-execute lock weight, default 1
@@ -182,13 +188,14 @@ func (c *Finder) PreLockWeight(command []string) int32 {
 
 // PreExecute do the pre-process in one executor command.
 // PreExecute should analyse the input command and generate the DistCommand to send to remote.
-func (c *Finder) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
+func (c *Finder) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	// command must be "find"
 	//if len(command) < 3 || (strings.ToUpper(command[0]) != "FIND" && strings.ToUpper(command[0]) != "FIND.EXE") {
 	upperCommand := strings.ToUpper(command[0])
 	if len(command) < 3 || (!strings.HasSuffix(upperCommand, "FIND") &&
 		!strings.HasSuffix(upperCommand, "FIND.EXE")) {
-		return nil, fmt.Errorf("invalid command,len(command):[%d], command[0]:[%s]", len(command), command[0])
+		blog.Warnf("find: invalid command,len(command):[%d], command[0]:[%s]", len(command), command[0])
+		return nil, dcType.ErrorUnknown
 	}
 
 	strSeen := false
@@ -226,7 +233,8 @@ func (c *Finder) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
 		// all the others are input files.
 		existed, fileSize, modifyTime, fileMode := dcFile.Stat(arg).Batch()
 		if !existed {
-			return nil, fmt.Errorf("input file %s not exist", arg)
+			blog.Warnf("find: input file %s not exist", arg)
+			return nil, dcType.ErrorUnknown
 		}
 		inputFiles = append(inputFiles, dcSDK.FileDesc{
 			FilePath:       arg,
@@ -252,7 +260,7 @@ func (c *Finder) PreExecute(command []string) (*dcSDK.BKDistCommand, error) {
 				Inputfiles: inputFiles,
 			},
 		},
-	}, nil
+	}, dcType.ErrorNone
 }
 
 // NeedRemoteResource check whether this command need remote resource
@@ -265,6 +273,16 @@ func (c *Finder) RemoteRetryTimes() int {
 	return 0
 }
 
+// NeedRetryOnRemoteFail check whether need retry on remote fail
+func (c *Finder) NeedRetryOnRemoteFail(command []string) bool {
+	return false
+}
+
+// OnRemoteFail give chance to try other way if failed to remote execute
+func (c *Finder) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	return nil, dcType.ErrorNone
+}
+
 // PostLockWeight decide post-execute lock weight, default 1
 func (c *Finder) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 	return 1
@@ -273,14 +291,16 @@ func (c *Finder) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 // PostExecute do the post-process in one executor command.
 // PostExecute should check the DistResult and judge whether the remote processing succeeded.
 // Also PostExecute should manages the output message.
-func (c *Finder) PostExecute(r *dcSDK.BKDistResult) error {
+func (c *Finder) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r == nil || len(r.Results) == 0 {
-		return fmt.Errorf("invalid param")
+		blog.Warnf("find: parameter is invalid")
+		return dcType.ErrorUnknown
 	}
 	result := r.Results[0]
 
 	if result.RetCode != 0 {
-		return fmt.Errorf("failed to execute on remote: %s", string(result.ErrorMessage))
+		blog.Warnf("find: failed to execute on remote: %s", string(result.ErrorMessage))
+		return dcType.ErrorUnknown
 	}
 
 	belongs := ""
@@ -304,7 +324,7 @@ func (c *Finder) PostExecute(r *dcSDK.BKDistResult) error {
 
 		fmt.Printf("%s\n", originResult)
 	}
-	return nil
+	return dcType.ErrorNone
 }
 
 // FinalExecute provide a chance to do process before the process exit.
@@ -322,4 +342,13 @@ func (c *Finder) hasBelongsMark(line string) (string, string) {
 	}
 
 	return "", line
+}
+
+// SupportResultCache check whether this command support result cache
+func (c *Finder) SupportResultCache(command []string) int {
+	return 0
+}
+
+func (c *Finder) GetResultCacheKey(command []string) string {
+	return ""
 }
