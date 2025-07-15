@@ -1,10 +1,7 @@
 package com.tencent.devops.turbo.controller
 
-import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.api.pojo.Response
-import com.tencent.devops.common.api.exception.TurboException
-import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
-import com.tencent.devops.common.util.constants.NO_ADMIN_MEMBER_MESSAGE
+import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.turbo.api.IUserCustomScheduleTaskController
 import com.tencent.devops.turbo.pojo.CustomScheduleJobModel
 import com.tencent.devops.turbo.service.CustomScheduleJobService

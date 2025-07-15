@@ -80,7 +80,7 @@ class UserTurboPlanController @Autowired constructor(
     ): Response<String> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.manualRefreshStatus(reqVO))
     }
