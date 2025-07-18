@@ -9,6 +9,7 @@ import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_GENERAL_SYSTEM_FAIL
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
+import com.tencent.devops.common.web.utils.I18NUtil
 import org.springframework.http.HttpStatus
 import org.springframework.validation.BindException
 import org.springframework.web.bind.MethodArgumentNotValidException
@@ -23,25 +24,26 @@ class ExceptionControllerAdvice {
     @ResponseBody
     @ExceptionHandler(ClientException::class)
     fun clientExceptionHandler(clientException: ClientException): Response<Void> {
-        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), "内部服务异常")
+        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_THIRDPARTY_SYSTEM_FAIL))
     }
 
     @ResponseBody
     @ExceptionHandler(OperationException::class)
     fun operationExceptionHandler(operationException: OperationException): Response<Void> {
-        return Response.fail(TURBO_GENERAL_SYSTEM_FAIL.toInt(), operationException.message!!)
+        return Response.fail(TURBO_GENERAL_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_GENERAL_SYSTEM_FAIL))
     }
 
     @ResponseBody
     @ExceptionHandler(RemoteServiceException::class)
     fun remoteServiceExceptionHandler(remoteServiceException: RemoteServiceException): Response<Void> {
-        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), remoteServiceException.errorMessage)
+        return Response.fail(TURBO_THIRDPARTY_SYSTEM_FAIL.toInt(), I18NUtil.getMessage(TURBO_THIRDPARTY_SYSTEM_FAIL))
     }
 
     @ResponseBody
     @ExceptionHandler(TurboException::class)
     fun turboExceptionHandler(turboException: TurboException): Response<Void> {
-        return Response.fail(turboException.errorCode.toInt(), turboException.message.orEmpty())
+        return Response.fail(turboException.errorCode.toInt(), turboException.message
+            ?: I18NUtil.getMessage(turboException.errorCode))
     }
 
     @ResponseStatus(value = HttpStatus.BAD_REQUEST)
@@ -72,7 +74,7 @@ class ExceptionControllerAdvice {
     fun jsonMappingExceptionHandler(jsonMappingException: JsonMappingException): Response<Void> {
         return Response.fail(
             TURBO_PARAM_INVALID.toInt(),
-            "请求参数错误"
+            I18NUtil.getMessage(TURBO_PARAM_INVALID)
         )
     }
 }

@@ -1,10 +1,8 @@
 package com.tencent.devops.turbo.controller
 
 import com.tencent.devops.api.pojo.Response
-import com.tencent.devops.common.api.exception.TurboException
-import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
+import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.common.api.pojo.Page
-import com.tencent.devops.common.util.constants.NO_ADMIN_MEMBER_MESSAGE
 import com.tencent.devops.turbo.api.IUserTurboPlanController
 import com.tencent.devops.turbo.pojo.TurboPlanModel
 import com.tencent.devops.turbo.service.TurboAuthService
@@ -26,7 +24,7 @@ class UserTurboPlanController @Autowired constructor(
     override fun addNewTurboPlan(turboPlanModel: TurboPlanModel, projectId: String, user: String): Response<String?> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.addNewTurboPlan(turboPlanModel, user))
     }
@@ -34,7 +32,7 @@ class UserTurboPlanController @Autowired constructor(
     override fun getTurboPlanStatRowData(projectId: String, pageNum: Int?, pageSize: Int?, user: String): Response<TurboPlanPageVO> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.getTurboPlanStatRowData(projectId, pageNum, pageSize))
     }
@@ -42,7 +40,7 @@ class UserTurboPlanController @Autowired constructor(
     override fun getTurboPlanDetailByPlanId(planId: String, projectId: String, user: String): Response<TurboPlanDetailVO> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.getTurboPlanDetailByPlanId(planId))
     }
@@ -50,7 +48,7 @@ class UserTurboPlanController @Autowired constructor(
     override fun putTurboPlanDetailNameAndOpenStatus(turboPlanModel: TurboPlanModel, planId: String, user: String, projectId: String): Response<Boolean> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.putTurboPlanDetailNameAndOpenStatus(turboPlanModel, planId, user))
     }
@@ -58,7 +56,7 @@ class UserTurboPlanController @Autowired constructor(
     override fun putTurboPlanConfigParam(turboPlanModel: TurboPlanModel, planId: String, user: String, projectId: String): Response<Boolean> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.putTurboPlanConfigParam(turboPlanModel, planId, user))
     }
@@ -82,7 +80,7 @@ class UserTurboPlanController @Autowired constructor(
     ): Response<String> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboPlanService.manualRefreshStatus(reqVO))
     }

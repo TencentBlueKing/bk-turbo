@@ -8,7 +8,7 @@ import javax.validation.constraints.NotBlank
 data class TurboEngineConfigPriorityModel(
     @ApiModelProperty("引擎代码")
     @get:NotBlank(
-        message = "请先选择加速模式！"
+        message = "{bizError.engineCodeNotSelect}"
     )
     val engineCode: String,
     @ApiModelProperty("优先级序号")
