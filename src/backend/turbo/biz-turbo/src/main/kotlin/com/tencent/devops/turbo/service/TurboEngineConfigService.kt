@@ -6,6 +6,7 @@ import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.db.PageUtils
 import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.common.util.enums.ConfigParamType
+import com.tencent.devops.turbo.config.DomainsProperties
 import com.tencent.devops.turbo.dao.mongotemplate.TurboEngineConfigDao
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
 import com.tencent.devops.turbo.enums.EnumEngineType
@@ -45,6 +46,7 @@ import java.util.concurrent.TimeUnit
 class TurboEngineConfigService @Autowired constructor(
     private val turboEngineConfigRepository: TurboEngineConfigRepository,
     private val turboEngineConfigDao: TurboEngineConfigDao,
+    private val domainsProperties: DomainsProperties,
     private val scheduler: Scheduler
 ) {
     companion object {
@@ -285,7 +287,14 @@ class TurboEngineConfigService @Autowired constructor(
                         linkVariable = it.linkVariable
                     )
                 },
-                pluginTips = I18NUtil.getMessage("$engineCode.pluginTips"),
+                pluginTips = I18NUtil.getMessage(
+                    "$engineCode.pluginTips",
+                    if (EnumEngineType.DISTTASK_UE4.getEngineCode() == engineCode) arrayOf(domainsProperties.iwiki)
+                    else arrayOf(
+                        domainsProperties.devgw,
+                        domainsProperties.iwiki
+                    )
+                ),
                 updatedBy = updatedBy,
                 updatedDate = updatedDate
             )
@@ -318,7 +327,14 @@ class TurboEngineConfigService @Autowired constructor(
                     docUrl = docUrl,
                     recommend = recommend,
                     recommendReason = I18NUtil.getMessage("$engineCode.recommendReason"),
-                    pluginTips = I18NUtil.getMessage("$engineCode.pluginTips"),
+                    pluginTips = I18NUtil.getMessage(
+                        "$engineCode.pluginTips",
+                        if (EnumEngineType.DISTTASK_UE4.getEngineCode() == engineCode) arrayOf(domainsProperties.iwiki)
+                        else arrayOf(
+                            domainsProperties.devgw,
+                            domainsProperties.iwiki
+                        )
+                    ),
                     paramConfig = paramConfig?.map {
                         ParamConfigModel(
                             paramKey = it.paramKey,
@@ -613,7 +629,14 @@ class TurboEngineConfigService @Autowired constructor(
                 },
                 recommend = it.recommend,
                 recommendReason = I18NUtil.getMessage("${it.engineCode}.recommendReason"),
-                pluginTips = I18NUtil.getMessage("${it.engineCode}.pluginTips"),
+                pluginTips = I18NUtil.getMessage(
+                    "${it.engineCode}.pluginTips",
+                    if (EnumEngineType.DISTTASK_UE4.getEngineCode() == it.engineCode) arrayOf(domainsProperties.iwiki)
+                    else arrayOf(
+                        domainsProperties.devgw,
+                        domainsProperties.iwiki
+                    )
+                ),
                 updatedBy = it.updatedBy,
                 updatedDate = it.updatedDate
             )
