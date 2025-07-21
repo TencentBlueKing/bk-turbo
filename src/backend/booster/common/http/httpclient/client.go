@@ -110,6 +110,7 @@ func (client *HTTPClient) NewTransPort() *http.Transport {
 			KeepAlive: 30 * time.Second,
 		}).Dial,
 		ResponseHeaderTimeout: 30 * time.Second,
+		Proxy:                 http.ProxyFromEnvironment,
 	}
 }
 
