@@ -127,6 +127,22 @@ func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
 	return nil
 }
 
+// 判断符号链接是否指向网络地址
+func isNetworkLink(target string) (bool, error) {
+	// 1. 转换为小写便于检查（保留原始值用于UNC检查）
+	lowerTarget := strings.ToLower(target)
+
+	// 2. 检查网络标识特征
+	switch {
+	case strings.Contains(lowerTarget, "://"): // 包含协议标识符
+		return true, nil
+	case strings.HasPrefix(target, "\\\\"): // Windows UNC路径 (原始大小写)
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // 得到所有关联文件；如果是链接，则递归搜索，直到找到非链接为止
 // 如果发现链接循环，则报错
 func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
@@ -154,28 +170,33 @@ func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
 	if i.Basic().Mode()&os.ModeSymlink != 0 {
 		originFile, err := os.Readlink(f)
 		if err == nil {
-			if !filepath.IsAbs(originFile) {
-				originFile, err = filepath.Abs(filepath.Join(filepath.Dir(f), originFile))
-				if err == nil {
+			isNetwork, err := isNetworkLink(originFile)
+			if !isNetwork {
+				if !filepath.IsAbs(originFile) {
+					originFile, err = filepath.Abs(filepath.Join(filepath.Dir(f), originFile))
+					if err == nil {
+						i.LinkTarget = originFile
+						blog.Infof("toolchain: symlink %s to %s", f, originFile)
+					} else {
+						blog.Infof("toolchain: symlink %s origin %s, got abs path error:%s",
+							f, originFile, err)
+						return err
+					}
+				} else {
 					i.LinkTarget = originFile
 					blog.Infof("toolchain: symlink %s to %s", f, originFile)
-				} else {
-					blog.Infof("toolchain: symlink %s origin %s, got abs path error:%s",
-						f, originFile, err)
+				}
+
+				err = checkAndAdd(i, remotepath, files)
+				if err != nil {
 					return err
 				}
+
+				// 递归查找
+				return getRecursiveFiles(originFile, filepath.Dir(originFile), files)
 			} else {
-				i.LinkTarget = originFile
-				blog.Infof("toolchain: symlink %s to %s", f, originFile)
+				blog.Infof("toolchain: symlink %s is network link, skip", originFile)
 			}
-
-			err = checkAndAdd(i, remotepath, files)
-			if err != nil {
-				return err
-			}
-
-			// 递归查找
-			return getRecursiveFiles(originFile, filepath.Dir(originFile), files)
 		} else {
 			blog.Infof("toolchain: symlink %s Readlink error:%s", f, err)
 			return err
