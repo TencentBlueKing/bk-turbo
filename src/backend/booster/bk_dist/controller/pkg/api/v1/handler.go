@@ -38,6 +38,13 @@ func available(_ *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &AvailableResp{Pid: os.Getpid()}})
 }
 
+func listresource(req *restful.Request, resp *restful.Response) {
+	blog.Infof("api: got listresource request body [%s]", req.Request.Body)
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &ListResourceResp{
+		Resources: defaultManager.GetAllWorkers(),
+	}})
+}
+
 func recordMessage(req *restful.Request, resp *restful.Response) {
 	var data Message
 	if err := codec.DecJSONReader(req.Request.Body, &data); err != nil {

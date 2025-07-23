@@ -87,6 +87,9 @@ type Mgr interface {
 
 	// Get first bazelNoLauncher workid
 	GetFirstBazelNoLauncherWorkID() (string, error)
+
+	// Get all workers
+	GetAllWorkers() []string
 }
 
 // RemoteMgr describe a manager for handling all actions with remote workers for work
@@ -112,6 +115,8 @@ type RemoteMgr interface {
 	DecRemoteJobs()
 
 	WaitingListLen() int
+
+	GetAllWorkers() []string
 }
 
 type CallbackCheckResource func() string
