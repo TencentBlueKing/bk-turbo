@@ -950,3 +950,21 @@ func (m *mgr) GetFirstBazelNoLauncherWorkID() (string, error) {
 		return "", err
 	}
 }
+
+// GetAllWorkers return all workers
+func (m *mgr) GetAllWorkers() []string {
+	var allworkers []string
+	if m.worksPool != nil {
+		for _, work := range m.worksPool.all() {
+			if work.Remote() != nil {
+				allworkers = append(allworkers, work.Remote().GetAllWorkers()...)
+			}
+		}
+	}
+
+	if m.globalWork != nil && m.globalWork.Remote() != nil {
+		allworkers = append(allworkers, m.globalWork.Remote().GetAllWorkers()...)
+	}
+
+	return allworkers
+}

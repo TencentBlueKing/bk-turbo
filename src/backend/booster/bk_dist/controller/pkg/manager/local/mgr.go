@@ -341,6 +341,13 @@ func (m *Mgr) ExecuteTask(
 				}
 			}
 
+			if !req.NeedLocalExecute() {
+				blog.Infof("local: work(%s) from pid(%d) this cmd can't local run, wait again",
+					m.work.ID(), req.Pid)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
 			// 尝试本地执行
 			blog.Infof("local: execute task for work(%s) from pid(%d) degrade to try local for no remote workers",
 				m.work.ID(), req.Pid)
