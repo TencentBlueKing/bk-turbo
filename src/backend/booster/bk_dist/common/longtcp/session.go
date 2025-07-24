@@ -379,7 +379,8 @@ func (s *Session) encData2Message(
 	}
 
 	wait := waitsecs
-	if wait > 0 && wait < MinWaitSecs {
+	// if wait > 0 && wait < MinWaitSecs {
+	if wait < 0 {
 		wait = MinWaitSecs
 	}
 
@@ -667,11 +668,11 @@ func (s *Session) Send(
 	// data 转到 message
 	msg := s.encData2Message(data, waitresponse, waitsecs, f)
 
-	blog.Infof("[longtcp] [trace message] [session:%s] [%s] start notify and wait result",
-		s.Desc(), msg.Desc())
+	blog.Infof("[longtcp] [trace message] [session:%s] [%s] start notify and wait result with waitsecs:%d",
+		s.Desc(), msg.Desc(), waitsecs)
 	ret := s.notifyAndWait(msg)
-	blog.Infof("[longtcp] [trace message] [session:%s] [%s] end notify and wait result",
-		s.Desc(), msg.Desc())
+	blog.Infof("[longtcp] [trace message] [session:%s] [%s] end notify and wait result with waitsecs:%d",
+		s.Desc(), msg.Desc(), waitsecs)
 
 	return ret
 }

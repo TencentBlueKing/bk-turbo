@@ -1004,6 +1004,7 @@ func (m *Mgr) realExecuteRequest(
 	host *dcProtocol.Host,
 	needAdjustInputStatus bool) (*types.RemoteTaskExecuteResult, error) {
 	blog.Debugf("remote: try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v", m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
+
 	var fpath string
 	if host == nil {
 		// 如果有超过100MB的大文件，则在选择host时，作为选择条件
@@ -2949,4 +2950,21 @@ func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
 		}
 		break
 	}
+}
+
+func (m *Mgr) GetAllWorkers() []string {
+	if m.resource == nil {
+		return nil
+	}
+
+	wks := m.resource.GetWorkers()
+	if wks == nil {
+		return nil
+	}
+
+	result := make([]string, 0, len(wks))
+	for _, v := range wks {
+		result = append(result, v.host.Server)
+	}
+	return result
 }

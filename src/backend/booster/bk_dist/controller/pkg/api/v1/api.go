@@ -29,6 +29,9 @@ func InitStorage() (err error) {
 		Verb: "GET", Path: "/dist/available", Params: nil, Handler: api.FuncWrapper(available),
 	})
 	api.RegisterV1Action(api.Action{
+		Verb: "GET", Path: "/dist/listresource", Params: nil, Handler: api.FuncWrapper(listresource),
+	})
+	api.RegisterV1Action(api.Action{
 		Verb: "GET", Path: "/dist/work/list", Params: nil, Handler: api.FuncWrapper(getWorkList),
 	})
 	api.RegisterV1Action(api.Action{
