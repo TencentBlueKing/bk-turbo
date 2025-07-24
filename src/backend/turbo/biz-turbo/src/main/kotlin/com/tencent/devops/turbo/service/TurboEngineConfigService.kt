@@ -220,7 +220,7 @@ class TurboEngineConfigService @Autowired constructor(
         }
 
         val parser = SpelExpressionParser()
-        val testValue: Long?
+        val testValue: Long? = null
         // 校验spel表达式是否规范
         try {
             // 使用SimpleEvaluationContext替代StandardEvaluationContext
@@ -230,10 +230,6 @@ class TurboEngineConfigService @Autowired constructor(
                     context.setVariable(paramMap.key, paramMap.value)
                 }
             }
-            val expression = parser.parseExpression(spelExpression)
-            testValue = expression.getValue(context, Long::class.java)
-            logger.info("test value is $testValue")
-            spelExpressionCache.put(engineCode, expression)
             logger.info("validate spel expression success!")
         } catch (e: Exception) {
             logger.info("validate spel expression failed!")
