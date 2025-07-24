@@ -11,7 +11,7 @@ import javax.validation.constraints.NotNull
 data class TurboPlanModel(
     @ApiModelProperty("蓝盾项目id")
     @get:NotBlank(
-        message = "项目id不能为空",
+        message = "{bizError.projectIdNotBlank}",
         groups = [
             TurboPlanGroup.Create::class,
             TurboPlanGroup.UpdateDetail::class
@@ -20,7 +20,7 @@ data class TurboPlanModel(
     val projectId: String?,
     @ApiModelProperty("加速方案名称")
     @get:NotBlank(
-        message = "方案名称不能为空",
+        message = "{bizError.planNameNotBlank}",
         groups = [
             TurboPlanGroup.Create::class,
             TurboPlanGroup.UpdateDetail::class,
@@ -30,7 +30,7 @@ data class TurboPlanModel(
     val planName: String?,
     @ApiModelProperty("蓝盾模板代码")
     @get:NotBlank(
-        message = "请先选择加速模式！",
+        message = "{bizError.engineCodeNotSelect}",
         groups = [
             TurboPlanGroup.Create::class,
             TurboPlanGroup.UpdateWhiteList::class,
@@ -42,14 +42,14 @@ data class TurboPlanModel(
     val desc: String?,
     @ApiModelProperty("配置参数值")
     @get:NotNull(
-        message = "参数不能为空",
+        message = "{bizError.configParamNotNull}",
         groups = [
             TurboPlanGroup.UpdateParam::class,
             TurboPlanGroup.UpdateAll::class
         ]
     )
     @get:NotEmpty(
-        message = "参数不能为空",
+        message = "{bizError.configParamNotEmpty}",
         groups = [
             TurboPlanGroup.UpdateParam::class,
             TurboPlanGroup.UpdateAll::class
@@ -58,7 +58,7 @@ data class TurboPlanModel(
     val configParam: Map<String, Any>?,
     @ApiModelProperty("白名单")
     @get:NotBlank(
-        message = "白名单不能为空",
+        message = "{bizError.whiteListNotBlank}",
         groups = [
             TurboPlanGroup.UpdateWhiteList::class
         ]
@@ -66,7 +66,7 @@ data class TurboPlanModel(
     val whiteList: String?,
     @ApiModelProperty("开启状态")
     @get:NotNull(
-        message = "状态不能为空",
+        message = "{bizError.openStatusNotNull}",
         groups = [
             TurboPlanGroup.UpdateDetail::class,
             TurboPlanGroup.UpdateAll::class
