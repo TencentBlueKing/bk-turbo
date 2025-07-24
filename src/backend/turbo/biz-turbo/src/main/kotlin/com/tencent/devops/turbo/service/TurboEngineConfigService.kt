@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.expression.Expression
 import org.springframework.expression.spel.standard.SpelExpressionParser
-import org.springframework.expression.spel.support.StandardEvaluationContext
+import org.springframework.expression.spel.support.SimpleEvaluationContext
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
@@ -209,27 +209,52 @@ class TurboEngineConfigService @Autowired constructor(
     /**
      * 校验spel表达式的有效性
      */
-    private fun validateSpelExpression(engineCode: String, spelExpression: String, spelParamMap: Map<String, Any?>?): Long? {
+    private fun validateSpelExpression(
+        engineCode: String,
+        spelExpression: String,
+        spelParamMap: Map<String, Any?>?
+    ): Long? {
+        // 检查危险关键字
+        if (containsDangerousKeywords(spelExpression)) {
+            return null
+        }
+
         val parser = SpelExpressionParser()
-        val testValue: Long?
+        val testValue: Long? = null
         // 校验spel表达式是否规范
         try {
-            val context = StandardEvaluationContext()
+            // 使用SimpleEvaluationContext替代StandardEvaluationContext
+            val context = SimpleEvaluationContext.forReadOnlyDataBinding().build()
             if (!spelParamMap.isNullOrEmpty()) {
                 for (paramMap in spelParamMap) {
                     context.setVariable(paramMap.key, paramMap.value)
                 }
             }
-            val expression = parser.parseExpression(spelExpression)
-            testValue = expression.getValue(context, Long::class.java)
-            logger.info("test value is $testValue")
-            spelExpressionCache.put(engineCode, expression)
             logger.info("validate spel expression success!")
         } catch (e: Exception) {
             logger.info("validate spel expression failed!")
             throw TurboException(errorCode = TURBO_PARAM_INVALID, errorMessage = "validate spel expression failed!")
         }
         return testValue
+    }
+
+    private fun containsDangerousKeywords(expression: String): Boolean {
+        val dangerousPatterns = listOf(
+            "T\\(",                     // 类加载
+            "new ",                     // 构造函数调用
+            "exec\\(", "fork\\(",        // 命令执行
+            "Runtime", "ProcessBuilder", // 危险类
+            "ScriptEngine",              // 脚本引擎
+            "java\\.lang\\.reflect",     // 反射
+            "java\\.io",                 // IO操作
+            "java\\.net",                // 网络操作
+            "\\$\\{",                    // 模板注入
+            "\\#\\{",                    // 模板注入
+            "Process", "Command",
+            "parse", "cmd", "Launch"     // 命令执行
+        )
+
+        return dangerousPatterns.any { Regex(it, RegexOption.IGNORE_CASE).containsMatchIn(expression) }
     }
 
     /**
@@ -800,6 +825,10 @@ class TurboEngineConfigService @Autowired constructor(
         return if (null == turboEngineConfigEntity || turboEngineConfigEntity.spelExpression.isBlank()) {
             null
         } else {
+            if (containsDangerousKeywords(turboEngineConfigEntity.spelExpression)) {
+                logger.warn("spel expression contains dangerous keywords ${turboEngineConfigEntity.spelExpression}")
+                return null
+            }
             val parser = SpelExpressionParser()
             parser.parseExpression(turboEngineConfigEntity.spelExpression)
         }
