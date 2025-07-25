@@ -111,7 +111,8 @@ type RemoteMgr interface {
 	// dec remote jobs
 	DecRemoteJobs()
 
-	WaitingListLen() int
+	// get remote jobs
+	GetRemoteJobs() int64
 }
 
 type CallbackCheckResource func() string
