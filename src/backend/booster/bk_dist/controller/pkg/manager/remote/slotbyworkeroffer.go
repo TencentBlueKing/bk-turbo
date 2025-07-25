@@ -20,7 +20,6 @@ import (
 
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
 	wkclient "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -85,9 +84,8 @@ func newWorkerOfferResource(hl []*dcProtocol.Host) *workerOffer {
 		worker:         wl,
 		validWorkerNum: len(hl),
 
-		waitingList:    list.New(),
-		waitingListLen: 0,
-		slotQueried:    false,
+		waitingList: list.New(),
+		slotQueried: false,
 
 		lastGetSlotTime:   time.Now(),
 		localJosBatchSize: runtime.NumCPU() - 2,
@@ -111,8 +109,7 @@ type workerOffer struct {
 	handling bool
 
 	// to save waiting requests
-	waitingList    *list.List
-	waitingListLen int
+	waitingList *list.List
 
 	// 用于接收worker提供的slot offer
 	slotChan chan *dcSDK.BKQuerySlotResult
@@ -215,10 +212,6 @@ func (wo *workerOffer) Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host) {}
 
 func (wo *workerOffer) TotalSlots() int {
 	return wo.validWorkerNum
-}
-
-func (wo *workerOffer) WaitingListLen() int {
-	return wo.waitingListLen
 }
 
 func (wo *workerOffer) IsWorkerDisabled(host *dcProtocol.Host) bool {
@@ -541,12 +534,10 @@ func (wo *workerOffer) handle(ctx context.Context) {
 
 func (wo *workerOffer) pushWaitList(msg *lockWorkerMessage) {
 	wo.waitingList.PushBack(msg)
-	wo.waitingListLen++
 }
 
 func (wo *workerOffer) popWaitList(e *list.Element) {
 	wo.waitingList.Remove(e)
-	wo.waitingListLen--
 }
 
 func (wo *workerOffer) getSlot(msg lockWorkerMessage) {
@@ -786,7 +777,7 @@ func (wo *workerOffer) querySlot() error {
 			initWorker = nil
 		}
 
-		remoteWorker := client.NewCommonRemoteWorker()
+		remoteWorker := wkclient.NewCommonRemoteWorker()
 		handler := remoteWorker.Handler(SlotTCPTimeoutSeconds, nil, nil, nil)
 
 		var wg sync.WaitGroup

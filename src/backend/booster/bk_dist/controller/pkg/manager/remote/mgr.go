@@ -615,6 +615,11 @@ func (m *Mgr) getRemoteJobs() int64 {
 	return atomic.LoadInt64(&m.remotejobs)
 }
 
+// GetRemoteJobs get remote jobs
+func (m *Mgr) GetRemoteJobs() int64 {
+	return m.getRemoteJobs()
+}
+
 func (m *Mgr) resourceCheck(ctx context.Context) {
 	blog.Infof("remote: run remote resource check tick for work: %s", m.work.ID())
 	ticker := time.NewTicker(m.resourceCheckTick)
@@ -739,7 +744,8 @@ func (m *Mgr) confirmWorker(h *dcProtocol.Host) {
 				if h.Token == "" {
 					blog.Infof("remote: host(%s) token is empty now, set it to %s", h.Server, msg)
 				} else {
-					blog.Errorf("remote: host(%s) token %s not match before %s, change token to %s , and clean worker terminated status cache", h.Server, msg, h.Token, msg)
+					blog.Errorf("remote: host(%s) token %s not match before %s, change to %s , clean terminated status cache",
+						h.Server, msg, h.Token, msg)
 					m.cleanWorkerCache(h)
 				}
 				h.Token = msg
@@ -1003,7 +1009,8 @@ func (m *Mgr) realExecuteRequest(
 	req *types.RemoteTaskExecuteRequest,
 	host *dcProtocol.Host,
 	needAdjustInputStatus bool) (*types.RemoteTaskExecuteResult, error) {
-	blog.Debugf("remote: try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v", m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
+	blog.Debugf("remote: try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v",
+		m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
 
 	var fpath string
 	if host == nil {
@@ -1031,10 +1038,10 @@ func (m *Mgr) realExecuteRequest(
 		m.work.Basic().UpdateJobStats(req.Stats)
 	}, req.Sandbox)
 
-	m.IncRemoteJobs()
+	//m.IncRemoteJobs()
 	defer func() {
 		m.setLastUsed(uint64(time.Now().Local().Unix()))
-		m.DecRemoteJobs()
+		//m.DecRemoteJobs()
 	}()
 
 	ret, err := checkHttpConn(req)
@@ -1075,7 +1082,8 @@ func (m *Mgr) realExecuteRequest(
 			banlistStr = banlistStr + s.Server + ","
 		}
 		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-			"ensure files failed: %v, after add failed server, banworkerlist is %s", m.work.ID(), req.Pid, req.Server.Server, err, banlistStr)
+			"ensure files failed: %v, after add failed server, banworkerlist is %s",
+			m.work.ID(), req.Pid, req.Server.Server, err, banlistStr)
 		return nil, err
 	}
 
@@ -1151,7 +1159,8 @@ func (m *Mgr) SendFiles(req *types.RemoteTaskSendFileRequest) ([]string, error) 
 }
 
 func (m *Mgr) retrySendFiles(h *dcProtocol.Host, failFiles []dcSDK.FileDesc, host chan string) {
-	blog.Infof("remote: try to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v", m.work.ID(), 1, h.Server, len(failFiles))
+	blog.Infof("remote: try to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v",
+		m.work.ID(), 1, h.Server, len(failFiles))
 	_, err := m.SendFiles(&types.RemoteTaskSendFileRequest{
 		Pid:     1,
 		Req:     failFiles,
@@ -1160,9 +1169,11 @@ func (m *Mgr) retrySendFiles(h *dcProtocol.Host, failFiles []dcSDK.FileDesc, hos
 		Stats:   &dcSDK.ControllerJobStats{},
 	})
 	if err != nil {
-		blog.Errorf("remote: try to retry send fail file for work(%s) from pid(%d) to server %s failed: %v", m.work.ID(), 1, h.Server, err)
+		blog.Errorf("remote: try to retry send fail file for work(%s) from pid(%d) to server %s failed: %v",
+			m.work.ID(), 1, h.Server, err)
 	} else {
-		blog.Infof("remote: success to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v", m.work.ID(), 1, h.Server, len(failFiles))
+		blog.Infof("remote: success to retry send fail file for work(%s) from pid(%d) to server %s with fail files %v",
+			m.work.ID(), 1, h.Server, len(failFiles))
 	}
 	host <- h.Server
 }
@@ -1253,7 +1264,8 @@ func (m *Mgr) checkAndSendCorkFiles(fs []*corkFile, server string, wg chan error
 			(fs)[i].resultchan = make(chan corkFileResult, 1)
 			needSendCorkFiles = append(needSendCorkFiles, (fs)[i])
 		}
-		blog.Debugf("remote: start to ensure single cork file %s:%s for work(%s)  to server(%s)", results[i].info.FullPath, (fs)[i].file.FilePath, m.work.ID(), server)
+		blog.Debugf("remote: start to ensure single cork file %s:%s for work(%s)  to server(%s)",
+			results[i].info.FullPath, (fs)[i].file.FilePath, m.work.ID(), server)
 		// 启动协程跟踪未发送完成的文件
 		c := (fs)[i]
 		go func(err chan<- error, c *corkFile, r matchResult, i int) {
@@ -1981,7 +1993,8 @@ func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.R
 	} else {
 		// enable worker
 		m.resource.EnableWorker(req.Server)
-		blog.Infof("remote: success to retry send tool chain for work(%s) from pid(%d) to server(%s)", m.work.ID(), req.Pid, req.Server.Server)
+		blog.Infof("remote: success to retry send tool chain for work(%s) from pid(%d) to server(%s)",
+			m.work.ID(), req.Pid, req.Server.Server)
 	}
 	host <- req.Server.Server
 }
@@ -2027,7 +2040,7 @@ func (m *Mgr) sendFileCollectionOnce(
 	return nil
 }
 
-func (m *Mgr) getRetryFileDetails(server string, fc *types.FileCollectionInfo, Servers []*dcProtocol.Host) ([]*types.FilesDetails, error) {
+func (m *Mgr) getRetryFileDetails(server string, fc *types.FileCollectionInfo, servers []*dcProtocol.Host) ([]*types.FilesDetails, error) {
 	fileDetails := make([]*types.FilesDetails, 0, len(fc.Files))
 	m.failFileSendMutex.Lock()
 	failsendMap := m.failFileSendMap[server]
@@ -2056,7 +2069,7 @@ func (m *Mgr) getRetryFileDetails(server string, fc *types.FileCollectionInfo, S
 			}
 		}
 		fileDetails = append(fileDetails, &types.FilesDetails{
-			Servers: Servers,
+			Servers: servers,
 			File:    f,
 		})
 	}
@@ -2383,12 +2396,6 @@ func (m *Mgr) unlockSlots(usage dcSDK.JobUsage, host *dcProtocol.Host) {
 // TotalSlots return available total slots
 func (m *Mgr) TotalSlots() int {
 	return m.resource.TotalSlots()
-}
-
-// WaitingListLen return waiting list length
-// TODO: 此处取waitingListLen存在并发读写问题，后续如需要可优化
-func (m *Mgr) WaitingListLen() int {
-	return m.resource.WaitingListLen()
 }
 
 func (m *Mgr) getRemoteFileBaseDir() string {

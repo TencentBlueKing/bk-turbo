@@ -38,7 +38,6 @@ type RemoteSlotMgr interface {
 	CountWorkerError(w *worker)
 	IsWorkerDead(w *worker, netErrorLimit int) bool
 	WorkerDead(w *worker)
-	WaitingListLen() int
 }
 
 type lockWorkerMessage struct {
@@ -100,8 +99,7 @@ func newResource(hl []*dcProtocol.Host) *resource {
 		emptyChan:     make(chan bool, 1000),
 		worker:        wl,
 
-		waitingList:    list.New(),
-		waitingListLen: 0,
+		waitingList: list.New(),
 	}
 }
 
@@ -125,8 +123,7 @@ type resource struct {
 	handling bool
 
 	// to save waiting requests
-	waitingList    *list.List
-	waitingListLen int
+	waitingList *list.List
 }
 
 // reset with []*dcProtocol.Host
@@ -231,10 +228,6 @@ func (wr *resource) Unlock(usage dcSDK.JobUsage, host *dcProtocol.Host) {
 
 func (wr *resource) TotalSlots() int {
 	return wr.totalSlots
-}
-
-func (wr *resource) WaitingListLen() int {
-	return wr.waitingListLen
 }
 
 func (wr *resource) IsWorkerDisabled(host *dcProtocol.Host) bool {
@@ -704,12 +697,10 @@ func (wr *resource) isIdle(set *usageWorkerSet) bool {
 
 func (wr *resource) pushWaitList(msg *lockWorkerMessage) {
 	wr.waitingList.PushBack(msg)
-	wr.waitingListLen++
 }
 
 func (wr *resource) popWaitList(e *list.Element) {
 	wr.waitingList.Remove(e)
-	wr.waitingListLen--
 }
 
 func (wr *resource) getSlot(msg lockWorkerMessage) {

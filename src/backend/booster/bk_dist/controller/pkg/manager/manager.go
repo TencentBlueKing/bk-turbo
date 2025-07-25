@@ -843,11 +843,11 @@ func (m *mgr) selectResourceExecutionMode(work *types.Work) string {
 	if m.checkRunWithLocalResource(work) {
 		return types.LocalResourceMode
 	}
-	//TODO: 此处取waitingList长度未加锁，因此存在并发读问题，后续如需要可优化
+	//TODO: 此处取远程任务数未加锁，因此存在并发读问题，后续如需要可优化
 	// 检查远程资源等待队列是否过长
-	if work.Remote().WaitingListLen() > work.Remote().TotalSlots()/10 {
-		blog.Debugf("mgr: remote resource waiting list len %d is too long, wait resource for work:%s",
-			work.Remote().WaitingListLen(), work.ID())
+	if work.Remote().GetRemoteJobs() > int64(float64(work.Remote().TotalSlots())*1.1) {
+		blog.Debugf("mgr: remote resource jobs %d is too long, wait resource for work:%s",
+			work.Remote().GetRemoteJobs(), work.ID())
 		return types.WaitResourceMode
 	}
 	return types.RemoteResourceMode
