@@ -681,7 +681,26 @@ type portsMap struct {
 	port     int
 }
 
+const (
+	UbaPortName   = "uba-port"
+	UbaPortNumber = 1345
+	UbaProtocol   = "tcp"
+)
+
 func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) {
+	// set platform
+	platform := "linux"
+	networkValue := ""
+	if v, ok := param.AttributeCondition[op.AttributeKeyPlatform]; ok {
+		switch v {
+		case "windows", "WINDOWS", "win", "WIN":
+			platform = "windows"
+			if !o.disableWinHostNW {
+				networkValue = "hostNetwork: true"
+			}
+		}
+	}
+
 	// add host port to env
 	index := 0
 	pm := make(map[string]portsMap)
@@ -700,6 +719,16 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 		randPortsNames = append(randPortsNames, enginePort2K8SPort(port))
 	}
 
+	// to support uba listen port
+	if platform == "windows" {
+		pm[UbaPortName] = portsMap{
+			protocol: UbaProtocol,
+			port:     UbaPortNumber,
+		}
+
+		randPortsNames = append(randPortsNames, UbaPortName)
+	}
+
 	data := o.templates
 	data = strings.ReplaceAll(data, templateVarImage, param.Image)
 	data = strings.ReplaceAll(data, templateVarName, param.Name)
@@ -709,19 +738,6 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	data = insertYamlPorts(data, pm)
 	data = insertYamlEnv(data, param.Env)
 	data = insertYamlVolumes(data, param.Volumes)
-
-	// set platform
-	platform := "linux"
-	networkValue := ""
-	if v, ok := param.AttributeCondition[op.AttributeKeyPlatform]; ok {
-		switch v {
-		case "windows", "WINDOWS", "win", "WIN":
-			platform = "windows"
-			if !o.disableWinHostNW {
-				networkValue = "hostNetwork: true"
-			}
-		}
-	}
 
 	// handle host network settings for k8s-windows need it, but linux not.
 	data = strings.ReplaceAll(data, templateVarHostNetwork, networkValue)
