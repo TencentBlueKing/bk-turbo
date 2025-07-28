@@ -25,6 +25,10 @@ type AvailableResp struct {
 	Pid int `json:"pid"`
 }
 
+type ListResourceResp struct {
+	Resources []string `json:"resources"`
+}
+
 // WorkStatusResp describe the response of getting work status
 type WorkStatusResp struct {
 	Status *dcSDK.WorkStatusDetail `json:"status"`

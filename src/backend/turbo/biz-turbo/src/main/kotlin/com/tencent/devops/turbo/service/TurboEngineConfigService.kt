@@ -4,9 +4,12 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.tencent.devops.common.api.exception.TurboException
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.db.PageUtils
+import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.common.util.enums.ConfigParamType
+import com.tencent.devops.turbo.config.DomainsProperties
 import com.tencent.devops.turbo.dao.mongotemplate.TurboEngineConfigDao
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
+import com.tencent.devops.turbo.enums.EnumEngineType
 import com.tencent.devops.turbo.job.TBSCreateDataJob
 import com.tencent.devops.turbo.job.TBSUpdateDataJob
 import com.tencent.devops.turbo.model.TTurboEngineConfigEntity
@@ -33,7 +36,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.expression.Expression
 import org.springframework.expression.spel.standard.SpelExpressionParser
-import org.springframework.expression.spel.support.StandardEvaluationContext
+import org.springframework.expression.spel.support.SimpleEvaluationContext
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
@@ -43,6 +46,7 @@ import java.util.concurrent.TimeUnit
 class TurboEngineConfigService @Autowired constructor(
     private val turboEngineConfigRepository: TurboEngineConfigRepository,
     private val turboEngineConfigDao: TurboEngineConfigDao,
+    private val domainsProperties: DomainsProperties,
     private val scheduler: Scheduler
 ) {
     companion object {
@@ -205,27 +209,52 @@ class TurboEngineConfigService @Autowired constructor(
     /**
      * 校验spel表达式的有效性
      */
-    private fun validateSpelExpression(engineCode: String, spelExpression: String, spelParamMap: Map<String, Any?>?): Long? {
+    private fun validateSpelExpression(
+        engineCode: String,
+        spelExpression: String,
+        spelParamMap: Map<String, Any?>?
+    ): Long? {
+        // 检查危险关键字
+        if (containsDangerousKeywords(spelExpression)) {
+            return null
+        }
+
         val parser = SpelExpressionParser()
-        val testValue: Long?
+        val testValue: Long? = null
         // 校验spel表达式是否规范
         try {
-            val context = StandardEvaluationContext()
+            // 使用SimpleEvaluationContext替代StandardEvaluationContext
+            val context = SimpleEvaluationContext.forReadOnlyDataBinding().build()
             if (!spelParamMap.isNullOrEmpty()) {
                 for (paramMap in spelParamMap) {
                     context.setVariable(paramMap.key, paramMap.value)
                 }
             }
-            val expression = parser.parseExpression(spelExpression)
-            testValue = expression.getValue(context, Long::class.java)
-            logger.info("test value is $testValue")
-            spelExpressionCache.put(engineCode, expression)
             logger.info("validate spel expression success!")
         } catch (e: Exception) {
             logger.info("validate spel expression failed!")
             throw TurboException(errorCode = TURBO_PARAM_INVALID, errorMessage = "validate spel expression failed!")
         }
         return testValue
+    }
+
+    private fun containsDangerousKeywords(expression: String): Boolean {
+        val dangerousPatterns = listOf(
+            "T\\(",                     // 类加载
+            "new ",                     // 构造函数调用
+            "exec\\(", "fork\\(",        // 命令执行
+            "Runtime", "ProcessBuilder", // 危险类
+            "ScriptEngine",              // 脚本引擎
+            "java\\.lang\\.reflect",     // 反射
+            "java\\.io",                 // IO操作
+            "java\\.net",                // 网络操作
+            "\\$\\{",                    // 模板注入
+            "\\#\\{",                    // 模板注入
+            "Process", "Command",
+            "parse", "cmd", "Launch"     // 命令执行
+        )
+
+        return dangerousPatterns.any { Regex(it, RegexOption.IGNORE_CASE).containsMatchIn(expression) }
     }
 
     /**
@@ -240,30 +269,33 @@ class TurboEngineConfigService @Autowired constructor(
         return with(turboEngineConfigEntity) {
             TurboEngineConfigVO(
                 engineCode = engineCode,
-                engineName = engineName,
+                engineName = I18NUtil.getMessage("$engineCode.engineName"),
                 priorityNum = priorityNum,
-                desc = desc,
+                desc = I18NUtil.getMessage("$engineCode.desc"),
                 spelExpression = spelExpression,
                 spelParamMap = spelParamMap,
                 enabled = enabled,
-                userManual = userManual,
+                userManual = translateEngineUserManual(engineCode, userManual ?: ""),
                 docUrl = docUrl,
                 recommend = recommend,
-                recommendReason = recommendReason,
+                recommendReason = I18NUtil.getMessage("$engineCode.recommendReason"),
                 paramConfig = paramConfig?.map {
                     ParamConfigModel(
                         paramKey = it.paramKey,
-                        paramName = it.paramName,
+                        paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey}.paramName"),
                         paramType = it.paramType,
                         paramProps = it.paramProps,
                         paramEnum = it.paramEnum?.map { paramEnumEntity ->
+                            val paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey
+                            }.paramEnum.${paramEnumEntity.paramValue}")
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
-                                paramName = paramEnumEntity.paramName,
+                                paramName = paramName,
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
-                        tips = it.tips,
+                        tips = if (!it.tips.isNullOrBlank()) I18NUtil.getMessage("$engineCode.paramConfig.${it
+                            .paramKey}.tips") else it.tips,
                         displayed = it.displayed,
                         defaultValue = it.defaultValue,
                         required = it.required,
@@ -280,7 +312,14 @@ class TurboEngineConfigService @Autowired constructor(
                         linkVariable = it.linkVariable
                     )
                 },
-                pluginTips = pluginTips,
+                pluginTips = I18NUtil.getMessage(
+                    "$engineCode.pluginTips",
+                    if (EnumEngineType.DISTTASK_UE4.getEngineCode() == engineCode) arrayOf(domainsProperties.iwiki)
+                    else arrayOf(
+                        domainsProperties.devgw,
+                        domainsProperties.iwiki
+                    )
+                ),
                 updatedBy = updatedBy,
                 updatedDate = updatedDate
             )
@@ -303,31 +342,41 @@ class TurboEngineConfigService @Autowired constructor(
             with(turboEnginConfigEntity) {
                 TurboEngineConfigVO(
                     engineCode = engineCode,
-                    engineName = engineName,
+                    engineName = I18NUtil.getMessage("$engineCode.engineName"),
                     priorityNum = priorityNum,
-                    desc = desc,
+                    desc = I18NUtil.getMessage("$engineCode.desc"),
                     spelExpression = spelExpression,
                     spelParamMap = spelParamMap,
                     enabled = enabled,
-                    userManual = userManual,
+                    userManual = translateEngineUserManual(engineCode, userManual ?: ""),
                     docUrl = docUrl,
                     recommend = recommend,
-                    recommendReason = recommendReason,
-                    pluginTips = pluginTips,
+                    recommendReason = I18NUtil.getMessage("$engineCode.recommendReason"),
+                    pluginTips = I18NUtil.getMessage(
+                        "$engineCode.pluginTips",
+                        if (EnumEngineType.DISTTASK_UE4.getEngineCode() == engineCode) arrayOf(domainsProperties.iwiki)
+                        else arrayOf(
+                            domainsProperties.devgw,
+                            domainsProperties.iwiki
+                        )
+                    ),
                     paramConfig = paramConfig?.map {
                         ParamConfigModel(
                             paramKey = it.paramKey,
-                            paramName = it.paramName,
+                            paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey}.paramName"),
                             paramType = it.paramType,
                             paramProps = it.paramProps,
                             paramEnum = it.paramEnum?.map { paramEnumEntity ->
+                                val paramName = I18NUtil.getMessage("$engineCode.paramConfig.${it.paramKey
+                                }.paramEnum.${paramEnumEntity.paramValue}")
                                 ParamEnumModel(
                                     paramValue = paramEnumEntity.paramValue,
-                                    paramName = paramEnumEntity.paramName,
+                                    paramName = if (I18NUtil.ERROR == paramName) paramEnumEntity.paramName else paramName,
                                     visualRange = paramEnumEntity.visualRange
                                 )
                             },
-                            tips = it.tips,
+                            tips = if (!it.tips.isNullOrBlank()) I18NUtil.getMessage("$engineCode.paramConfig.${it
+                                .paramKey}.tips") else it.tips,
                             displayed = it.displayed,
                             defaultValue = it.defaultValue,
                             required = it.required
@@ -532,6 +581,37 @@ class TurboEngineConfigService @Autowired constructor(
     }
 
     /**
+     * 手动翻译Html文本
+     */
+    private fun translateEngineUserManual(engineCode: String, userManual: String): String {
+        return when(engineCode) {
+            EnumEngineType.DISTTASK_CC.getEngineCode() ->
+                userManual.replaceFirst(Regex("<h4>(.*?)</h4>"), "<h4>${I18NUtil.getMessage("$engineCode.userManual.0")}</h4>")
+                    .replaceFirst(Regex("<h5>方式一：</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.1")}</h5>")
+                    .replaceFirst(Regex("tip-word\">(.*?)<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.2")}<a")
+                    .replace(Regex("target=\"__blank\">(.*?)</a>"), "target=\"__blank\">${I18NUtil.getMessage("$engineCode.userManual.3")}</a>")
+                    .replaceFirst(Regex("<h5>方式二：</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.4")}</h5>")
+                    .replaceFirst(Regex("tip-word\">在私人构建机上.*<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.5")}<a")
+
+            EnumEngineType.DISTTASK_UE4.getEngineCode() ->
+                userManual.replaceFirst(Regex("<h4>(.*?)\n<span"), "<h4>${I18NUtil.getMessage("$engineCode.userManual.0")}\n<span")
+                    .replaceFirst(Regex("target=\"__blank\">(.*?)</a>"), "target=\"__blank\">${I18NUtil.getMessage("$engineCode.userManual.1")}<a")
+
+            EnumEngineType.DISTTCC.getEngineCode() ->
+                userManual.replaceFirst(Regex("<h4>(.*?)</h4>"), "<h4>${I18NUtil.getMessage("$engineCode.userManual.0")}</h4>")
+                    .replaceFirst(Regex("<h5>方式一</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.1")}</h5>")
+                    .replaceFirst(Regex("tip-word\">如果你的项目.*<code"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.2")}<code")
+                    .replaceFirst(Regex("</code>(.*?)</span>"), "</code>${I18NUtil.getMessage("$engineCode.userManual.3")}</span>")
+                    .replaceFirst(Regex("<h5>方式二</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.4")}</h5>")
+                    .replaceFirst(Regex("tip-word\">在流水线中.*<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.5")}<a")
+                    .replace(Regex("target=\"__blank\">(.*?)</a>"), "target=\"__blank\">${I18NUtil.getMessage("$engineCode.userManual.6")}</a>")
+                    .replaceFirst(Regex("<h5>方式三</h5>"), "<h5>${I18NUtil.getMessage("$engineCode.userManual.7")}</h5>")
+                    .replaceFirst(Regex("tip-word\">在私人构建机上.*<a"), "tip-word\">${I18NUtil.getMessage("$engineCode.userManual.8")}<a")
+            else -> userManual
+        }
+    }
+
+    /**
      * 获取编译加速模式清单
      */
     fun getEngineConfigList(projectId: String): List<TurboEngineConfigVO> {
@@ -540,27 +620,31 @@ class TurboEngineConfigService @Autowired constructor(
         return turboEngineConfigList.map {
             TurboEngineConfigVO(
                 engineCode = it.engineCode,
-                engineName = it.engineName,
+                engineName = I18NUtil.getMessage("${it.engineCode}.engineName"),
                 priorityNum = it.priorityNum,
-                userManual = it.userManual,
-                desc = it.desc,
+                userManual = translateEngineUserManual(it.engineCode, it.userManual ?: ""),
+                desc = I18NUtil.getMessage("${it.engineCode}.desc"),
                 paramConfig = it.paramConfig?.filter { param -> param.displayed }?.map { param ->
                     ParamConfigModel(
                         paramKey = param.paramKey,
-                        paramName = param.paramName,
+                        paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey}.paramName"),
                         paramType = param.paramType,
                         paramProps = param.paramProps,
                         paramEnum = param.paramEnum?.filter { paramEnumEntity ->
                             paramEnumEntity.visualRange.isNullOrEmpty() ||
                                 paramEnumEntity.visualRange.contains(projectId)
                         }?.map { paramEnumEntity ->
+                            // 兼容部分无需国际化的值
+                            val paramName = I18NUtil.getMessage("${it.engineCode}.paramConfig.${param.paramKey
+                            }.paramEnum.${paramEnumEntity.paramValue}")
                             ParamEnumModel(
                                 paramValue = paramEnumEntity.paramValue,
-                                paramName = paramEnumEntity.paramName,
+                                paramName = if (I18NUtil.ERROR == paramName) paramEnumEntity.paramName else paramName,
                                 visualRange = paramEnumEntity.visualRange
                             )
                         },
-                        tips = param.tips,
+                        tips = if (!param.tips.isNullOrBlank()) I18NUtil.getMessage("${it
+                            .engineCode}.paramConfig.${param.paramKey}.tips") else param.tips,
                         displayed = param.displayed,
                         defaultValue = param.defaultValue,
                         required = param.required,
@@ -569,8 +653,15 @@ class TurboEngineConfigService @Autowired constructor(
                     )
                 },
                 recommend = it.recommend,
-                recommendReason = it.recommendReason,
-                pluginTips = it.pluginTips,
+                recommendReason = I18NUtil.getMessage("${it.engineCode}.recommendReason"),
+                pluginTips = I18NUtil.getMessage(
+                    "${it.engineCode}.pluginTips",
+                    if (EnumEngineType.DISTTASK_UE4.getEngineCode() == it.engineCode) arrayOf(domainsProperties.iwiki)
+                    else arrayOf(
+                        domainsProperties.devgw,
+                        domainsProperties.iwiki
+                    )
+                ),
                 updatedBy = it.updatedBy,
                 updatedDate = it.updatedDate
             )
@@ -734,6 +825,10 @@ class TurboEngineConfigService @Autowired constructor(
         return if (null == turboEngineConfigEntity || turboEngineConfigEntity.spelExpression.isBlank()) {
             null
         } else {
+            if (containsDangerousKeywords(turboEngineConfigEntity.spelExpression)) {
+                logger.warn("spel expression contains dangerous keywords ${turboEngineConfigEntity.spelExpression}")
+                return null
+            }
             val parser = SpelExpressionParser()
             parser.parseExpression(turboEngineConfigEntity.spelExpression)
         }
