@@ -2,10 +2,10 @@ package com.tencent.devops.turbo.controller
 
 import com.tencent.devops.api.pojo.Response
 import com.tencent.devops.common.api.exception.TurboException
-import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
+import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.pojo.Page
-import com.tencent.devops.common.util.constants.NO_ADMIN_MEMBER_MESSAGE
+import com.tencent.devops.common.web.utils.I18NUtil
 import com.tencent.devops.turbo.api.IUserTurboRecordController
 import com.tencent.devops.turbo.enums.EnumDistccTaskStatus
 import com.tencent.devops.turbo.pojo.TurboRecordModel
@@ -44,7 +44,7 @@ class UserTurboRecordController @Autowired constructor(
     ): Response<Page<TurboRecordHistoryVO>> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
         return Response.success(turboRecordService.getTurboRecordHistoryList(pageNum, pageSize, sortField, sortType, turboRecordModel))
     }
@@ -56,7 +56,8 @@ class UserTurboRecordController @Autowired constructor(
                 planInfo = turboPlanService.getByProjectId(projectId).associate { it.id!! to it.planName },
                 pipelineInfo = turboPlanInstanceList.filter { !it.pipelineId.isNullOrBlank() }.associate { it.pipelineId!! to it.pipelineName },
                 clientIpInfo = turboPlanInstanceList.filter { !it.clientIp.isNullOrBlank() }.distinctBy { it.clientIp }.map { it.clientIp!! },
-                statusInfo = EnumDistccTaskStatus.values().associate { it.getTBSStatus() to it.getStatusName() }
+                statusInfo = EnumDistccTaskStatus.values().associate { it.getTBSStatus() to (I18NUtil
+                    .getMessage("taskStatus.${it.getTBSStatus()}") ?: it.getStatusName()) }
             )
         )
     }
@@ -70,7 +71,7 @@ class UserTurboRecordController @Autowired constructor(
     override fun getTurboDisplayInfoById(turboRecordId: String, projectId: String, user: String): Response<TurboRecordDisplayVO> {
         // 判断是否是管理员
         if (!turboAuthService.getAuthResult(projectId, user)) {
-            throw TurboException(errorCode = IS_NOT_ADMIN_MEMBER, errorMessage = NO_ADMIN_MEMBER_MESSAGE)
+            throw UnauthorizedErrorException()
         }
 
         val turboRecordEntity = turboRecordService.findByRecordId(turboRecordId)
