@@ -1029,8 +1029,9 @@ func (h *ShaderTool) adjustActions4UBAAgent(all *common.UE4Action, t *dcSDK.Tool
 }
 
 // apply resource
-func (h *ShaderTool) shaders(actions *common.UE4Action) error {
-	blog.Infof("ShaderTool: shaders...")
+func (h *ShaderTool) shaders(actions *common.UE4Action, updatetoolchain string) error {
+	blog.Infof("ShaderTool: shaders with updatetoolchain[%s]", updatetoolchain)
+
 	// apply resource before set tool chain, otherwize we will get degraded for set tool chain script
 	err := h.applyResource(h.pCtx)
 	if err != nil {
@@ -1038,13 +1039,19 @@ func (h *ShaderTool) shaders(actions *common.UE4Action) error {
 		blog.Errorf("ShaderTool: failed to apply resource with error:%v", err)
 	}
 
-	err = h.booster.SetToolChainWithJSON(&actions.ToolJSON)
-	if err != nil {
-		blog.Errorf("ShaderTool: failed to set tool chain with error:%v", err)
-		return err
-	}
+	if updatetoolchain == "" ||
+		updatetoolchain == "1" ||
+		h.lasttoolchain == nil {
+		err = h.booster.SetToolChainWithJSON(&actions.ToolJSON)
+		if err != nil {
+			blog.Errorf("ShaderTool: failed to set tool chain with error:%v", err)
+			return err
+		}
 
-	h.lasttoolchain = &actions.ToolJSON
+		h.lasttoolchain = &actions.ToolJSON
+	} else {
+		blog.Infof("ShaderTool: not update tool chain with update flag[%s]", updatetoolchain)
+	}
 
 	h.actionlock.Lock()
 	defer h.actionlock.Unlock()
