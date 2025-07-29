@@ -6,7 +6,7 @@ object Versions {
     const val guavaVersion = "29.0-jre"
     const val ciVersion = "2.1.0"
     const val commonIo = "2.7"
-    const val jjwtVersion = "0.9.0"
+    const val jjwtVersion = "0.12.6"
     const val micrometerVersion = "1.6.6"
     const val okHttpVersion = "4.9.0"
     const val Kotlin = "1.6.0"
