@@ -1,6 +1,5 @@
 package com.tencent.devops.common.web.filter
 
-import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.common.security.jwt.JwtManager
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_JWT_TOKEN
 import org.springframework.web.filter.OncePerRequestFilter
@@ -21,15 +20,25 @@ class ServiceSecurityFilter(
     ) {
         val uri = request.requestURI
         val clientIp = request.remoteAddr
-        val jwt = request.getHeader(AUTH_HEADER_DEVOPS_JWT_TOKEN)
-        val flag = shouldFilter(uri, clientIp)
-        var error: UnauthorizedErrorException? = null
-        if (flag && jwtManager.isSendEnable()) {
-            error = check(jwt, clientIp, uri)
+
+        if (shouldFilter(uri, clientIp) && jwtManager.isSendEnable()) {
+            val jwt = request.getHeader(AUTH_HEADER_DEVOPS_JWT_TOKEN)
+            if (jwt.isNullOrBlank()) {
+                logger.info("Invalid request, jwt is empty!Client ip:$clientIp,uri:$uri")
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized:devops api jwt it empty.")
+                return
+            }
+            val checkResult: Boolean = jwtManager.verifyJwt(jwt)
+            if (!checkResult && jwtManager.isAuthEnable()) {
+                logger.warn("Invalid request, jwt is invalid or expired!Client ip:$clientIp,uri:$uri")
+                response.sendError(
+                    HttpServletResponse.SC_UNAUTHORIZED,
+                    "Unauthorized:devops api jwt it invalid or expired."
+                )
+                return
+            }
         }
-        if (error != null && jwtManager.isAuthEnable()) {
-            throw error
-        }
+        filterChain.doFilter(request, response)
     }
 
     private fun shouldFilter(uri: String, clientIp: String): Boolean {
@@ -57,28 +66,6 @@ class ServiceSecurityFilter(
         return false
     }
 
-    private fun check(
-        jwt: String?,
-        clientIp: String?,
-        uri: String?
-    ): UnauthorizedErrorException? {
-        if (jwt.isNullOrBlank()) {
-            logger.warn("Invalid request, jwt is empty!Client ip:$clientIp,uri:$uri")
-            return UnauthorizedErrorException(
-                errorCode = "401",
-                errorMessage = "Unauthorized:turbo api jwt is empty!"
-            )
-        }
-        val checkResult: Boolean = jwtManager.verifyJwt(jwt)
-        if (!checkResult) {
-            logger.warn("Invalid request, jwt is invalid or expired!Client ip:$clientIp,uri:$uri")
-            return UnauthorizedErrorException(
-                errorCode = "401",
-                errorMessage = "Unauthorized:turbo api jwt is invalid or expired!"
-            )
-        }
-        return null
-    }
 
     companion object {
         private val excludeVerifyPath = listOf(
