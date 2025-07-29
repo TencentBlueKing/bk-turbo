@@ -97,6 +97,10 @@ class KubernetesClientAutoConfiguration(
                 // 设置Accept-Language请求头
                 requestTemplate.header(languageHeaderName, languageHeaderValue)
             }
+            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
+                val jwtToken = jwtManager.getToken()
+                requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
+            }
         }
     }
 
