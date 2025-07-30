@@ -31,9 +31,11 @@ import com.tencent.devops.common.client.discovery.DiscoveryUtils
 import com.tencent.devops.common.client.ms.ConsulServiceClient
 import com.tencent.devops.common.client.pojo.AllProperties
 import com.tencent.devops.common.client.proxy.DevopsProxy
+import com.tencent.devops.common.security.jwt.JwtManager
 import com.tencent.devops.common.service.ServiceAutoConfiguration
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_BK_TICKET
+import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_JWT_TOKEN
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_PROJECT_ID
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_USER_ID
 import feign.RequestInterceptor
@@ -57,7 +59,9 @@ import org.springframework.web.context.request.ServletRequestAttributes
 @PropertySource("classpath:/common-client.properties")
 @AutoConfigureOrder(Ordered.HIGHEST_PRECEDENCE)
 @AutoConfigureAfter(ServiceAutoConfiguration::class, LoadBalancerAutoConfiguration::class)
-class ConsulClientAutoConfiguration {
+class ConsulClientAutoConfiguration(
+    private val jwtManager: JwtManager
+) {
 
     companion object {
         private val logger = LoggerFactory.getLogger(ConsulClientAutoConfiguration::class.java)
@@ -91,6 +95,10 @@ class ConsulClientAutoConfiguration {
                 // 设置Accept-Language请求头
                 requestTemplate.header(languageHeaderName, languageHeaderValue)
             }
+            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
+                val jwtToken = jwtManager.getToken()
+                requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
+            }
         }
     }
 
@@ -115,6 +123,10 @@ class ConsulClientAutoConfiguration {
             }
             if (!userName.isNullOrBlank()) {
                 requestTemplate.header(AUTH_HEADER_DEVOPS_USER_ID, userName)
+            }
+            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
+                val jwtToken = jwtManager.getToken()
+                requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
             }
         }
     }
