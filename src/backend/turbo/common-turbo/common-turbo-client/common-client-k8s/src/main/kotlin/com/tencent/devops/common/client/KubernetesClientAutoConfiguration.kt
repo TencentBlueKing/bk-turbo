@@ -40,6 +40,7 @@ import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_JWT_TOKEN
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_PROJECT_ID
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_USER_ID
 import feign.RequestInterceptor
+import feign.RequestTemplate
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.AutoConfigureAfter
@@ -89,19 +90,14 @@ class KubernetesClientAutoConfiguration(
     @Bean(name = ["normalRequestInterceptor"])
     fun requestInterceptor(): RequestInterceptor {
         return  RequestInterceptor { requestTemplate ->
+            // 设置JWT请求头
+            checkAndAssignJwtHeader(requestTemplate)
+
             RequestContextHolder.getRequestAttributes()?.let { attributes ->
                 (attributes as? ServletRequestAttributes)?.request?.getHeader(languageHeaderName)
                     ?.let { languageHeaderValue ->
                         requestTemplate.header(languageHeaderName, languageHeaderValue)
                     }
-            }
-            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
-                try {
-                    val jwtToken = jwtManager.getToken()
-                    requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
-                } catch (e: Exception) {
-                    logger.error("Failed to get JWT token: {}", e.message, e)
-                }
             }
         }
     }
@@ -110,6 +106,8 @@ class KubernetesClientAutoConfiguration(
     @Bean(name = ["devopsRequestInterceptor"])
     fun bsRequestInterceptor(): RequestInterceptor {
         return RequestInterceptor { requestTemplate ->
+            checkAndAssignJwtHeader(requestTemplate)
+
             val projectId = DevopsProxy.projectIdThreadLocal.get() as String?
             if (!projectId.isNullOrBlank()) {
                 logger.info("project id of header: $projectId")
@@ -130,14 +128,16 @@ class KubernetesClientAutoConfiguration(
                     }
                 }
             }
+        }
+    }
 
-            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
-                try {
-                    val jwtToken = jwtManager.getToken()
-                    requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
-                } catch (e: Exception) {
-                    logger.error("Failed to get JWT token: {}", e.message, e)
-                }
+    private fun checkAndAssignJwtHeader(requestTemplate: RequestTemplate) {
+        if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
+            try {
+                val jwtToken = jwtManager.getToken()
+                requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
+            } catch (e: Exception) {
+                logger.error("Failed to get JWT token: {}", e.message, e)
             }
         }
     }

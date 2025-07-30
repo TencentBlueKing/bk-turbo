@@ -39,6 +39,7 @@ import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_JWT_TOKEN
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_PROJECT_ID
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_USER_ID
 import feign.RequestInterceptor
+import feign.RequestTemplate
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.AutoConfigureAfter
@@ -87,17 +88,14 @@ class ConsulClientAutoConfiguration(
     @Bean(name = ["normalRequestInterceptor"])
     fun requestInterceptor(): RequestInterceptor {
         return RequestInterceptor { requestTemplate ->
-            val attributes = RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes
-                ?: return@RequestInterceptor
-            val request = attributes.request
-            val languageHeaderValue = request.getHeader(languageHeaderName)
-            if (!languageHeaderValue.isNullOrBlank()) {
-                // 设置Accept-Language请求头
-                requestTemplate.header(languageHeaderName, languageHeaderValue)
-            }
-            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
-                val jwtToken = jwtManager.getToken()
-                requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
+            // 设置JWT请求头
+            checkAndAssignJwtHeader(requestTemplate)
+
+            RequestContextHolder.getRequestAttributes()?.let { attributes ->
+                (attributes as? ServletRequestAttributes)?.request?.getHeader(languageHeaderName)
+                    ?.let { languageHeaderValue ->
+                        requestTemplate.header(languageHeaderName, languageHeaderValue)
+                    }
             }
         }
     }
@@ -106,27 +104,38 @@ class ConsulClientAutoConfiguration(
     @Bean(name = ["devopsRequestInterceptor"])
     fun bsRequestInterceptor(): RequestInterceptor {
         return RequestInterceptor { requestTemplate ->
+            checkAndAssignJwtHeader(requestTemplate)
+
             val projectId = DevopsProxy.projectIdThreadLocal.get() as String?
             if (!projectId.isNullOrBlank()) {
                 logger.info("project id of header: $projectId")
                 requestTemplate.header(AUTH_HEADER_DEVOPS_PROJECT_ID, projectId)
             }
 
-            val attributes = RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes
-                ?: return@RequestInterceptor
-            val request = attributes.request
-            val bkTicket = request.getHeader(AUTH_HEADER_DEVOPS_BK_TICKET)
-            val userName = request.getHeader(AUTH_HEADER_DEVOPS_USER_ID)
+            RequestContextHolder.getRequestAttributes()?.let { attributes ->
+                (attributes as? ServletRequestAttributes)?.request?.let { request ->
+                    val bkTicket = request.getHeader(AUTH_HEADER_DEVOPS_BK_TICKET)
+                    val userName = request.getHeader(AUTH_HEADER_DEVOPS_USER_ID)
 
-            if (!bkTicket.isNullOrBlank()) {
-                requestTemplate.header(AUTH_HEADER_DEVOPS_BK_TICKET, bkTicket)
+                    bkTicket?.takeIf { it.isNotBlank() }?.let {
+                        requestTemplate.header(AUTH_HEADER_DEVOPS_BK_TICKET, it)
+                    }
+
+                    userName?.takeIf { it.isNotBlank() }?.let {
+                        requestTemplate.header(AUTH_HEADER_DEVOPS_USER_ID, it)
+                    }
+                }
             }
-            if (!userName.isNullOrBlank()) {
-                requestTemplate.header(AUTH_HEADER_DEVOPS_USER_ID, userName)
-            }
-            if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
+        }
+    }
+
+    private fun checkAndAssignJwtHeader(requestTemplate: RequestTemplate) {
+        if (!requestTemplate.headers().containsKey(AUTH_HEADER_DEVOPS_JWT_TOKEN) && jwtManager.isSendEnable()) {
+            try {
                 val jwtToken = jwtManager.getToken()
                 requestTemplate.header(AUTH_HEADER_DEVOPS_JWT_TOKEN, jwtToken)
+            } catch (e: Exception) {
+                logger.error("Failed to get JWT token: {}", e.message, e)
             }
         }
     }
