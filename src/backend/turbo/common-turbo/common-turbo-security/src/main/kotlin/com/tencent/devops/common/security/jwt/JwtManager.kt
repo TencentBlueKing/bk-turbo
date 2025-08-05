@@ -121,7 +121,7 @@ class JwtManager(
     }
 
     override fun configureTasks(taskRegistrar: ScheduledTaskRegistrar) {
-        if (isAuthEnable()) {
+        if (isSendEnable()) {
             taskRegistrar.addFixedDelayTask(
                 this@JwtManager::refreshToken,
                 5 * 60 * 1000
@@ -140,7 +140,7 @@ class JwtManager(
     }
 
     fun isSendEnable(): Boolean {
-        // 只有authEnable=true，且privateKeyString、publicKeyString不为空的时候，才会验证
+        // privateKeyString、publicKeyString不为空的时候，发起请求才会携带jwt请求头
         return !privateKeyString.isNullOrBlank() && !publicKeyString.isNullOrBlank()
     }
 
