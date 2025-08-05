@@ -21,7 +21,7 @@ include("model-turbo")
 
 pluginManagement {
     repositories {
-        maven { url = java.net.URI("https://oss.sonatype.org/content/repositories/snapshots/") }
+        maven { url = java.net.URI("https://central.sonatype.com/repository/maven-snapshots/") }
 //        mavenLocal()
         mavenCentral()
         gradlePluginPortal()
