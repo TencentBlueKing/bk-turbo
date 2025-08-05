@@ -139,8 +139,13 @@ class JwtManager(
         return authEnable && !privateKeyString.isNullOrBlank() && !publicKeyString.isNullOrBlank()
     }
 
+    /**
+     * 判断是否需要发送JWT令牌。
+     * 当`privateKeyString`和`publicKeyString`均不为空时返回`true`，否则返回`false`。
+     *
+     * @return Boolean 是否需要发送JWT令牌
+     */
     fun isSendEnable(): Boolean {
-        // privateKeyString、publicKeyString不为空的时候，发起请求才会携带jwt请求头
         return !privateKeyString.isNullOrBlank() && !publicKeyString.isNullOrBlank()
     }
 
