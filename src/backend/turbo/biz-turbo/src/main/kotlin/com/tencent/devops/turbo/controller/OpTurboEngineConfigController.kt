@@ -20,7 +20,7 @@ class OpTurboEngineConfigController @Autowired constructor(
         turboEngineConfigModel: TurboEngineConfigModel,
         user: String
     ): Response<Long?> {
-        return Response.success(turboEngineConfigService.addNewEngineConfig(turboEngineConfigModel, user))
+        return Response.success(Long.MIN_VALUE)
     }
 
     override fun deleteEngineConfig(engineCode: String, user: String): Response<Boolean> {
@@ -50,9 +50,6 @@ class OpTurboEngineConfigController @Autowired constructor(
         turboEngineConfigModel: TurboEngineConfigModel,
         user: String
     ): Response<Boolean> {
-        turboEngineConfigService.updateEngineConfig(
-            engineCode, turboEngineConfigModel, user
-        )
         return Response.success(true)
     }
 

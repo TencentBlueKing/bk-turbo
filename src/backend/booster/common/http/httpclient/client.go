@@ -110,11 +110,10 @@ func (client *HTTPClient) NewTransPort() *http.Transport {
 			KeepAlive: 30 * time.Second,
 		}).Dial,
 		ResponseHeaderTimeout: 30 * time.Second,
-		Proxy:                 http.ProxyFromEnvironment,
 	}
 }
 
-// SetTimeout set the client timeout.
+// SetTimeOut set the client timeout.
 func (client *HTTPClient) SetTimeOut(timeOut time.Duration) {
 	client.httpCli.Timeout = timeOut
 }

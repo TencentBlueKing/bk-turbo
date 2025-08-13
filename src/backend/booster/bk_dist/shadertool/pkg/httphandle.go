@@ -34,6 +34,8 @@ const (
 	PathV1 = prefix + VersionV1
 
 	processIDKey = "process_id"
+
+	updatetoolchainKey = "updatetoolchain"
 )
 
 // HTTPHandle : http handle
@@ -136,6 +138,8 @@ func (a *HTTPHandle) available(req *restful.Request, resp *restful.Response) {
 func (a *HTTPHandle) shaders(req *restful.Request, resp *restful.Response) {
 	blog.Debugf("ShaderTool: shaders...")
 
+	updatetoolchain := req.QueryParameter(updatetoolchainKey)
+
 	actions, err := getShaderActions(req)
 	if err != nil {
 		ReturnRest(&RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrCode(
@@ -143,7 +147,7 @@ func (a *HTTPHandle) shaders(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	err = a.mgr.shaders(actions)
+	err = a.mgr.shaders(actions, updatetoolchain)
 	if err != nil {
 		ReturnRest(&RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrCode(
 			GetErrorCode(ErrorInvalidJSON)), Message: err.Error()})
