@@ -12,6 +12,7 @@ package manager
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -51,6 +52,8 @@ func NewMgr(conf *config.ServerConfig) types.Mgr {
 		globalWork:        newGlobalWork(conf),
 		netCounters:       make(map[string]net.IOCountersStat),
 		hasWorkUnregisted: false,
+		checkduration:     3600 * time.Second,
+		deleteduration:    3600 * 24 * 3 * time.Second,
 	}
 }
 
@@ -75,6 +78,11 @@ type mgr struct {
 
 	localResourceTaskMutex sync.Mutex
 	localResourceTaskNum   int32
+
+	lastcheckubatime time.Time
+	checkduration    time.Duration
+	deleteduration   time.Duration
+	checkubalock     sync.RWMutex
 }
 
 // Run brings up the manager handler
@@ -952,19 +960,68 @@ func (m *mgr) GetFirstBazelNoLauncherWorkID() (string, error) {
 }
 
 // GetAllWorkers return all workers
-func (m *mgr) GetAllWorkers() []string {
+func (m *mgr) GetAllWorkers(ubainfo types.UbaInfo) []string {
 	var allworkers []string
 	if m.worksPool != nil {
 		for _, work := range m.worksPool.all() {
 			if work.Remote() != nil {
 				allworkers = append(allworkers, work.Remote().GetAllWorkers()...)
 			}
+			if work.Basic() != nil {
+				work.Basic().SetUbaInfo(ubainfo)
+			}
 		}
 	}
 
 	if m.globalWork != nil && m.globalWork.Remote() != nil {
 		allworkers = append(allworkers, m.globalWork.Remote().GetAllWorkers()...)
+		if m.globalWork.Basic() != nil {
+			m.globalWork.Basic().SetUbaInfo(ubainfo)
+		}
+	}
+
+	if ubainfo.TraceFile != "" {
+		go m.checkubadir(ubainfo.TraceFile)
 	}
 
 	return allworkers
+}
+
+func (m *mgr) checkubadir(ubafile string) error {
+	m.checkubalock.Lock()
+	defer m.checkubalock.Unlock()
+
+	if m.lastcheckubatime.After(time.Now().Add(-1 * m.checkduration)) {
+		return nil
+	}
+
+	m.lastcheckubatime = time.Now()
+	// 获取uba目录路径（向上两级）
+	dir := filepath.Dir(filepath.Dir(ubafile))
+	blog.Infof("mgr: check uba file dir: %s", dir)
+
+	f, err := os.Open(dir)
+	if err != nil {
+		blog.Warnf("mgr: failed to open dir %s with error:%v", dir, err)
+		return err
+	}
+	fis, _ := f.Readdir(-1)
+	f.Close()
+
+	t := time.Now().Add(-1 * m.deleteduration) // 3天之前的文件删除
+	blog.Infof("mgr: dir %s time:%s", dir, t)
+	fullpath := ""
+	for _, fi := range fis {
+		if fi.ModTime().After(t) {
+			continue
+		}
+		fullpath = filepath.Join(dir, fi.Name())
+		if strings.HasPrefix(ubafile, fullpath) {
+			continue
+		}
+		blog.Infof("mgr: ready remove file:%s modify time:%s", fullpath, fi.ModTime())
+		os.RemoveAll(fullpath)
+	}
+
+	return nil
 }

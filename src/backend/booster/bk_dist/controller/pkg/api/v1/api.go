@@ -19,6 +19,9 @@ var (
 	queryParamJobIndex          = "job_index"
 	queryParamJobLeastLeaveTime = "job_least_leave_time"
 
+	listresourceTraceFile  = "tracefile"
+	listresourceSessionmap = "sessionmap"
+
 	defaultManager types.Mgr
 )
 
