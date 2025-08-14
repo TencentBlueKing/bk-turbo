@@ -89,7 +89,7 @@ type Mgr interface {
 	GetFirstBazelNoLauncherWorkID() (string, error)
 
 	// Get all workers
-	GetAllWorkers() []string
+	GetAllWorkers(ubainfo UbaInfo) []string
 }
 
 // RemoteMgr describe a manager for handling all actions with remote workers for work
@@ -283,4 +283,6 @@ type BasicMgr interface {
 	SearchToolChain(cmd, path string) error
 
 	GetCacheServer() []string
+
+	SetUbaInfo(ubaInfo UbaInfo)
 }
