@@ -2664,6 +2664,7 @@ func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 				FilePath:           c.ExeName,
 				Compresstype:       dcProtocol.CompressLZ4,
 				FileSize:           -1,
+				InitFileSize:       -1,
 				Lastmodifytime:     0,
 				Md5:                "",
 				Targetrelativepath: remotepath,
@@ -2959,6 +2960,7 @@ func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
 	}
 }
 
+// GetAllWorkers get all workers
 func (m *Mgr) GetAllWorkers() []string {
 	if m.resource == nil {
 		return nil
