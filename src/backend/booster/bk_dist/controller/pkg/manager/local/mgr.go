@@ -453,9 +453,14 @@ func (m *Mgr) ExecuteTask(
 			for i, c := range remoteReq.Req.Commands {
 				for j, f := range c.Inputfiles {
 					if f.CompressedSize < 0 && f.InitCompressedSize >= 0 {
-						remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize = remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize
+						blog.Infof("local: reset compressed size for file(%s) from work(%s) for pid(%d) from %d to %d",
+							f.FilePath, m.work.ID(), req.Pid, remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize, remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize)
+						remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize =
+							remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize
 					}
 					if f.FileSize < 0 && f.InitFileSize >= 0 {
+						blog.Infof("local: reset file size for file(%s) from work(%s) for pid(%d) from %d to %d",
+							f.FilePath, m.work.ID(), req.Pid, remoteReq.Req.Commands[i].Inputfiles[j].FileSize, remoteReq.Req.Commands[i].Inputfiles[j].InitFileSize)
 						remoteReq.Req.Commands[i].Inputfiles[j].FileSize = remoteReq.Req.Commands[i].Inputfiles[j].InitFileSize
 					}
 				}
