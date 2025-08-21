@@ -540,7 +540,7 @@ func (m *Mgr) SendStats(brief bool) error {
 
 	jobbytes := []byte{}
 	if !brief {
-		jobbytes = as.DumpJobs()
+		jobbytes = as.DumpJobs(m.newlyTaskID, info.WorkID())
 	}
 
 	scene := info.Scene()
@@ -626,7 +626,7 @@ func (m *Mgr) getSendStatsData(brief bool, t int64) (*[]byte, error) {
 
 	jobbytes := []byte{}
 	if !brief {
-		jobbytes = as.DumpJobs()
+		jobbytes = as.DumpJobs(m.newlyTaskID, info.WorkID())
 	}
 
 	scene := info.Scene()

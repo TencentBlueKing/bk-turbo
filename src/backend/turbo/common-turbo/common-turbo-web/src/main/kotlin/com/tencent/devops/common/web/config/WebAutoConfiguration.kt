@@ -3,9 +3,12 @@ package com.tencent.devops.common.web.config
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer
+import com.tencent.devops.common.security.jwt.JwtManager
+import com.tencent.devops.common.web.filter.ServiceSecurityFilter
 import com.tencent.devops.common.web.interceptor.LocaleInterceptor
 import com.tencent.devops.common.web.jasypt.DefaultEncryptor
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.MessageSource
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -20,6 +23,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import javax.servlet.Filter
 
 
 @Suppress("MaxLineLength")
@@ -66,5 +70,19 @@ class WebAutoConfiguration : WebMvcConfigurer {
         // 不支持resource/ValidationMessages.properties系列
         bean.setValidationMessageSource(this.messageSource())
         return bean
+    }
+
+    @Bean
+    fun serviceSecurityFilter(jwtManager: JwtManager): Filter {
+        return ServiceSecurityFilter(jwtManager)
+    }
+
+    @Bean
+    fun serviceSecurityFilterRegistration(jwtManager: JwtManager): FilterRegistrationBean<Filter> {
+        val registration: FilterRegistrationBean<Filter> = FilterRegistrationBean<Filter>()
+        registration.filter = serviceSecurityFilter(jwtManager)
+        registration.addUrlPatterns("/api/*")
+        registration.order = 1
+        return registration
     }
 }

@@ -7,6 +7,7 @@ include("common-turbo:common-turbo-client")
 include("common-turbo:common-turbo-client:common-client-base")
 include("common-turbo:common-turbo-client:common-client-consul")
 include("common-turbo:common-turbo-client:common-client-k8s")
+include("common-turbo:common-turbo-security")
 include("common-turbo:common-turbo-service")
 include("common-turbo:common-turbo-quartz")
 include("common-turbo:common-turbo-util")
@@ -20,7 +21,7 @@ include("model-turbo")
 
 pluginManagement {
     repositories {
-        maven { url = java.net.URI("https://oss.sonatype.org/content/repositories/snapshots/") }
+        maven { url = java.net.URI("https://central.sonatype.com/repository/maven-snapshots/") }
 //        mavenLocal()
         mavenCentral()
         gradlePluginPortal()
