@@ -1,7 +1,7 @@
 ---
 name: Server功能增强
 about: Suggest an enhancement for this project
-title: "【Enhancement】"
+title: "【Server Enhance】"
 labels: server, todo
 assignees: ''
 
