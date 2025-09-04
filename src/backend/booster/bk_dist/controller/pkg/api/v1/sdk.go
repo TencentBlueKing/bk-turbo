@@ -548,11 +548,14 @@ func (s *sdk) setConfig(config *dcSDK.CommonControllerConfig) error {
 		Data: config.Data,
 	}, &data)
 
-	_, _, err := s.request("POST", commonConfigURI, data, false)
+	// ++ by tomtian 20250904
+	// 在某些特殊场景下，比如shader工具链是网络映射路径，则默认的超时时间不够；
+	// 会导致这儿不停地重试，conroller侧处理工具链越来越慢，去掉超时更好
+	_, _, err := s.request("POST", commonConfigURI, data, true)
 	if err != nil {
 		retry := 0
 		for ; ; time.Sleep(100 * time.Millisecond) {
-			_, _, err = s.request("POST", commonConfigURI, data, false)
+			_, _, err = s.request("POST", commonConfigURI, data, true)
 			if err == nil {
 				break
 			}
@@ -562,6 +565,7 @@ func (s *sdk) setConfig(config *dcSDK.CommonControllerConfig) error {
 			}
 		}
 	}
+	// -- by tomtian 20250904
 
 	return nil
 }
