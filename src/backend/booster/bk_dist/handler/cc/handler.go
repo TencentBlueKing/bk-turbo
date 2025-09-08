@@ -1584,7 +1584,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 		return "", nil, err
 	}
 	blog.Infof("cc(%s): [%s] success to execute pre-process and get %s: %s",
-		cc.tag, outputFile, strings.Join(newArgs2, " "))
+		cc.jobID, cc.tag, outputFile, strings.Join(newArgs2, " "))
 	cc.preprocessedErrorBuf = errBuf.String()
 
 	return outputFile, parseInspectHeader(errBuf.String()), nil

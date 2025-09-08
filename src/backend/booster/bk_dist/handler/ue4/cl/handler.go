@@ -918,7 +918,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				cl.ForceLocalResponseFileKeys = append(cl.ForceLocalResponseFileKeys, forcekeylist...)
 				cl.ForceLocalCppFileKeys = append(cl.ForceLocalCppFileKeys, forcekeylist...)
 				blog.Infof("cl(%s): ForceLocalResponseFileKeys: %v, ForceLocalCppFileKeys: %v",
-					cl.ForceLocalResponseFileKeys, cl.ForceLocalCppFileKeys)
+					cl.jobID, cl.ForceLocalResponseFileKeys, cl.ForceLocalCppFileKeys)
 			}
 		}
 	}

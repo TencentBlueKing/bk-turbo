@@ -253,8 +253,8 @@ func (m *Mgr) GetPumpCache() (*analyser.FileCache, *analyser.RootCache) {
 
 func checkHttpConn(req *types.LocalTaskExecuteRequest) (*types.LocalTaskExecuteResult, error) {
 	if !types.IsHttpConnStatusOk(req.HttpConnCache, req.HttpConnKey) {
-		blog.Errorf("local(%s): httpconncache exit execute pid(%d) command:[%s] for http connection[%s] error", req.Stats.ID,
-			req.Pid, strings.Join(req.Commands, " "), req.HttpConnKey)
+		blog.Errorf("local(%s): httpconncache exit execute pid(%d) command:[%s] for http connection[%s] error",
+			req.Stats.ID, req.Pid, strings.Join(req.Commands, " "), req.HttpConnKey)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: -1,
@@ -622,7 +622,6 @@ func (m *Mgr) retryOnRemoteFail(
 				req.Stats.ID,
 				m.work.ID(),
 				req.Pid,
-				req.Stats.ID,
 				err)
 			return nil, err
 		}

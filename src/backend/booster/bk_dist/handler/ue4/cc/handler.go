@@ -962,7 +962,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			cc.ForceLocalResponseFileKeys = append(cc.ForceLocalResponseFileKeys, forcekeylist...)
 			cc.ForceLocalCppFileKeys = append(cc.ForceLocalCppFileKeys, forcekeylist...)
 			blog.Infof("cc(%s): ForceLocalResponseFileKeys: %v, ForceLocalCppFileKeys: %v",
-				cc.ForceLocalResponseFileKeys, cc.ForceLocalCppFileKeys)
+				cc.jobID, cc.ForceLocalResponseFileKeys, cc.ForceLocalCppFileKeys)
 		}
 	}
 
@@ -1026,7 +1026,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	existed, fileSize, modifyTime, fileMode := dcFile.Stat(cc.preprocessedFile).Batch()
 	if !existed {
 		err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
-		blog.Errorf("cc(%s): %v", err)
+		blog.Errorf("cc(%s): %v", cc.jobID, err)
 		return nil, dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: fmt.Errorf("%s not existed", cc.preprocessedFile),

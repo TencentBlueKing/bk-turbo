@@ -398,8 +398,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		blog.Infof("executor(%s): ready from pid(%d) run cmd:%v with command type:%d, env:%v, dir:%s",
-			e.req.Stats.ID, e.req.Pid, e.req.Commands, e.req.CommandType, e.req.Environments, e.req.Dir)
+		blog.Infof("executor(%s): ready from pid(%d) run cmd:%v with command type:%d",
+			e.req.Stats.ID, e.req.Pid, e.req.Commands, e.req.CommandType)
 		cmd := e.req.Commands[0]
 		switch e.req.CommandType {
 		case dcType.CommandInFile: //try to run cmd in file
@@ -423,8 +423,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 	}
 
 	if err != nil {
-		blog.Errorf("executor(%s): failed to execute local-task from pid(%d) command:[%s]: %v(%d), %v",
-			e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "), err, code, string(stderr))
+		blog.Errorf("executor(%s): failed to execute local-task from pid(%d): %v(%d), %v",
+			e.req.Stats.ID, e.req.Pid, err, code, string(stderr))
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: code,

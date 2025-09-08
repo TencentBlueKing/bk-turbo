@@ -901,8 +901,8 @@ func (m *Mgr) retryFailFiles(ctx context.Context) {
 
 func checkHttpConn(req *types.RemoteTaskExecuteRequest) (*types.RemoteTaskExecuteResult, error) {
 	if !types.IsHttpConnStatusOk(req.HttpConnCache, req.HttpConnKey) {
-		blog.Errorf("remote(%s): httpconncache exit execute pid(%d) for http connection[%s] error", req.Stats.ID,
-			req.Pid, req.HttpConnKey)
+		blog.Errorf("remote(%s): httpconncache exit execute pid(%d) for http connection[%s] error",
+			req.Stats.ID, req.Pid, req.HttpConnKey)
 		return nil, types.ErrLocalHttpConnDisconnected
 	}
 

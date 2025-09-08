@@ -369,8 +369,7 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 	err := checkAndsaveResultFile(&result.ResultFiles[0])
 	if err != nil {
 		blog.Infof("shader(%s): failed to check and save shader result file[%s],error:[%v]",
-			u.jobID,
-			result.ResultFiles[0].FilePath, err)
+			u.jobID, result.ResultFiles[0].FilePath, err)
 
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
