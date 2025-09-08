@@ -45,6 +45,11 @@ func (cc *WinClangCl) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	cc.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (cc *WinClangCl) SetJobID(jobID string) {
+	return
+}
+
 // InitExtra receive the extra data from project settings and init the handle extra data
 func (cc *WinClangCl) InitExtra(extra []byte) {
 

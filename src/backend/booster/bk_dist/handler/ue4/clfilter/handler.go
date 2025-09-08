@@ -83,6 +83,11 @@ func (cf *TaskCLFilter) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	}
 }
 
+// SetJobID set jobID to task
+func (cf *TaskCLFilter) SetJobID(jobID string) {
+	return
+}
+
 // InitExtra no need
 func (cf *TaskCLFilter) InitExtra(extra []byte) {
 }

@@ -81,8 +81,8 @@ var (
 
 // TaskCL 定义了cl.exe编译的描述处理对象, 一般用来处理ue4-win下的cl编译
 type TaskCL struct {
-	sandbox *dcSyscall.Sandbox
-
+	sandbox      *dcSyscall.Sandbox
+	jobID        string
 	ccacheEnable bool
 
 	// tmp file list to clean
@@ -184,6 +184,11 @@ func (cl *TaskCL) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	cl.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (cl *TaskCL) SetJobID(jobID string) {
+	cl.jobID = jobID
+}
+
 // InitExtra no need
 func (cl *TaskCL) InitExtra(extra []byte) {
 }
@@ -277,10 +282,10 @@ func (cl *TaskCL) NeedRetryOnRemoteFail(command []string) bool {
 
 // TODO : OnRemoteFail give chance to try other way if failed to remote execute
 func (cl *TaskCL) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("cl: start OnRemoteFail for: %v", command)
+	blog.Infof("cl(%s): start OnRemoteFail for: %v", cl.jobID, command)
 
 	if cl.pumpremote {
-		blog.Infof("cl: set pumpremotefailed to true now")
+		blog.Infof("cl(%s): set pumpremotefailed to true now", cl.jobID)
 		cl.pumpremotefailed = true
 		cl.needcopypumpheadfile = true
 		cl.pumpremote = false
@@ -325,7 +330,7 @@ func (cl *TaskCL) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 // LocalExecute no need
 func (cl *TaskCL) LocalExecute(command []string) dcType.BKDistCommonError {
 	if len(command) < 1 {
-		blog.Warnf("cl: failed to execute command, for args is empty")
+		blog.Warnf("cl(%s): failed to execute command, for args is empty", cl.jobID)
 		return dcType.ErrorUnknown
 	}
 
@@ -358,7 +363,7 @@ func (cl *TaskCL) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 }
 
 func (cl *TaskCL) getIncludeExe() (string, error) {
-	blog.Debugf("cl: ready get include exe")
+	blog.Debugf("cl(%s): ready get include exe", cl.jobID)
 
 	target := "bk-includes"
 	if runtime.GOOS == osWindows {
@@ -371,7 +376,7 @@ func (cl *TaskCL) getIncludeExe() (string, error) {
 
 		includePath, err = dcUtil.CheckFileWithCallerPath(target)
 		if err != nil {
-			blog.Errorf("cl: not found exe file with error: %v", err)
+			blog.Errorf("cl(%s): not found exe file with error: %v", cl.jobID, err)
 			return includePath, err
 		}
 	}
@@ -406,7 +411,7 @@ func (cl *TaskCL) analyzeIncludes(f string, workdir string) ([]*dcFile.Info, err
 
 	lines := strings.Split(string(data), "\r\n")
 	uniqlines := dcUtil.UniqArr(lines)
-	blog.Infof("cl: got %d uniq include file from file: %s", len(uniqlines), f)
+	blog.Infof("cl(%s): got %d uniq include file from file: %s", cl.jobID, len(uniqlines), f)
 
 	// if dcPump.SupportPumpStatCache(cl.sandbox.Env) {
 	// return commonUtil.GetFileInfo(uniqlines, true, true, dcPump.SupportPumpLstatByDir(cl.sandbox.Env))
@@ -478,17 +483,17 @@ type sourceDependencies struct {
 // }
 
 func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
-	blog.Infof("cl: copy pump head file: %s to: %s", cl.sourcedependfile, cl.pumpHeadFile)
+	blog.Infof("cl(%s): copy pump head file: %s to: %s", cl.jobID, cl.sourcedependfile, cl.pumpHeadFile)
 
 	// 只拷贝由加速编译预处理生成的依赖文件；非加速模式下生成的依赖文件不完整，去掉了系统文件
 	if cl.inputFile == "" {
-		blog.Infof("cl: not found input file,so do not copy depend file: %s with err:%v", cl.sourcedependfile, ErrorNotRemoteTask)
+		blog.Infof("cl(%s): not found input file,so do not copy depend file: %s with err:%v", cl.jobID, cl.sourcedependfile, ErrorNotRemoteTask)
 		return ErrorNotRemoteTask
 	}
 
 	data, err := ioutil.ReadFile(cl.sourcedependfile)
 	if err != nil {
-		blog.Warnf("cl: copy pump head failed to read depend file: %s with err:%v", cl.sourcedependfile, err)
+		blog.Warnf("cl(%s): copy pump head failed to read depend file: %s with err:%v", cl.jobID, cl.sourcedependfile, err)
 		return err
 	}
 
@@ -520,7 +525,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 				}
 			}
 		} else {
-			blog.Warnf("cl: failed to resolve depend file: %s with err:%s", cl.sourcedependfile, err)
+			blog.Warnf("cl(%s): failed to resolve depend file: %s with err:%s", cl.jobID, cl.sourcedependfile, err)
 			return err
 		}
 	} else {
@@ -552,7 +557,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	// copy includeRspFiles
 	if len(cl.includeRspFiles) > 0 {
 		for _, l := range cl.includeRspFiles {
-			blog.Infof("cl: ready add rsp file: %s", l)
+			blog.Infof("cl(%s): ready add rsp file: %s", cl.jobID, l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -563,7 +568,7 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	// copy includePaths
 	if len(cl.includePaths) > 0 {
 		for _, l := range cl.includePaths {
-			blog.Infof("cl: ready add include path: %s", l)
+			blog.Infof("cl(%s): ready add include path: %s", cl.jobID, l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -571,10 +576,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 		}
 	}
 
-	blog.Infof("cl: copy pump head got %d uniq include file from file: %s", len(includes), cl.sourcedependfile)
+	blog.Infof("cl(%s): copy pump head got %d uniq include file from file: %s", cl.jobID, len(includes), cl.sourcedependfile)
 
 	if len(includes) == 0 {
-		blog.Warnf("cl: depend file: %s data:[%s] is invalid", cl.sourcedependfile, string(data))
+		blog.Warnf("cl(%s): depend file: %s data:[%s] is invalid", cl.jobID, cl.sourcedependfile, string(data))
 		return ErrorInvalidDependFile
 	}
 
@@ -591,10 +596,10 @@ func (cl *TaskCL) copyPumpHeadFile(workdir string) error {
 	newdata := strings.Join(uniqlines, sep)
 	err = ioutil.WriteFile(cl.pumpHeadFile, []byte(newdata), os.ModePerm)
 	if err != nil {
-		blog.Warnf("cl: copy pump head failed to write file: %s with err:%v", cl.pumpHeadFile, err)
+		blog.Warnf("cl(%s): copy pump head failed to write file: %s with err:%v", cl.jobID, cl.pumpHeadFile, err)
 		return err
 	} else {
-		blog.Infof("cl: copy pump head succeed to write file: %s", cl.pumpHeadFile)
+		blog.Infof("cl(%s): copy pump head succeed to write file: %s", cl.jobID, cl.pumpHeadFile)
 	}
 
 	return nil
@@ -617,7 +622,7 @@ func (cl *TaskCL) Includes(responseFile string, args []string, workdir string, f
 	var err error
 	cl.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
-		blog.Errorf("cl: do includes get output file failed: %v", err)
+		blog.Errorf("cl(%s): do includes get output file failed: %v", cl.jobID, err)
 		return nil, err
 	}
 
@@ -648,13 +653,13 @@ func (cl *TaskCL) inPumpBlack(responseFile string, args []string) (bool, error) 
 		if len(blacklist) > 0 {
 			for _, v := range blacklist {
 				if v != "" && strings.Contains(responseFile, v) {
-					blog.Infof("cl: found response %s is in pump blacklist", responseFile)
+					blog.Infof("cl(%s): found response %s is in pump blacklist", cl.jobID, responseFile)
 					return true, nil
 				}
 
 				for _, v1 := range args {
 					if strings.HasSuffix(v1, ".cpp") && strings.Contains(v1, v) {
-						blog.Infof("cl: found arg %s is in pump blacklist", v1)
+						blog.Infof("cl(%s): found arg %s is in pump blacklist", cl.jobID, v1)
 						return true, nil
 					}
 				}
@@ -667,27 +672,27 @@ func (cl *TaskCL) inPumpBlack(responseFile string, args []string) (bool, error) 
 
 // first error means real error when try pump, second is notify error
 func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error) {
-	blog.Infof("cl: trypump: %v", command)
+	blog.Infof("cl(%s): trypump: %v", cl.jobID, command)
 
 	// TODO : !! ensureCompilerRaw changed the command slice, it maybe not we need !!
 	tstart := time.Now().Local()
 	responseFile, args, showinclude, sourcedependfile, objectfile, pchfile, err := ensureCompilerRaw(command, cl.sandbox.Dir)
 	if err != nil {
-		blog.Debugf("cl: pre execute ensure compiler failed %v: %v", args, err)
+		blog.Debugf("cl(%s): pre execute ensure compiler failed %v: %v", cl.jobID, args, err)
 		return nil, err, nil
 	} else {
-		blog.Infof("cl: after parse command, got responseFile:%s,sourcedepent:%s,objectfile:%s,pchfile:%s",
-			responseFile, sourcedependfile, objectfile, pchfile)
+		blog.Infof("cl(%s): after parse command, got responseFile:%s,sourcedepent:%s,objectfile:%s,pchfile:%s",
+			cl.jobID, responseFile, sourcedependfile, objectfile, pchfile)
 	}
 	tend := time.Now().Local()
-	blog.Debugf("cl: trypump time record: %s for ensureCompilerRaw for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cl(%s): trypump time record: %s for ensureCompilerRaw for rsp file:%s", cl.jobID, tend.Sub(tstart), responseFile)
 
 	tstart = tend
 
 	// check whether support remote execute
 	scandata, err := scanArgs(args)
 	if err != nil {
-		blog.Debugf("cl: try pump not support, scan args %v: %v", args, err)
+		blog.Debugf("cl(%s): try pump not support, scan args %v: %v", cl.jobID, args, err)
 		return nil, err, ErrorNotSupportRemote
 	}
 	cl.logfilesarif = scandata.logfilesarif
@@ -702,7 +707,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			cl.sourcedependfile = sourcedependfile
 		} else {
 			// TODO : 我们可以主动加上 /showIncludes 参数得到依赖列表，生成一个临时的 cl.sourcedependfile 文件
-			blog.Infof("cl: trypump not found depend file, try append it")
+			blog.Infof("cl(%s): trypump not found depend file, try append it", cl.jobID)
 			if cl.forceDepend() != nil {
 				return nil, ErrorNoDependFile, nil
 			}
@@ -712,7 +717,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	cl.needcopypumpheadfile = true
 
 	tend = time.Now().Local()
-	blog.Debugf("cl: trypump time record: %s for scanArgs for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cl(%s): trypump time record: %s for scanArgs for rsp file:%s", cl.jobID, tend.Sub(tstart), responseFile)
 	tstart = tend
 
 	cl.responseFile = responseFile
@@ -725,7 +730,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	includes, err := cl.Includes(responseFile, args, cl.sandbox.Dir, false)
 
 	tend = time.Now().Local()
-	blog.Debugf("cl: trypump time record: %s for Includes for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cl(%s): trypump time record: %s for Includes for rsp file:%s", cl.jobID, tend.Sub(tstart), responseFile)
 	tstart = tend
 
 	if err == nil {
@@ -749,7 +754,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 
 		oldlen := len(includes)
 		includes = dcFile.Uniq(includes)
-		blog.Infof("cc: parse command,got total %d uniq %d includes files", oldlen, len(includes))
+		blog.Infof("cl(%s): parse command,got total %d uniq %d includes files", cl.jobID, oldlen, len(includes))
 
 		inputFiles := []dcSDK.FileDesc{}
 		// priority := dcSDK.MaxFileDescPriority
@@ -759,7 +764,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			existed, fileSize, modifyTime, fileMode := f.Batch()
 			fpath := f.Path()
 			if !existed {
-				err := fmt.Errorf("input response file %s not existed", fpath)
+				err := fmt.Errorf("cl(%s): input response file %s not existed", cl.jobID, fpath)
 				blog.Errorf("%v", err)
 				return nil, err, nil
 			}
@@ -776,7 +781,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 			})
 			// priority++
 
-			blog.Debugf("cl: added include file:%s for object:%s", fpath, objectfile)
+			blog.Debugf("cl(%s): added include file:%s for object:%s", cl.jobID, fpath, objectfile)
 		}
 
 		results := []string{objectfile}
@@ -802,12 +807,12 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 				break
 			}
 		}
-		blog.Infof("cl: env which ready sent to remote:[%v]", envs)
+		blog.Infof("cl(%s): env which ready sent to remote:[%v]", cl.jobID, envs)
 
 		exeName := command[0]
 		params := command[1:]
-		blog.Infof("cl: parse command,server command:[%s %s],dir[%s]",
-			exeName, strings.Join(params, " "), cl.sandbox.Dir)
+		blog.Infof("cl(%s): parse command,server command:[%s %s],dir[%s]",
+			cl.jobID, exeName, strings.Join(params, " "), cl.sandbox.Dir)
 
 		cl.customSave = true
 		return &dcSDK.BKDistCommand{
@@ -828,7 +833,7 @@ func (cl *TaskCL) trypump(command []string) (*dcSDK.BKDistCommand, error, error)
 	}
 
 	tend = time.Now().Local()
-	blog.Debugf("cl: trypump time record: %s for return dcSDK.BKCommand for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cl(%s): trypump time record: %s for return dcSDK.BKCommand for rsp file:%s", cl.jobID, tend.Sub(tstart), responseFile)
 
 	return nil, err, nil
 }
@@ -850,7 +855,7 @@ func (cl *TaskCL) isPumpActionNumSatisfied() (bool, error) {
 		}
 	}
 
-	blog.Infof("cl: check pump action num with min:%d: current batch num:%d", minnum, curbatchsize)
+	blog.Infof("cl(%s): check pump action num with min:%d: current batch num:%d", cl.jobID, minnum, curbatchsize)
 
 	return int32(curbatchsize) > minnum, nil
 }
@@ -866,7 +871,7 @@ func (cl *TaskCL) workerSupportAbsPath() bool {
 }
 
 func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("cl: start pre execute for: %v", command)
+	blog.Infof("cl(%s): start pre execute for: %v", cl.jobID, command)
 
 	// debugRecordFileName(fmt.Sprintf("cl: start pre execute for: %v", command))
 
@@ -879,7 +884,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				req, err, notifyerr := cl.trypump(command)
 				if err != nil {
 					if notifyerr == ErrorNotSupportRemote {
-						blog.Warnf("cl: pre execute failed to try pump %v: %v", command, err)
+						blog.Warnf("cl(%s): pre execute failed to try pump %v: %v", cl.jobID, command, err)
 						return nil, dcType.BKDistCommonError{
 							Code:  dcType.UnknowCode,
 							Error: err,
@@ -896,7 +901,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	responseFile, args, showinclude, err := ensureCompiler(command, cl.sandbox.Dir)
 	if err != nil {
-		blog.Warnf("cl: pre execute ensure compiler failed %v: %v", args, err)
+		blog.Warnf("cl(%s): pre execute ensure compiler failed %v: %v", cl.jobID, args, err)
 		return nil, dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: err,
@@ -907,12 +912,12 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	if cl.sandbox != nil && cl.sandbox.Env != nil {
 		forcekeystr := cl.sandbox.Env.GetEnv(dcEnv.KeyExecutorForceLocalKeys)
 		if forcekeystr != "" {
-			blog.Infof("cl: got force local key string: %s", forcekeystr)
+			blog.Infof("cl(%s): got force local key string: %s", cl.jobID, forcekeystr)
 			forcekeylist := strings.Split(forcekeystr, dcEnv.CommonBKEnvSepKey)
 			if len(forcekeylist) > 0 {
 				cl.ForceLocalResponseFileKeys = append(cl.ForceLocalResponseFileKeys, forcekeylist...)
 				cl.ForceLocalCppFileKeys = append(cl.ForceLocalCppFileKeys, forcekeylist...)
-				blog.Infof("cl: ForceLocalResponseFileKeys: %v, ForceLocalCppFileKeys: %v",
+				blog.Infof("cl(%s): ForceLocalResponseFileKeys: %v, ForceLocalCppFileKeys: %v",
 					cl.ForceLocalResponseFileKeys, cl.ForceLocalCppFileKeys)
 			}
 		}
@@ -922,8 +927,8 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	if responseFile != "" {
 		for _, v := range cl.ForceLocalResponseFileKeys {
 			if v != "" && strings.Contains(responseFile, v) {
-				blog.Warnf("cl: pre execute found response %s is in force local list, do not deal now",
-					responseFile)
+				blog.Warnf("cl(%s): pre execute found response %s is in force local list, do not deal now",
+					cl.jobID, responseFile)
 				return nil, dcType.ErrorPreForceLocal
 			}
 		}
@@ -934,7 +939,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		if strings.HasSuffix(v, ".cpp") {
 			for _, v1 := range cl.ForceLocalCppFileKeys {
 				if v1 != "" && strings.Contains(v, v1) {
-					blog.Warnf("cl: pre execute found %s is in force local list, do not deal now", v)
+					blog.Warnf("cl(%s): pre execute found %s is in force local list, do not deal now", cl.jobID, v)
 					return nil, dcType.ErrorPreForceLocal
 				}
 			}
@@ -955,7 +960,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	if err = cl.preBuild(args); err != nil {
-		blog.Debugf("cl: pre execute pre-build %v: %v", args, err)
+		blog.Debugf("cl(%s): pre execute pre-build %v: %v", cl.jobID, args, err)
 		return nil, dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: err,
@@ -963,7 +968,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	tend := time.Now().Local()
-	blog.Debugf("cl: trypump time record: %s for preBuild for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cl(%s): trypump time record: %s for preBuild for rsp file:%s", cl.jobID, tend.Sub(tstart), responseFile)
 
 	// debugRecordFileName("FileInfo begin")
 
@@ -978,7 +983,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	} else {
 		existed, fileSize, modifyTime, fileMode = dcFile.Stat(cl.preprocessedFile).Batch()
 		if !existed {
-			blog.Errorf("cl: input pre file %s not existed", cl.preprocessedFile)
+			blog.Errorf("cl(%s): input pre file %s not existed", cl.jobID, cl.preprocessedFile)
 			return nil, dcType.BKDistCommonError{
 				Code:  dcType.UnknowCode,
 				Error: fmt.Errorf("%s not existed", cl.preprocessedFile),
@@ -1005,8 +1010,8 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	// debugRecordFileName(fmt.Sprintf("cl: success done pre execute for: %v", command))
 
-	blog.Infof("cl: success done pre execute for: %v", command)
-	blog.Infof("cl: going to execute compile: %v", cl.serverSideArgs)
+	blog.Infof("cl(%s): success done pre execute for: %v", cl.jobID, command)
+	blog.Infof("cl(%s): going to execute compile command: %v", cl.jobID, cl.serverSideArgs)
 
 	// to check whether need to compile with response file
 	exeName := cl.serverSideArgs[0]
@@ -1017,7 +1022,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		params = []string{fmt.Sprintf("@%s", rspfile)}
 		existed, fileSize, modifyTime, fileMode := dcFile.Stat(rspfile).Batch()
 		if !existed {
-			blog.Errorf("cl: input response file %s not existed", rspfile)
+			blog.Errorf("cl(%s): input response file %s not existed", cl.jobID, rspfile)
 			return nil, dcType.BKDistCommonError{
 				Code:  dcType.UnknowCode,
 				Error: fmt.Errorf("%s not existed", rspfile),
@@ -1056,7 +1061,7 @@ func (cl *TaskCL) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 }
 
 func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult, byclfilter bool) dcType.BKDistCommonError {
-	blog.Infof("cl: start post execute for: %v", cl.originArgs)
+	blog.Infof("cl(%s): start post execute for: %v", cl.jobID, cl.originArgs)
 
 	resultfilenum := 0
 	var dealError error
@@ -1073,17 +1078,17 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult, byclfilter bool) dcType.BKD
 	// resultfilenum := 0
 	// by tomtian 20201224,to ensure existed result file
 	if len(r.Results[0].ResultFiles) == 0 {
-		blog.Warnf("cl: not found result file for: %v", cl.originArgs)
+		blog.Warnf("cl(%s): not found result file for: %v", cl.jobID, cl.originArgs)
 		goto ERROREND
 	}
-	blog.Infof("cl: found %d result files for result[0]", len(r.Results[0].ResultFiles))
+	blog.Infof("cl(%s): found %d result files for result[0]", cl.jobID, len(r.Results[0].ResultFiles))
 
 	// resultfilenum := 0
 	if len(r.Results[0].ResultFiles) > 0 {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cl.sandbox.Dir); err != nil {
-					blog.Errorf("cl: failed to save file [%s]", f.FilePath)
+					blog.Errorf("cl(%s): failed to save file [%s]", cl.jobID, f.FilePath)
 					// return dcType.BKDistCommonError{
 					// 	Code:  dcType.UnknowCode,
 					// 	Error: err,
@@ -1098,14 +1103,14 @@ func (cl *TaskCL) postExecute(r *dcSDK.BKDistResult, byclfilter bool) dcType.BKD
 
 	// by tomtian 20201224,to ensure existed result file
 	if resultfilenum == 0 && cl.customSave {
-		blog.Warnf("cl: not found result file for: %v", cl.originArgs)
+		blog.Warnf("cl(%s): not found result file for: %v", cl.jobID, cl.originArgs)
 		goto ERROREND
 	}
 
-	blog.Infof("cl: output [%s] errormessage [%s]", r.Results[0].OutputMessage, r.Results[0].ErrorMessage)
+	blog.Infof("cl(%s): output [%s] errormessage [%s]", cl.jobID, r.Results[0].OutputMessage, r.Results[0].ErrorMessage)
 
 	if r.Results[0].RetCode == 0 {
-		blog.Infof("cl: success done post execute for: %v", cl.originArgs)
+		blog.Infof("cl(%s): success done post execute for: %v", cl.jobID, cl.originArgs)
 		if cl.showinclude {
 			// if !dcPump.SupportPump(cl.sandbox.Env) {
 			if cl.preprocessedErrorBuf != "" {
@@ -1144,7 +1149,7 @@ ERROREND:
 	}
 
 	if r == nil || len(r.Results) == 0 {
-		blog.Warnf("cl: parameter is invalid")
+		blog.Warnf("cl(%s): parameter is invalid", cl.jobID)
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: fmt.Errorf("parameter is invalid"),
@@ -1163,23 +1168,24 @@ ERROREND:
 		// make the tmp file for storing the stderr from server compiler.
 		stderrFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cl.sandbox), "cl_server_stderr", ".txt")
 		if err != nil {
-			blog.Warnf("cl: make tmp file for stderr from server failed: %v", err)
+			blog.Warnf("cl(%s): make tmp file for stderr from server failed: %v", cl.jobID, err)
 		} else {
 			if f, err := os.OpenFile(stderrFile, os.O_RDWR, 0644); err == nil {
 				_, _ = f.Write(r.Results[0].ErrorMessage)
 				_ = f.Close()
-				blog.Debugf("cl: save error message to %s for: %s", stderrFile, cl.originArgs)
+				blog.Debugf("cl(%s): save error message to %s for: %s", cl.jobID, stderrFile, cl.originArgs)
 			}
 		}
 	}
 
 	if cl.pumpremote {
-		blog.Infof("cl: ready remove pump head file: %s after failed pump remote, generate it next time",
-			cl.pumpHeadFile)
+		blog.Infof("cl(%s): ready remove pump head file: %s after failed pump remote, generate it next time",
+			cl.jobID, cl.pumpHeadFile)
 		os.Remove(cl.pumpHeadFile)
 	}
 
-	blog.Warnf("cl: failed to remote execute, retcode %d, error message:%s, output message:%s",
+	blog.Warnf("cl(%s): failed to remote execute, retcode %d, error message:%s, output message:%s",
+		cl.jobID,
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
@@ -1209,7 +1215,7 @@ func (cl *TaskCL) saveTemp() bool {
 }
 
 func (cl *TaskCL) preBuild(args []string) error {
-	blog.Debugf("cl: pre-build begin got args: %v", args)
+	blog.Debugf("cl(%s): pre-build begin got args: %v", cl.jobID, args)
 
 	var err error
 	cl.expandArgs = args
@@ -1243,7 +1249,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 
 	// do the pre-process, store result in the file.
 	if cl.preprocessedFile, cl.preprocessedBuffer, err = cl.doPreProcess(finalArgs, cl.inputFile); err != nil {
-		blog.Errorf("cl: pre-build error, do pre-process %v: %v", finalArgs, err)
+		blog.Errorf("cl(%s): pre-build error, do pre-process %v: %v", cl.jobID, finalArgs, err)
 		return err
 	}
 
@@ -1298,7 +1304,7 @@ func (cl *TaskCL) preBuild(args []string) error {
 		}
 	}
 
-	blog.Infof("cl: pre-build success for enter args: %v", args)
+	blog.Infof("cl(%s): pre-build success for enter args: %v", cl.jobID, args)
 	return nil
 }
 
@@ -1309,7 +1315,7 @@ func (cl *TaskCL) addTmpFile(filename string) {
 func (cl *TaskCL) cleanTmpFile() {
 	for _, filename := range cl.tmpFileList {
 		if err := os.Remove(filename); err != nil {
-			blog.Debugf("cl: clean tmp file %s failed: %v", filename, err)
+			blog.Debugf("cl(%s): clean tmp file %s failed: %v", cl.jobID, filename, err)
 		}
 	}
 }
@@ -1332,7 +1338,7 @@ func formatArg(arg string) string {
 // use many cycles, with running the preprocessor.
 func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte, error) {
 	if isPreprocessedFile(inputFile) {
-		blog.Infof("cl: input \"%s\" is already preprocessed", inputFile)
+		blog.Infof("cl(%s): input \"%s\" is already preprocessed", cl.jobID, inputFile)
 
 		// input file already preprocessed
 		return inputFile, nil, nil
@@ -1342,7 +1348,7 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 	savetomemroy := false
 	if cl.sandbox.Env.IsSet(dcEnv.KeyExecutorWriteMemory) {
 		savetomemroy = true
-		blog.Infof("cl: ready save processed file to memory")
+		blog.Infof("cl(%s): ready save processed file to memory", cl.jobID)
 	}
 
 	outputExt := getPreprocessedExt(inputFile)
@@ -1351,7 +1357,7 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 	if !savetomemroy {
 		outputFile, err = makeTmpFile(commonUtil.GetHandlerTmpDir(cl.sandbox), "cl", outputExt)
 		if err != nil {
-			blog.Errorf("cl: do pre-process get output file failed: %v", err)
+			blog.Errorf("cl(%s): do pre-process get output file failed: %v", cl.jobID, err)
 			return "", nil, err
 		}
 		cl.addTmpFile(outputFile)
@@ -1361,7 +1367,7 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 
 	newArgs, err := setActionOptionE(stripDashO(args))
 	if err != nil {
-		blog.Warnf("cl: set action option /E : %v", err)
+		blog.Warnf("cl(%s): set action option /E : %v", cl.jobID, err)
 		return "", nil, err
 	}
 
@@ -1380,12 +1386,12 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 	flag, rspfile, err := cl.needSaveResponseFile(newArgs)
 	if flag && err == nil {
 		rspargs := []string{newArgs[0], fmt.Sprintf("@%s", rspfile)}
-		blog.Infof("cl: going to execute pre-process: %s", strings.Join(rspargs, " "))
+		blog.Infof("cl(%s): going to execute pre-process command: %s", cl.jobID, strings.Join(rspargs, " "))
 		execName = rspargs[0]
 		execArgs = rspargs[1:]
 		cl.addTmpFile(rspfile)
 	} else {
-		blog.Infof("cl: going to execute pre-process: %s", strings.Join(newArgs, " "))
+		blog.Infof("cl(%s): going to execute pre-process command: %s", cl.jobID, strings.Join(newArgs, " "))
 		execName = newArgs[0]
 		execArgs = newArgs[1:]
 	}
@@ -1396,7 +1402,7 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 	if !savetomemroy {
 		output, err := os.OpenFile(outputFile, os.O_WRONLY, 0666)
 		if err != nil {
-			blog.Errorf("cl: failed to open output file \"%s\" when pre-processing: %v", outputFile, err)
+			blog.Errorf("cl(%s): failed to open output file \"%s\" when pre-processing: %v", cl.jobID, outputFile, err)
 			return "", nil, err
 		}
 		defer func() {
@@ -1412,11 +1418,11 @@ func (cl *TaskCL) doPreProcess(args []string, inputFile string) (string, []byte,
 	sandbox.Stderr = &errBuf
 
 	if _, err = sandbox.ExecCommand(execName, execArgs...); err != nil {
-		blog.Warnf("cl: failed to do pre-process %s: %v, %s",
-			strings.Join(newArgs, " "), err, errBuf.String())
+		blog.Warnf("cl(%s): failed to do pre-process %s: %v, %s",
+			cl.jobID, strings.Join(newArgs, " "), err, errBuf.String())
 		return "", nil, err
 	}
-	blog.Infof("cl: success to execute pre-process and get %s: %s", outputFile, strings.Join(newArgs, " "))
+	blog.Infof("cl(%s): success to execute pre-process and get %s", cl.jobID, outputFile)
 
 	// if cl.showinclude || cl.forcedepend {
 	cl.preprocessedErrorBuf = errBuf.String()
@@ -1479,12 +1485,12 @@ func (cl *TaskCL) needSaveResponseFile(args []string) (bool, string, error) {
 			if len(fullArgs) >= MaxWindowsCommandLength {
 				rspFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cl.sandbox), "cl", ".response")
 				if err != nil {
-					return false, "", fmt.Errorf("cl: cmd too long and failed to create rsp file")
+					return false, "", fmt.Errorf("cl(%s): cmd too long and failed to create rsp file", cl.jobID)
 				}
 
 				err = ioutil.WriteFile(rspFile, []byte(fullArgs), os.ModePerm)
 				if err != nil {
-					blog.Errorf("cl: failed to write data to file[%s], error:%v", rspFile, err)
+					blog.Errorf("cl(%s): failed to write data to file[%s], error:%v", cl.jobID, rspFile, err)
 					return false, "", err
 				}
 
@@ -1498,7 +1504,7 @@ func (cl *TaskCL) needSaveResponseFile(args []string) (bool, string, error) {
 
 // copied from clfilter handle
 func (cl *TaskCL) parseOutput(s string) (string, error) {
-	blog.Debugf("cl: start parse output: %s", s)
+	blog.Debugf("cl(%s): start parse output: %s", cl.jobID, s)
 
 	output := make([]string, 0, 0)
 	includes := make([]string, 0, 0)
@@ -1525,7 +1531,7 @@ func (cl *TaskCL) parseOutput(s string) (string, error) {
 			if existed {
 				includes = append(includes, includefile)
 			} else {
-				blog.Infof("cl: includefile [%s] not existed", includefile)
+				blog.Infof("cl(%s): includefile [%s] not existed", cl.jobID, includefile)
 				output = append(output, line)
 			}
 		} else if len(columns) == 4 {
@@ -1535,7 +1541,7 @@ func (cl *TaskCL) parseOutput(s string) (string, error) {
 			if existed {
 				includes = append(includes, includefile)
 			} else {
-				blog.Infof("cl: includefile [%s] not existed", includefile)
+				blog.Infof("cl(%s): includefile [%s] not existed", cl.jobID, includefile)
 				output = append(output, line)
 			}
 		} else {
@@ -1546,20 +1552,20 @@ func (cl *TaskCL) parseOutput(s string) (string, error) {
 			break
 		}
 	}
-	blog.Debugf("cl: got output: [%v], includes:[%v]", output, includes)
+	blog.Debugf("cl(%s): got output: [%v], includes:[%v]", cl.jobID, output, includes)
 
 	// save includes to cl.sourcedependfile
 	if len(includes) > 0 {
 		f, err := os.Create(cl.sourcedependfile)
 		if err != nil {
-			blog.Errorf("cl: create file %s error: [%s]", cl.sourcedependfile, err.Error())
+			blog.Errorf("cl(%s): create file %s error: [%s]", cl.jobID, cl.sourcedependfile, err.Error())
 		} else {
 			defer func() {
 				_ = f.Close()
 			}()
 			_, err := f.Write([]byte(strings.Join(includes, "\r\n")))
 			if err != nil {
-				blog.Errorf("cl: save depend file [%s] error: [%s]", cl.sourcedependfile, err.Error())
+				blog.Errorf("cl(%s): save depend file [%s] error: [%s]", cl.jobID, cl.sourcedependfile, err.Error())
 				return strings.Join(output, "\n"), err
 			}
 		}
@@ -1589,11 +1595,11 @@ func (cl *TaskCL) hasResultIndex() bool {
 
 func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	if cl.preprocessedFile == "" {
-		blog.Infof("cl: cl.preprocessedFile is null , no need to get result cache key")
+		blog.Infof("cl(%s): cl.preprocessedFile is null , no need to get result cache key", cl.jobID)
 		return ""
 	}
 	if !dcFile.Stat(cl.preprocessedFile).Exist() {
-		blog.Warnf("cl: cl.preprocessedFile %s not existed when get result cache key", cl.preprocessedFile)
+		blog.Warnf("cl(%s): cl.preprocessedFile %s not existed when get result cache key", cl.jobID, cl.preprocessedFile)
 		return ""
 	}
 
@@ -1603,7 +1609,7 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	// cc_mtime cc_name from compile tool
 	cchash, err := dcUtil.HashFile(command[0])
 	if err != nil {
-		blog.Warnf("cl: hash file %s with error: %v", command[0], err)
+		blog.Warnf("cl(%s): hash file %s with error: %v", cl.jobID, command[0], err)
 		return ""
 	}
 
@@ -1617,7 +1623,7 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	// cpp content from cl.preprocessedFile
 	cpphash, err := dcUtil.HashFile(cl.preprocessedFile)
 	if err != nil {
-		blog.Warnf("cl: hash file %s with error: %v", cl.preprocessedFile, err)
+		blog.Warnf("cl(%s): hash file %s with error: %v", cl.jobID, cl.preprocessedFile, err)
 		return ""
 	}
 
@@ -1627,8 +1633,8 @@ func (cl *TaskCL) GetResultCacheKey(command []string) string {
 	fullstring := fmt.Sprintf("%s_%x_%x_%x_%x", ext, cchash, arghash, cpphash, cppstderrhash)
 	fullstringhash := xxhash.Sum64([]byte(fullstring))
 
-	blog.Infof("cl: got hash key %x for string[%s] cmd:[%s]",
-		fullstringhash, fullstring, strings.Join(command, " "))
+	blog.Infof("cl(%s): got hash key %x for string[%s] cmd:[%s]",
+		cl.jobID, fullstringhash, fullstring, strings.Join(command, " "))
 
 	return fmt.Sprintf("%x", fullstringhash)
 }
