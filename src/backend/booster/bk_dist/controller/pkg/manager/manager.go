@@ -374,8 +374,8 @@ func (m *mgr) UnlockLocalSlots(workID string, usage dcSDK.JobUsage, weight int32
 // ExecuteLocalTask do task for work
 func (m *mgr) ExecuteLocalTask(
 	workID string, req *types.LocalTaskExecuteRequest) (*types.LocalTaskExecuteResult, error) {
-	blog.Infof("mgr: try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
-		workID, req.Pid, req.Environments, req.Commands)
+	blog.Infof("mgr(%s): try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
+		req.Stats.ID, workID, req.Pid, req.Environments, req.Commands)
 
 	var work *types.Work
 	var err error
@@ -383,7 +383,7 @@ func (m *mgr) ExecuteLocalTask(
 		if m.conf.UseDefaultWorker {
 			work, err = m.worksPool.getFirstBazelNoLauncherWork()
 			if err != nil {
-				blog.Errorf("mgr: get first work failed: %v", err)
+				blog.Errorf("mgr(%s): get first work failed: %v", req.Stats.ID, err)
 				return nil, err
 			}
 		} else {
@@ -392,14 +392,14 @@ func (m *mgr) ExecuteLocalTask(
 	} else {
 		work, err = m.worksPool.getWork(workID)
 		if err != nil {
-			blog.Errorf("mgr: get work(%s) failed: %v", workID, err)
+			blog.Errorf("mgr(%s): get work(%s) failed: %v", req.Stats.ID, workID, err)
 			return nil, err
 		}
 	}
 
 	if !work.Basic().Info().IsWorking() {
-		blog.Errorf("mgr: execute local task for work(%s) from pid(%d) failed: %v",
-			workID, req.Pid, types.ErrWorkIsNotWorking)
+		blog.Errorf("mgr(%s): execute local task for work(%s) from pid(%d) failed: %v",
+			req.Stats.ID, workID, req.Pid, types.ErrWorkIsNotWorking)
 		return nil, types.ErrWorkIsNotWorking
 	}
 
@@ -426,8 +426,8 @@ func (m *mgr) ExecuteLocalTask(
 	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() string {
 		resExecMode = m.selectResourceExecutionMode(work)
 		if resExecMode != types.WaitResourceMode {
-			blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got mode %v",
-				workID, req.Pid, resExecMode)
+			blog.Infof("mgr(%s): check run with local resource for work(%s) from pid(%d) got mode %v",
+				req.Stats.ID, workID, req.Pid, resExecMode)
 		}
 		return resExecMode
 	})
@@ -441,12 +441,12 @@ func (m *mgr) ExecuteLocalTask(
 				Message:  "unknown reason",
 			}}
 		}
-		blog.Errorf("mgr: execute local task for work(%s) from pid(%d) failed: %v", workID, req.Pid, err)
+		blog.Errorf("mgr(%s): execute local task for work(%s) from pid(%d) failed: %v", req.Stats.ID, workID, req.Pid, err)
 		return result, nil
 	}
 
-	blog.Infof("mgr: success to execute local task for work(%s) from pid(%d) and get exit code(%d)",
-		workID, req.Pid, result.Result.ExitCode)
+	blog.Infof("mgr(%s): success to execute local task for work(%s) from pid(%d) and get exit code(%d)",
+		req.Stats.ID, workID, req.Pid, result.Result.ExitCode)
 	return result, nil
 }
 
