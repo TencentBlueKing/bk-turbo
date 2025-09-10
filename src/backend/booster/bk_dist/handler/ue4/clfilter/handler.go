@@ -244,13 +244,11 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcTy
 	if cf.innertype == CompilerCL {
 		realhandle, ok := cf.clhandle.(*cl.TaskCL)
 		if ok {
-			realhandle.SetJobID(cf.jobID)
 			realhandle.SetDepend(cf.dependentFile)
 		}
 	} else if cf.innertype == CompilerClangCl {
 		realhandle, ok := cf.clhandle.(*cc.TaskCC)
 		if ok {
-			realhandle.SetJobID(cf.jobID)
 			realhandle.SetDepend(cf.dependentFile)
 		}
 	}
