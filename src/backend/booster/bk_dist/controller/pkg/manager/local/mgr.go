@@ -253,8 +253,8 @@ func (m *Mgr) GetPumpCache() (*analyser.FileCache, *analyser.RootCache) {
 
 func checkHttpConn(req *types.LocalTaskExecuteRequest) (*types.LocalTaskExecuteResult, error) {
 	if !types.IsHttpConnStatusOk(req.HttpConnCache, req.HttpConnKey) {
-		blog.Errorf("local: httpconncache exit execute pid(%d) command:[%s] for http connection[%s] error",
-			req.Pid, strings.Join(req.Commands, " "), req.HttpConnKey)
+		blog.Errorf("local(%s): httpconncache exit execute pid(%d) command:[%s] for http connection[%s] error",
+			req.Stats.ID, req.Pid, strings.Join(req.Commands, " "), req.HttpConnKey)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: -1,
@@ -275,8 +275,8 @@ func (m *Mgr) ExecuteTask(
 	globalWork *types.Work,
 	canUseLocalIdleResource bool,
 	f types.CallbackCheckResource) (*types.LocalTaskExecuteResult, error) {
-	blog.Infof("local: try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
-		strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
+	blog.Infof("local(%s): try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
+		req.Stats.ID, strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
 
 	e, err := newExecutor(m,
 		req,
@@ -284,8 +284,8 @@ func (m *Mgr) ExecuteTask(
 		m.work.Resource().SupportAbsPath(),
 		m.resultdata)
 	if err != nil {
-		blog.Errorf("local: try to execute task for work(%s) from pid(%d) get executor failed: %v",
-			m.work.ID(), req.Pid, err)
+		blog.Errorf("local(%s): try to execute task for work(%s) from pid(%d) get executor failed: %v",
+			req.Stats.ID, m.work.ID(), req.Pid, err)
 		return nil, err
 	}
 
@@ -296,18 +296,20 @@ func (m *Mgr) ExecuteTask(
 	if err != nil {
 		return ret, err
 	}
-
+	if req.Stats != nil && req.Stats.ID != "" {
+		e.handler.SetJobID(req.Stats.ID)
+	}
 	// 该work被置为degraded || 该executor被置为degraded, 则直接走本地执行
 	if m.work.Basic().Settings().Degraded || e.degrade() {
-		blog.Warnf("local: execute task for work(%s) from pid(%d) degrade to local with degraded",
-			m.work.ID(), req.Pid)
+		blog.Warnf("local(%s): execute task for work(%s) from pid(%d) degrade to local with degraded",
+			req.Stats.ID, m.work.ID(), req.Pid)
 		return e.executeLocalTask(), nil
 	}
 
 	// 历史记录显示该任务多次远程失败，则直接走本地执行
 	if e.retryAndSuccessTooManyAndDegradeDirectly() {
-		blog.Warnf("local: execute task for work(%s) from pid(%d) degrade to local for too many failed",
-			m.work.ID(), req.Pid)
+		blog.Warnf("local(%s): execute task for work(%s) from pid(%d) degrade to local for too many failed",
+			req.Stats.ID, m.work.ID(), req.Pid)
 		return e.executeLocalTask(), nil
 	}
 	resMode := f()
@@ -315,8 +317,8 @@ func (m *Mgr) ExecuteTask(
 	// 该任务已确定用本地资源运行，则直接走本地执行
 	if canUseLocalIdleResource {
 		if e.canExecuteWithLocalIdleResource() && resMode == types.LocalResourceMode {
-			blog.Infof("local: execute task [%s] for work(%s) from pid(%d) degrade to local with local idle resource",
-				req.Commands[0], m.work.ID(), req.Pid)
+			blog.Infof("local(%s): execute task [%s] for work(%s) from pid(%d) degrade to local with local idle resource",
+				req.Stats.ID, req.Commands[0], m.work.ID(), req.Pid)
 			return e.executeLocalTask(), nil
 		}
 	}
@@ -336,21 +338,21 @@ func (m *Mgr) ExecuteTask(
 			if e.needRemoteResource() {
 				_, err := m.work.Resource().Apply(nil, false)
 				if err != nil {
-					blog.Warnf("local: execute task for work(%s) from pid(%d) failed to apply resource with err:%v",
-						m.work.ID(), req.Pid, err)
+					blog.Warnf("local(%s): execute task for work(%s) from pid(%d) failed to apply resource with err:%v",
+						req.Stats.ID, m.work.ID(), req.Pid, err)
 				}
 			}
 
 			if !req.NeedLocalExecute() {
-				blog.Infof("local: work(%s) from pid(%d) this cmd can't local run, wait again",
-					m.work.ID(), req.Pid)
+				blog.Infof("local(%s): work(%s) from pid(%d) this cmd can't local run, wait again",
+					req.Stats.ID, m.work.ID(), req.Pid)
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
 			// 尝试本地执行
-			blog.Infof("local: execute task for work(%s) from pid(%d) degrade to try local for no remote workers",
-				m.work.ID(), req.Pid)
+			blog.Infof("local(%s): execute task for work(%s) from pid(%d) degrade to try local for no remote workers",
+				req.Stats.ID, m.work.ID(), req.Pid)
 			ret := e.tryExecuteLocalTask()
 			if ret != nil {
 				return ret, nil
@@ -366,14 +368,14 @@ func (m *Mgr) ExecuteTask(
 	// TODO : check whether need more resource
 
 	for resMode == types.WaitResourceMode {
-		blog.Debugf("local: execute task for work(%s) from pid(%d) still wait for resource", m.work.ID(), req.Pid)
+		blog.Debugf("local(%s): execute task for work(%s) from pid(%d) still wait for resource", req.Stats.ID, m.work.ID(), req.Pid)
 		resMode = f()
 		switch resMode {
 		case types.LocalResourceMode:
-			blog.Infof("local: execute task for work(%s) from pid(%d) degrade to local", m.work.ID(), req.Pid)
+			blog.Infof("local(%s): execute task for work(%s) from pid(%d) degrade to local", req.Stats.ID, m.work.ID(), req.Pid)
 			return e.executeLocalTask(), nil
 		case types.RemoteResourceMode:
-			blog.Infof("local: execute task for work(%s) from pid(%d) try to execute with remote resource", m.work.ID(), req.Pid)
+			blog.Infof("local(%s): execute task for work(%s) from pid(%d) try to execute with remote resource", req.Stats.ID, m.work.ID(), req.Pid)
 			break
 		default:
 			time.Sleep(1 * time.Second)
@@ -398,7 +400,7 @@ func (m *Mgr) ExecuteTask(
 	if err != nil {
 		// m.work.Basic().Info().DecPrepared()
 		// m.work.Remote().DecRemoteJobs()
-		blog.Warnf("local: execute pre-task for work(%s) from pid(%d) : %v", m.work.ID(), req.Pid, err)
+		blog.Warnf("local(%s): execute pre-task for work(%s) from pid(%d): %v", req.Stats.ID, m.work.ID(), req.Pid, err)
 		return e.executeLocalTask(), nil
 	}
 
@@ -407,9 +409,9 @@ func (m *Mgr) ExecuteTask(
 	// 如果cache查询到了，则按预期的结果列表保存
 	cacheresult, fromlocal := e.getCacheResult(c)
 	if cacheresult != nil {
-		blog.Infof("local: success to execute task by query cache for work(%s)"+
+		blog.Infof("local(%s): success to execute task by query cache for work(%s)"+
 			" from pid(%d) in env(%v) dir(%s)",
-			m.work.ID(),
+			req.Stats.ID, m.work.ID(),
 			req.Pid, req.Environments, req.Dir)
 		req.Stats.TBSPreprocessHit = true
 		go e.putHitRecord(fromlocal)
@@ -438,35 +440,36 @@ func (m *Mgr) ExecuteTask(
 		req.Stats.RemoteTryTimes = i + 1
 		r, err = m.work.Remote().ExecuteTask(remoteReq)
 		if err != nil {
-			blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed: %v",
-				m.work.ID(),
+			blog.Warnf("local(%s): execute remote-task for work(%s) from pid(%d) (%d)try failed: %v",
+				req.Stats.ID, m.work.ID(),
 				req.Pid,
 				i,
 				err)
 			req.Stats.RemoteErrorMessage = err.Error()
 			if !needRetry(req) {
-				blog.Warnf("local: execute remote-task for work(%s) from pid(%d) (%d)try failed with error: %v",
-					m.work.ID(), req.Pid, i, err)
+				blog.Warnf("local(%s): execute remote-task for work(%s) from pid(%d) (%d)try failed with error: %v",
+					req.Stats.ID, m.work.ID(), req.Pid, i, err)
 				break
 			}
 			// 远程任务失败后，将文件大小和压缩大小都置为初始值，方便其他worker重试
 			for i, c := range remoteReq.Req.Commands {
 				for j, f := range c.Inputfiles {
 					if f.CompressedSize < 0 && f.InitCompressedSize >= 0 {
-						blog.Infof("local: reset compressed size for file(%s) from work(%s) for pid(%d) from %d to %d",
-							f.FilePath, m.work.ID(), req.Pid, remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize, remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize)
+						blog.Infof("local(%s): reset compressed size for file(%s) from work(%s) for pid(%d) from %d to %d",
+							req.Stats.ID, f.FilePath, m.work.ID(), req.Pid, remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize, remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize)
 						remoteReq.Req.Commands[i].Inputfiles[j].CompressedSize =
 							remoteReq.Req.Commands[i].Inputfiles[j].InitCompressedSize
 					}
 					if f.FileSize < 0 && f.InitFileSize >= 0 {
-						blog.Infof("local: reset file size for file(%s) from work(%s) for pid(%d) from %d to %d",
-							f.FilePath, m.work.ID(), req.Pid, remoteReq.Req.Commands[i].Inputfiles[j].FileSize, remoteReq.Req.Commands[i].Inputfiles[j].InitFileSize)
+						blog.Infof("local(%s): reset file size for file(%s) from work(%s) for pid(%d) from %d to %d",
+							req.Stats.ID, f.FilePath, m.work.ID(), req.Pid, remoteReq.Req.Commands[i].Inputfiles[j].FileSize, remoteReq.Req.Commands[i].Inputfiles[j].InitFileSize)
 						remoteReq.Req.Commands[i].Inputfiles[j].FileSize = remoteReq.Req.Commands[i].Inputfiles[j].InitFileSize
 					}
 				}
 			}
-			blog.Infof("local: retry remote-task from work(%s) for the(%d) time from pid(%d) "+
+			blog.Infof("local(%s): retry remote-task from work(%s) for the(%d) time from pid(%d)"+
 				"with error(%v),ban (%d) worker:(%s)",
+				req.Stats.ID,
 				m.work.ID(),
 				i+1,
 				req.Pid,
@@ -479,7 +482,7 @@ func (m *Mgr) ExecuteTask(
 	}
 
 	if e.isUbaCommand {
-		blog.Infof("local: return for ubaagent now")
+		blog.Infof("local(%s): return for ubaagent now", req.Stats.ID)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: 0,
@@ -499,9 +502,9 @@ func (m *Mgr) ExecuteTask(
 		}
 
 		if err == types.ErrSendFileFailed {
-			blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d)"+
+			blog.Infof("local(%s): retry remote-task failed from work(%s) for (%d) times from pid(%d)"+
 				" with send file error, retryOnRemoteFail now",
-				m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
+				req.Stats.ID, m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
 
 			lr, err := m.retryOnRemoteFail(req, globalWork, e)
 			if err == nil && lr != nil {
@@ -509,11 +512,11 @@ func (m *Mgr) ExecuteTask(
 			}
 		}
 
-		blog.Infof("local: retry remote-task failed from work(%s) for (%d) times from pid(%d), turn it local",
-			m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
+		blog.Infof("local(%s): retry remote-task failed from work(%s) for (%d) times from pid(%d), turn it local",
+			req.Stats.ID, m.work.ID(), req.Stats.RemoteTryTimes, req.Pid)
 
 		if !req.NeedLocalExecute() {
-			blog.Infof("local: command[%s] do not need local execute", strings.Join(req.Commands, " "))
+			blog.Infof("local(%s): command[%s] do not need local execute", req.Stats.ID, strings.Join(req.Commands, " "))
 			return nil, err
 		}
 
@@ -522,7 +525,7 @@ func (m *Mgr) ExecuteTask(
 
 	err = e.executePostTask(r.Result)
 	if err != nil {
-		blog.Warnf("local: execute post-task for work(%s) from pid(%d) failed: %v", m.work.ID(), req.Pid, err)
+		blog.Warnf("local(%s): execute post-task for work(%s) from pid(%d) failed: %v", req.Stats.ID, m.work.ID(), req.Pid, err)
 		req.Stats.RemoteErrorMessage = err.Error()
 
 		ret, err = checkHttpConn(req)
@@ -539,8 +542,8 @@ func (m *Mgr) ExecuteTask(
 			return e.executeLocalTask(), nil
 		}
 
-		blog.Warnf("local: executor skip local retry for work(%s) from pid(%d) "+
-			"and return remote err directly: %v", m.work.ID(), req.Pid, err)
+		blog.Warnf("local(%s): executor skip local retry for work(%s) from pid(%d)"+
+			"and return remote err directly: %v", req.Stats.ID, m.work.ID(), req.Pid, err)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: 1,
@@ -557,13 +560,13 @@ func (m *Mgr) ExecuteTask(
 	// 前期考虑直接用解压后的完整文件，减少压缩和解压的开销，但会增加存储开销
 	go func() {
 		err := e.putCacheResult(r.Result, req.Stats)
-		blog.Infof("local: put to cache with error:%v", err)
+		blog.Infof("local(%s): put to cache with error:%v", req.Stats.ID, err)
 	}()
 
 	req.Stats.Success = true
 	m.work.Basic().UpdateJobStats(req.Stats)
-	blog.Infof("local: success to execute task for work(%s) from pid(%d) in env(%v) dir(%s)",
-		m.work.ID(), req.Pid, req.Environments, req.Dir)
+	blog.Infof("local(%s): success to execute task for work(%s) from pid(%d) in env(%v) dir(%s)",
+		req.Stats.ID, m.work.ID(), req.Pid, req.Environments, req.Dir)
 	return &types.LocalTaskExecuteResult{
 		Result: &dcSDK.LocalTaskResult{
 			ExitCode: 0,
@@ -579,8 +582,8 @@ func (m *Mgr) retryOnRemoteFail(
 	req *types.LocalTaskExecuteRequest,
 	globalWork *types.Work,
 	e *executor) (*types.LocalTaskExecuteResult, error) {
-	blog.Infof("local: onRemoteFail with task(%s) for work(%s) from pid(%d) ",
-		strings.Join(req.Commands, " "), m.work.ID(), req.Pid)
+	blog.Infof("local(%s): onRemoteFail with task(%s) for work(%s) from pid(%d) ",
+		req.Stats.ID, strings.Join(req.Commands, " "), m.work.ID(), req.Pid)
 
 	m.work.Basic().Info().IncPrepared()
 	m.work.Remote().IncRemoteJobs()
@@ -603,18 +606,20 @@ func (m *Mgr) retryOnRemoteFail(
 		m.work.Remote().DecRemoteJobs()
 
 		if err != nil {
-			blog.Warnf("local: failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)",
+			blog.Warnf("local(%s): failed to remote in onRemoteFail from work(%s) from pid(%d) with error(%v)",
+				req.Stats.ID,
 				m.work.ID(),
 				req.Pid,
 				err)
 			return nil, err
 		}
 
-		blog.Infof("local: succeed to remote in onRemoteFail from work(%s) from pid(%d)", m.work.ID(), req.Pid)
+		blog.Infof("local(%s): succeed to remote in onRemoteFail from work(%s) from pid(%d) ", req.Stats.ID, m.work.ID(), req.Pid)
 		// 重新post环节
 		err = e.executePostTask(r.Result)
 		if err != nil {
-			blog.Warnf("local: execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v",
+			blog.Warnf("local(%s): execute post-task in onRemoteFail for work(%s) from pid(%d) failed: %v",
+				req.Stats.ID,
 				m.work.ID(),
 				req.Pid,
 				err)
@@ -623,8 +628,8 @@ func (m *Mgr) retryOnRemoteFail(
 
 		req.Stats.Success = true
 		m.work.Basic().UpdateJobStats(req.Stats)
-		blog.Infof("local: success to execute post task in onRemoteFail for work(%s) from pid(%d) in env(%v) dir(%s)",
-			m.work.ID(), req.Pid, req.Environments, req.Dir)
+		blog.Infof("local(%s): success to execute post task in onRemoteFail for work(%s) from pid(%d) in env(%v) dir(%s)",
+			req.Stats.ID, m.work.ID(), req.Pid, req.Environments, req.Dir)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: 0,

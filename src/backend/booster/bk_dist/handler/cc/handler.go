@@ -50,9 +50,9 @@ var (
 
 // TaskCC 定义了c/c++编译的描述处理对象
 type TaskCC struct {
-	tag     string
-	sandbox *dcSyscall.Sandbox
-
+	tag          string
+	sandbox      *dcSyscall.Sandbox
+	jobID        string
 	ccacheEnable bool
 	ccacheStats  types.Ccache
 
@@ -136,6 +136,11 @@ func (cc *TaskCC) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	cc.sandbox = sandbox
 }
 
+// SetJobID set jobID to task-cc
+func (cc *TaskCC) SetJobID(jobID string) {
+	cc.jobID = jobID
+}
+
 func (cc *TaskCC) CanExecuteWithLocalIdleResource(command []string) bool {
 	return true
 }
@@ -202,10 +207,10 @@ func (cc *TaskCC) NeedRetryOnRemoteFail(command []string) bool {
 
 // OnRemoteFail give chance to try other way if failed to remote execute
 func (cc *TaskCC) OnRemoteFail(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("cc: start OnRemoteFail for: %v", command)
+	blog.Infof("cc(%s): start OnRemoteFail for: %v", cc.jobID, command)
 
 	if cc.pumpremote {
-		blog.Infof("cc: set pumpremotefailed to true now")
+		blog.Infof("cc(%s): set pumpremotefailed to true now", cc.jobID)
 		cc.pumpremotefailed = true
 		cc.needcopypumpheadfile = true
 		cc.pumpremote = false
@@ -252,7 +257,7 @@ func (cc *TaskCC) analyzeIncludes(dependf string) ([]*dcFile.Info, error) {
 	sep := "\n"
 	lines := strings.Split(string(data), sep)
 	uniqlines := dcUtil.UniqArr(lines)
-	blog.Infof("cc: got %d uniq include file from file: %s", len(uniqlines), dependf)
+	blog.Infof("cc(%s): got %d uniq include file from file: %s", cc.jobID, len(uniqlines), dependf)
 
 	return dcFile.GetFileInfo(uniqlines, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 }
@@ -321,7 +326,7 @@ func checkFile(input string, workdir string) (bool, string) {
 func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) error {
 	data, err := os.ReadFile(cc.sourcedependfile)
 	if err != nil {
-		blog.Warnf("cc: copy pump head failed to read depned file: %s with err:%v", cc.sourcedependfile, err)
+		blog.Warnf("cc(%s): copy pump head failed to read depned file: %s with err:%v", cc.jobID, cc.sourcedependfile, err)
 		return err
 	}
 
@@ -351,7 +356,7 @@ func (cc *TaskCC) resolveDependFile(sep, workdir string, includes *[]string) err
 }
 
 func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
-	blog.Infof("cc: copy pump head file: %s to: %s", cc.sourcedependfile, cc.pumpHeadFile)
+	blog.Infof("cc(%s): copy pump head file: %s to: %s", cc.jobID, cc.sourcedependfile, cc.pumpHeadFile)
 
 	sep := "\n"
 	includes := []string{}
@@ -363,7 +368,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	// copy includeRspFiles
 	if len(cc.includeRspFiles) > 0 {
 		for _, l := range cc.includeRspFiles {
-			blog.Infof("cc: ready add rsp file: %s", l)
+			blog.Infof("cc(%s): ready add rsp file: %s", cc.jobID, l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -374,7 +379,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	// copy includePaths
 	if len(cc.includePaths) > 0 {
 		for _, l := range cc.includePaths {
-			blog.Infof("cc: ready add include path: %s", l)
+			blog.Infof("cc(%s): ready add include path: %s", cc.jobID, l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -385,7 +390,7 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	// copy include files
 	if len(cc.includeFiles) > 0 {
 		for _, l := range cc.includeFiles {
-			blog.Infof("cc: ready add include file: %s", l)
+			blog.Infof("cc(%s): ready add include file: %s", cc.jobID, l)
 			if !filepath.IsAbs(l) {
 				l, _ = filepath.Abs(filepath.Join(workdir, l))
 			}
@@ -393,10 +398,10 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 		}
 	}
 
-	blog.Infof("cc: copy pump head got %d uniq include file from file: %s", len(includes), cc.sourcedependfile)
+	blog.Infof("cc(%s): copy pump head got %d uniq include file from file: %s", cc.jobID, len(includes), cc.sourcedependfile)
 
 	if len(includes) == 0 {
-		blog.Warnf("cc: depend file: %s is invalid", cc.sourcedependfile)
+		blog.Warnf("cc(%s): depend file: %s is invalid", cc.jobID, cc.sourcedependfile)
 		return ErrorInvalidDependFile
 	}
 
@@ -420,10 +425,10 @@ func (cc *TaskCC) copyPumpHeadFile(workdir string) error {
 	newdata := strings.Join(uniqlines, sep)
 	err = os.WriteFile(cc.pumpHeadFile, []byte(newdata), os.ModePerm)
 	if err != nil {
-		blog.Warnf("cc: copy pump head failed to write file: %s with err:%v", cc.pumpHeadFile, err)
+		blog.Warnf("cc(%s): copy pump head failed to write file: %s with err:%v", cc.jobID, cc.pumpHeadFile, err)
 		return err
 	} else {
-		blog.Infof("cc: copy pump head succeed to write file: %s", cc.pumpHeadFile)
+		blog.Infof("cc(%s): copy pump head succeed to write file: %s", cc.jobID, cc.pumpHeadFile)
 	}
 
 	return nil
@@ -453,7 +458,7 @@ func (cc *TaskCC) Includes(responseFile string, args []string, workdir string, f
 
 	cc.pumpHeadFile, err = getPumpIncludeFile(pumpdir, "pump_heads", ".txt", args, workdir)
 	if err != nil {
-		blog.Errorf("cc: do includes get output file failed: %v", err)
+		blog.Errorf("cc(%s): do includes get output file failed: %v", cc.jobID, err)
 		return nil, err
 	}
 
@@ -508,10 +513,10 @@ func (cc *TaskCC) forceDepend(arg *ccArgs) error {
 	}
 
 	if cc.sourcedependfile != "" {
-		blog.Infof("cc: got depend file: %s", cc.sourcedependfile)
+		blog.Infof("cc(%s): got depend file: %s", cc.jobID, cc.sourcedependfile)
 		cc.forcedepend = true
 	} else {
-		blog.Warnf("cc: failed to get depend file with scan arg:%v", *arg)
+		blog.Warnf("cc(%s): failed to get depend file with scan arg:%v", cc.jobID, *arg)
 	}
 
 	return nil
@@ -526,13 +531,13 @@ func (cc *TaskCC) inPumpBlack(responseFile string, args []string) (bool, error) 
 		if len(blacklist) > 0 {
 			for _, v := range blacklist {
 				if v != "" && strings.Contains(responseFile, v) {
-					blog.Infof("cc: found response %s is in pump blacklist", responseFile)
+					blog.Infof("cc(%s): found response %s is in pump blacklist", cc.jobID, responseFile)
 					return true, nil
 				}
 
 				for _, v1 := range args {
 					if strings.HasSuffix(v1, ".cpp") && strings.Contains(v1, v) {
-						blog.Infof("cc: found arg %s is in pump blacklist", v1)
+						blog.Infof("cc(%s): found arg %s is in pump blacklist", cc.jobID, v1)
 						return true, nil
 					}
 				}
@@ -578,7 +583,7 @@ func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
 	}
 
 	if len(gchfiles) > 0 {
-		blog.Infof("cc: got pch files:%v", gchfiles)
+		blog.Infof("cc(%s): got pch files:%v", cc.jobID, gchfiles)
 
 		gchdependfiles := []string{}
 		// 再得到这些gch文件的依赖的其它gch文件
@@ -603,7 +608,7 @@ func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
 
 		// 得到最终的 文件信息列表
 		if len(gchdependfiles) > 0 {
-			blog.Infof("cc: got pch depends files:%v", gchdependfiles)
+			blog.Infof("cc(%s): got pch depends files:%v", cc.jobID, gchdependfiles)
 			fs, err := dcFile.GetFileInfo(gchdependfiles, false, false, dcPump.SupportPumpLstatByDir(cc.sandbox.Env))
 			if err != nil {
 				return nil, err
@@ -630,7 +635,7 @@ func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
 				}
 			}
 
-			blog.Infof("cc: got pch total %d depends files", len(fs))
+			blog.Infof("cc(%s): got pch total %d depends files", cc.jobID, len(fs))
 			return fs, nil
 		}
 	}
@@ -640,20 +645,20 @@ func (cc *TaskCC) getPchDepends(fs []*dcFile.Info) ([]*dcFile.Info, error) {
 
 // first error means real error when try pump, second is notify error
 func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, error, error) {
-	blog.Infof("cc: trypumpwithcache: %v", command)
+	blog.Infof("cc(%s): trypumpwithcache: %v", cc.jobID, command)
 
 	// TODO : !! ensureCompilerRaw changed the command slice, it maybe not we need !!
 	tstart := time.Now().Local()
 	responseFile, args, showinclude, sourcedependfile, objectfile, pchfile, err := ensureCompilerRaw(command, cc.sandbox.Dir)
 	if err != nil {
-		blog.Debugf("cc: pre execute ensure compiler failed %v: %v", args, err)
+		blog.Debugf("cc(%s): pre execute ensure compiler failed %v: %v", cc.jobID, args, err)
 		return nil, err, nil
 	} else {
-		blog.Infof("cc: after parse command, got responseFile:%s,sourcedepent:%s,objectfile:%s,pchfile:%s",
-			responseFile, sourcedependfile, objectfile, pchfile)
+		blog.Infof("cc(%s): after parse command, got responseFile:%s,sourcedepent:%s,objectfile:%s,pchfile:%s",
+			cc.jobID, responseFile, sourcedependfile, objectfile, pchfile)
 	}
 	tend := time.Now().Local()
-	blog.Debugf("cc: trypumpwithcache time record: %s for ensureCompilerRaw for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cc(%s): trypumpwithcache time record: %s for ensureCompilerRaw for rsp file:%s", cc.jobID, tend.Sub(tstart), responseFile)
 	tstart = tend
 
 	// 关注 gch 文件的依赖列表
@@ -661,12 +666,12 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 		cc.needresolvepchdepend = true
 		cc.sourcedependfile = sourcedependfile
 		cc.objectpchfile = objectfile
-		blog.Infof("cc: need resolve dpend for gch file:%s", objectfile)
+		blog.Infof("cc(%s): need resolve dpend for gch file:%s", cc.jobID, objectfile)
 	}
 
 	ccargs, err := scanArgs(args, cc.sandbox)
 	if err != nil {
-		blog.Debugf("cc: try pump not support, scan args %v: %v", args, err)
+		blog.Debugf("cc(%s): try pump not support, scan args %v: %v", cc.jobID, args, err)
 		return nil, err, ErrorNotSupportRemote
 	}
 
@@ -681,7 +686,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 	}
 
 	tend = time.Now().Local()
-	blog.Debugf("cc: trypumpwithcache time record: %s for scanArgs for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cc(%s): trypumpwithcache time record: %s for scanArgs for rsp file:%s", cc.jobID, tend.Sub(tstart), responseFile)
 	tstart = tend
 
 	if cc.sourcedependfile == "" {
@@ -689,7 +694,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 			cc.sourcedependfile = sourcedependfile
 		} else {
 			// 主动加上参数得到依赖列表，生成一个临时的 sourcedependfile 文件
-			blog.Infof("cc: trypump not found depend file, try append it")
+			blog.Infof("cc(%s): trypump not found depend file, try append it", cc.jobID)
 			if cc.forceDepend(ccargs) != nil {
 				return nil, ErrorNoDependFile, nil
 			}
@@ -712,7 +717,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 	}
 
 	tend = time.Now().Local()
-	blog.Debugf("cc: trypumpwithcache time record: %s for Includes for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cc(%s): trypumpwithcache time record: %s for Includes for rsp file:%s", cc.jobID, tend.Sub(tstart), responseFile)
 	tstart = tend
 
 	if err == nil {
@@ -736,7 +741,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 
 		oldlen := len(includes)
 		includes = dcFile.Uniq(includes)
-		blog.Infof("cc: parse command,got total %d uniq %d includes files", oldlen, len(includes))
+		blog.Infof("cc(%s): parse command,got total %d uniq %d includes files", cc.jobID, oldlen, len(includes))
 
 		inputFiles := []dcSDK.FileDesc{}
 		// priority := dcSDK.MaxFileDescPriority
@@ -746,7 +751,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 			fpath := f.Path()
 			if !existed {
 				err := fmt.Errorf("input file %s not existed", fpath)
-				blog.Errorf("cc: %v", err)
+				blog.Errorf("cc(%s): %v", cc.jobID, err)
 				return nil, err, nil
 			}
 			inputFiles = append(inputFiles, dcSDK.FileDesc{
@@ -764,7 +769,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 			// priority++
 			// blog.Infof("cc: added include file:%s with modify time %d", fpath, modifyTime)
 
-			blog.Debugf("cc: added include file:%s for object:%s", fpath, objectfile)
+			blog.Debugf("cc(%s): added include file:%s for object:%s", cc.jobID, fpath, objectfile)
 		}
 
 		results := []string{objectfile}
@@ -781,12 +786,12 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 				break
 			}
 		}
-		blog.Infof("cc: env which ready sent to remote:[%v]", envs)
+		blog.Infof("cc(%s): env which ready sent to remote:[%v]", cc.jobID, envs)
 
 		exeName := command[0]
 		params := command[1:]
-		blog.Infof("cc: parse command,server command:[%s %s],dir[%s]",
-			exeName, strings.Join(params, " "), cc.sandbox.Dir)
+		blog.Infof("cc(%s): parse command,server command:[%s %s],dir[%s]",
+			cc.jobID, exeName, strings.Join(params, " "), cc.sandbox.Dir)
 		return &dcSDK.BKDistCommand{
 			Commands: []dcSDK.BKCommand{
 				{
@@ -805,7 +810,7 @@ func (cc *TaskCC) trypumpwithcache(command []string) (*dcSDK.BKDistCommand, erro
 	}
 
 	tend = time.Now().Local()
-	blog.Debugf("cc: trypumpwithcache time record: %s for return dcSDK.BKCommand for rsp file:%s", tend.Sub(tstart), responseFile)
+	blog.Debugf("cc(%s): trypumpwithcache time record: %s for return dcSDK.BKCommand for rsp file:%s", cc.jobID, tend.Sub(tstart), responseFile)
 
 	return nil, err, nil
 }
@@ -827,7 +832,7 @@ func (cc *TaskCC) isPumpActionNumSatisfied() (bool, error) {
 		}
 	}
 
-	blog.Infof("cc: check pump action num with min:%d: current batch num:%d", minnum, curbatchsize)
+	blog.Infof("cc(%s): check pump action num with min:%d: current batch num:%d", cc.jobID, minnum, curbatchsize)
 
 	return int32(curbatchsize) > minnum, nil
 }
@@ -843,7 +848,7 @@ func (cc *TaskCC) workerSupportAbsPath() bool {
 }
 
 func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("cc: [%s] start pre execute for: %v", cc.tag, command)
+	blog.Infof("cc(%s): [%s] start pre execute for: %v", cc.jobID, cc.tag, command)
 
 	cc.originArgs = command
 
@@ -854,7 +859,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			req, err, notifyerr := cc.trypumpwithcache(command)
 			if err != nil {
 				if notifyerr == ErrorNotSupportRemote {
-					blog.Warnf("cc: pre execute failed to try pump %v: %v", command, err)
+					blog.Warnf("cc(%s): pre execute failed to try pump %v: %v", cc.jobID, command, err)
 					return nil, dcType.BKDistCommonError{
 						Code:  dcType.UnknowCode,
 						Error: err,
@@ -862,7 +867,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				}
 			} else {
 				// for debug
-				blog.Debugf("cc: after try pump, req: %+v", *req)
+				blog.Debugf("cc(%s): after try pump, req: %+v", cc.jobID, *req)
 				cc.pumpremote = true
 				return req, dcType.ErrorNone
 			}
@@ -871,7 +876,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 
 	compilerEnsuredArgs, err := ensureCompiler(command)
 	if err != nil {
-		blog.Warnf("cc: [%s] pre execute ensure compiler %v: %v", cc.tag, command, err)
+		blog.Warnf("cc(%s): [%s] pre execute ensure compiler %v: %v", cc.jobID, cc.tag, command, err)
 		return nil, dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: err,
@@ -879,7 +884,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 	args, err := expandOptions(cc.sandbox, compilerEnsuredArgs)
 	if err != nil {
-		blog.Warnf("cc: [%s] pre execute expand options %v: %v", cc.tag, compilerEnsuredArgs, err)
+		blog.Warnf("cc(%s): [%s] pre execute expand options %v: %v", cc.jobID, cc.tag, compilerEnsuredArgs, err)
 		return nil, dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: err,
@@ -890,18 +895,18 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	// obtain force key set by booster
 	forcekeystr := cc.sandbox.Env.GetEnv(dcEnv.KeyExecutorForceLocalKeys)
 	if forcekeystr != "" {
-		blog.Infof("cc: [%s] got force local key string: %s", cc.tag, forcekeystr)
+		blog.Infof("cc(%s): [%s] got force local key string: %s", cc.jobID, cc.tag, forcekeystr)
 		forcekeylist := strings.Split(forcekeystr, dcEnv.CommonBKEnvSepKey)
 		if len(forcekeylist) > 0 {
 			cc.ForceLocalCppFileKeys = append(cc.ForceLocalCppFileKeys, forcekeylist...)
-			blog.Infof("cc: [%s] ForceLocalCppFileKeys: %v", cc.tag, cc.ForceLocalCppFileKeys)
+			blog.Infof("cc(%s): [%s] ForceLocalCppFileKeys: %v", cc.jobID, cc.tag, cc.ForceLocalCppFileKeys)
 		}
 	}
 
 	for _, v := range args {
 		for _, v1 := range cc.ForceLocalCppFileKeys {
 			if v1 != "" && strings.Contains(v, v1) {
-				blog.Warnf("cc: [%s] pre execute found %s is in force local list, do not deal now", cc.tag, v)
+				blog.Warnf("cc(%s): [%s] pre execute found %s is in force local list, do not deal now", cc.jobID, cc.tag, v)
 				// return nil, fmt.Errorf("arg %s is in force local cpp list", v)
 				return nil, dcType.ErrorPreForceLocal
 			}
@@ -926,7 +931,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	if err = cc.preBuild(args); err != nil {
-		blog.Warnf("cc: [%s] pre execute pre-build %v: %v", cc.tag, args, err)
+		blog.Warnf("cc(%s): [%s] pre execute pre-build %v: %v", cc.jobID, cc.tag, args, err)
 		return nil, dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: err,
@@ -947,7 +952,8 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 				if err == nil {
 					defer dst.Close()
 					_, err = io.Copy(dst, src)
-					blog.Infof("cc: [%s] depend copy %s to %s",
+					blog.Infof("cc(%s): [%s] depend copy %s to %s",
+						cc.jobID,
 						cc.tag,
 						cc.origindependfile,
 						cc.sourcedependfile)
@@ -955,7 +961,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			}
 		}
 	} else {
-		blog.Infof("cc: [%s] depend %s not exist", cc.tag, cc.origindependfile)
+		blog.Infof("cc(%s): [%s] depend %s not exist", cc.jobID, cc.tag, cc.origindependfile)
 	}
 
 	// generate the input files for pre-process file
@@ -963,14 +969,14 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 		existed, fileSize, modifyTime, fileMode := dcFile.Stat(cc.preprocessedFile).Batch()
 		if !existed {
 			err := fmt.Errorf("result file %s not existed", cc.preprocessedFile)
-			blog.Warnf("cc: [%s] %v", cc.tag, err)
+			blog.Warnf("cc(%s): [%s] %v", cc.jobID, cc.tag, err)
 			return nil, dcType.BKDistCommonError{
 				Code:  dcType.UnknowCode,
 				Error: fmt.Errorf("%s not existed", cc.preprocessedFile),
 			}
 		}
 
-		blog.Infof("cc: [%s] get preprocessedFile: %s, size:%d", cc.tag, cc.preprocessedFile, fileSize)
+		blog.Infof("cc(%s): [%s] get preprocessedFile: %s, size:%d", cc.jobID, cc.tag, cc.preprocessedFile, fileSize)
 		cc.sendFiles = append(cc.sendFiles, dcSDK.FileDesc{
 			FilePath:           cc.preprocessedFile,
 			Compresstype:       protocol.CompressLZ4,
@@ -988,14 +994,14 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	}
 
 	// debugRecordFileName(fmt.Sprintf("cc: success done pre execute for: %v", command))
-	blog.Infof("cc: [%s] success done pre execute and going to execute compile: %v", cc.tag, cc.serverSideArgs)
+	blog.Infof("cc(%s): [%s] success done pre execute and going to execute compile: %v", cc.jobID, cc.tag, cc.serverSideArgs)
 
 	for i, item := range cc.outputFile {
 		if !filepath.IsAbs(item) {
 			cc.outputFile[i] = filepath.Join(cc.sandbox.Dir, item)
 		}
 	}
-	blog.Infof("cc: [%s] expect result files: %v", cc.tag, cc.outputFile)
+	blog.Infof("cc(%s): [%s] expect result files: %v", cc.jobID, cc.tag, cc.outputFile)
 
 	// sync env of PATH to remote
 	envs := []string{}
@@ -1005,7 +1011,7 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 			break
 		}
 	}
-	blog.Infof("cc: [%s] env which ready sent to remote:[%v]", cc.tag, envs)
+	blog.Infof("cc(%s): [%s] env which ready sent to remote:[%v]", cc.jobID, cc.tag, envs)
 
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
@@ -1025,9 +1031,9 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 }
 
 func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
-	blog.Infof("cc: [%s] start post execute", cc.tag)
+	blog.Infof("cc(%s): [%s] start post execute", cc.jobID, cc.tag)
 	if r == nil || len(r.Results) == 0 {
-		blog.Warnf("cc: [%s] got empty result", cc.tag)
+		blog.Warnf("cc(%s): [%s] got empty result", cc.jobID, cc.tag)
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: fmt.Errorf("parameter is invalid"),
@@ -1037,17 +1043,17 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	resultfilenum := 0
 	// by tomtian 20201224,to ensure existed result file
 	if len(r.Results[0].ResultFiles) == 0 {
-		blog.Warnf("cc: [%s] not found result file for: %v", cc.tag, cc.originArgs)
+		blog.Warnf("cc(%s): [%s] not found result file for: %v", cc.jobID, cc.tag, cc.originArgs)
 		goto ERROREND
 	}
-	blog.Infof("cc: [%s] found %d result files for result[0]", cc.tag, len(r.Results[0].ResultFiles))
+	blog.Infof("cc(%s): [%s] found %d result files for result[0]", cc.jobID, cc.tag, len(r.Results[0].ResultFiles))
 
 	// resultfilenum := 0
 	if len(r.Results[0].ResultFiles) > 0 {
 		for _, f := range r.Results[0].ResultFiles {
 			if f.Buffer != nil {
 				if err := saveResultFile(&f, cc.sandbox.Dir); err != nil {
-					blog.Errorf("cc: [%s] failed to save file [%s]", cc.tag, f.FilePath)
+					blog.Errorf("cc(%s): [%s] failed to save file [%s]", cc.jobID, cc.tag, f.FilePath)
 					return dcType.BKDistCommonError{
 						Code:  dcType.UnknowCode,
 						Error: err,
@@ -1060,12 +1066,12 @@ func (cc *TaskCC) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 
 	// by tomtian 20201224,to ensure existed result file
 	if resultfilenum == 0 {
-		blog.Warnf("cc: [%s] not found result file for: %v", cc.tag, cc.originArgs)
+		blog.Warnf("cc(%s): [%s] not found result file for: %v", cc.jobID, cc.tag, cc.originArgs)
 		goto ERROREND
 	}
 
 	if r.Results[0].RetCode == 0 {
-		blog.Infof("cc: [%s] success done post execute", cc.tag)
+		blog.Infof("cc(%s): [%s] success done post execute", cc.jobID, cc.tag)
 		// set output to inputFile
 		// r.Results[0].OutputMessage = []byte(filepath.Base(cc.inputFile))
 		// if remote succeed with pump,do not need copy head file
@@ -1082,23 +1088,23 @@ ERROREND:
 		stderrFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox),
 			"cc", "server_stderr.txt")
 		if err != nil {
-			blog.Warnf("cc: [%s] make tmp file for stderr from server failed: %v", cc.tag, err)
+			blog.Warnf("cc(%s): [%s] make tmp file for stderr from server failed: %v", cc.jobID, cc.tag, err)
 		} else {
 			if f, err := os.OpenFile(stderrFile, os.O_RDWR, 0644); err == nil {
 				_, _ = f.Write(r.Results[0].ErrorMessage)
 				_ = f.Close()
-				blog.Debugf("cc: [%s] save error message to %s", cc.tag, stderrFile)
+				blog.Debugf("cc(%s): [%s] save error message to %s", cc.jobID, cc.tag, stderrFile)
 			}
 		}
 	}
 
 	if cc.pumpremote {
-		blog.Infof("cc: [%s] ready remove pump head file: %s after failed pump remote, generate it next time", cc.tag, cc.pumpHeadFile)
+		blog.Infof("cc(%s): [%s] ready remove pump head file: %s after failed pump remote, generate it next time", cc.jobID, cc.tag, cc.pumpHeadFile)
 		os.Remove(cc.pumpHeadFile)
 	}
 
-	blog.Warnf("cc: [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
-		cc.tag,
+	blog.Warnf("cc(%s): [%s] failed to remote execute, retcode %d, error message:%s, output message:%s",
+		cc.jobID, cc.tag,
 		r.Results[0].RetCode,
 		r.Results[0].ErrorMessage,
 		r.Results[0].OutputMessage)
@@ -1116,13 +1122,13 @@ func (cc *TaskCC) ensureOwner(fdl []string) {
 
 	u := cc.sandbox.User
 	if u.Username == "" {
-		blog.Warnf("cc: [%s] change file owner get sandbox user failed: user name empty", cc.tag)
+		blog.Warnf("cc(%s): [%s] change file owner get sandbox user failed: user name empty", cc.jobID, cc.tag)
 		return
 	}
 
 	uc, err := user.Current()
 	if err != nil {
-		blog.Warnf("cc: [%s] change file owner get current user failed: %v", cc.tag, err)
+		blog.Warnf("cc(%s): [%s] change file owner get current user failed: %v", cc.jobID, cc.tag, err)
 		return
 	}
 
@@ -1138,14 +1144,14 @@ func (cc *TaskCC) ensureOwner(fdl []string) {
 		}
 		f := cc.sandbox.GetAbsPath(fd)
 		if err := os.Chown(f, uid, gid); err != nil {
-			blog.Warnf("cc: [%s] change file owner(%s) failed: %v", cc.tag, f, err)
+			blog.Warnf("cc(%s): [%s] change file owner(%s) failed: %v", cc.jobID, cc.tag, f, err)
 		}
-		blog.Infof("cc: [%s] success to change file owner(%s) from %s to %s", cc.tag, f, uc.Username, u.Username)
+		blog.Infof("cc(%s): [%s] success to change file owner(%s) from %s to %s", cc.jobID, cc.tag, f, uc.Username, u.Username)
 	}
 }
 
 func (cc *TaskCC) resolvePchDepend(workdir string) error {
-	blog.Infof("cc: ready resolve pch depend file: %s", cc.sourcedependfile)
+	blog.Infof("cc(%s): ready resolve pch depend file: %s", cc.jobID, cc.sourcedependfile)
 
 	sep := "\n"
 	includes := []string{}
@@ -1171,7 +1177,7 @@ func (cc *TaskCC) resolvePchDepend(workdir string) error {
 				}
 
 				if newfile {
-					blog.Infof("cc: found pch depend %s->%s", cc.objectpchfile, v)
+					blog.Infof("cc(%s): found pch depend %s->%s", cc.jobID, cc.objectpchfile, v)
 					gchfile = append(gchfile, v)
 				}
 			}
@@ -1192,7 +1198,7 @@ func (cc *TaskCC) getPumpFileByPCHFullPath(f string) (string, error) {
 		return getPumpIncludeFile(pumpdir, "pch_depend", ".txt", args, cc.sandbox.Dir)
 	}
 
-	blog.Warnf("cc: got pch:%s depend file with err:%v", f, err)
+	blog.Warnf("cc(%s): got pch:%s depend file with err:%v", cc.jobID, f, err)
 	return "", err
 }
 
@@ -1213,7 +1219,7 @@ func (cc *TaskCC) finalExecute(args []string, sandbox *dcSyscall.Sandbox) {
 			var err error
 			cc.pumpHeadFile, err = cc.getPumpFileByPCHFullPath(cc.objectpchfile)
 			if err != nil {
-				blog.Warnf("cc: failed to get pump head file with pch file:%s err:%v", cc.objectpchfile, err)
+				blog.Warnf("cc(%s): failed to get pump head file with pch file:%s err:%v", cc.jobID, cc.objectpchfile, err)
 			} else {
 				cc.copyPumpHeadFile(cc.sandbox.Dir)
 			}
@@ -1258,14 +1264,14 @@ func (cc *TaskCC) getWorkID() string {
 func (cc *TaskCC) preBuild(args []string) error {
 	// debugRecordFileName(fmt.Sprintf("cc: preBuild in..."))
 
-	blog.Debugf("cc: [%s] pre-build begin got args: %v", cc.tag, args)
+	blog.Debugf("cc(%s): [%s] pre-build begin got args: %v", cc.jobID, cc.tag, args)
 
 	// debugRecordFileName(fmt.Sprintf("cc: pre-build ready expandPreprocessorOptions"))
 
 	var err error
 	// expand args to make the following process easier.
 	if cc.expandArgs, err = expandPreprocessorOptions(args); err != nil {
-		blog.Warnf("cc: [%s] pre-build expand pre-process options %v: %v", cc.tag, args, err)
+		blog.Warnf("cc(%s): [%s] pre-build expand pre-process options %v: %v", cc.jobID, cc.tag, args, err)
 		return err
 	}
 
@@ -1290,19 +1296,19 @@ func (cc *TaskCC) preBuild(args []string) error {
 		var targetArgsGeneric, targetArgsACT, targetArgsGRF []string
 
 		if targetArgsGeneric, err = rewriteGenericCompiler(targetArgs); err != nil {
-			blog.Warnf("cc: [%s] pre-build rewrite generic compiler %v: %v",
-				cc.tag, targetArgs, err)
+			blog.Warnf("cc(%s): [%s] pre-build rewrite generic compiler %v: %v",
+				cc.jobID, cc.tag, targetArgs, err)
 			return err
 		}
 
 		if targetArgsACT, err = addClangTarget(targetArgsGeneric); err != nil {
-			blog.Warnf("cc: [%s] pre-build add clang target %v: %v",
-				cc.tag, targetArgsGeneric, err)
+			blog.Warnf("cc(%s): [%s] pre-build add clang target %v: %v",
+				cc.jobID, cc.tag, targetArgsGeneric, err)
 			return err
 		}
 
 		if targetArgsGRF, err = gccRewriteFqn(targetArgsACT); err != nil {
-			blog.Warnf("cc: [%s] pre-build gcc rewrite fqn %v: %v", cc.tag, targetArgsACT, err)
+			blog.Warnf("cc(%s): [%s] pre-build gcc rewrite fqn %v: %v", cc.jobID, cc.tag, targetArgsACT, err)
 			return err
 		}
 
@@ -1317,7 +1323,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 	if checkFiles, ok, pumpErr := cc.tryPump(); !ok {
 		// do the pre-process, store result in the file.
 		if cc.preprocessedFile, cc.includeHeaders, err = cc.doPreProcess(finalArgs, cc.inputFile); err != nil {
-			blog.Warnf("cc: [%s] pre-build do pre-process %v: %v", cc.tag, finalArgs, err)
+			blog.Warnf("cc(%s): [%s] pre-build do pre-process %v: %v", cc.jobID, cc.tag, finalArgs, err)
 			return err
 		}
 
@@ -1343,7 +1349,7 @@ func (cc *TaskCC) preBuild(args []string) error {
 					version, err := strconv.Atoi(v[len(prefix):])
 					if err == nil && version > 14 {
 						serverSideArgs = append(serverSideArgs, "-Wno-register")
-						blog.Infof("cc: found %s,ready add [-Wno-register]", v)
+						blog.Infof("cc(%s): found %s,ready add [-Wno-register]", cc.jobID, v)
 					}
 				}
 				break
@@ -1381,21 +1387,21 @@ func (cc *TaskCC) preBuild(args []string) error {
 				}
 
 				if !found {
-					blog.Warnf("cc: [%s] pump check compiling %s lack of header %s", cc.tag, cc.inputFile, hdr)
-					blog.Warnf("cc: [%s] pump files: \n%s", strings.Join(checkFiles, "\n"))
+					blog.Warnf("cc(%s): [%s] pump check compiling %s lack of header %s", cc.jobID, cc.tag, cc.inputFile, hdr)
+					blog.Warnf("cc(%s): [%s] pump files: \n%s", cc.jobID, strings.Join(checkFiles, "\n"))
 					break
 				}
 			}
 
 			if found {
-				blog.Infof("cc: [%s] pump check compiling %s has complete headers", cc.tag, cc.inputFile)
+				blog.Infof("cc(%s): [%s] pump check compiling %s has complete headers", cc.jobID, cc.tag, cc.inputFile)
 			}
 		}
 	} else {
 		cc.outputFile = append(cc.outputFile, scannedData.mfOutputFile...)
 	}
 
-	blog.Debugf("cc: [%s] pre-build success for enter args: %v", cc.tag, args)
+	blog.Debugf("cc(%s): [%s] pre-build success for enter args: %v", cc.jobID, cc.tag, args)
 	return nil
 }
 
@@ -1410,7 +1416,7 @@ func (cc *TaskCC) tryPump() ([]string, bool, error) {
 	files, err := anal.Do(cc.sandbox.Dir, cc.serverSideArgs, cc.sandbox.Env,
 		cc.isPumpIncludeSystemHeader(), cc.isPumpDisableMacro())
 	if err != nil {
-		blog.Warnf("cc: [%s] get pump info for %s : %v", cc.tag, cc.inputFile, err)
+		blog.Warnf("cc(%s): [%s] get pump info for %s : %v", cc.jobID, cc.tag, cc.inputFile, err)
 		return nil, false, err
 	}
 
@@ -1438,7 +1444,7 @@ func (cc *TaskCC) tryPump() ([]string, bool, error) {
 		})
 		priority++
 
-		blog.Debugf("cc: [%s] get pump link, from %s to %s", cc.tag, f.FilePath, f.LinkTarget)
+		blog.Debugf("cc(%s): [%s] get pump link, from %s to %s", cc.jobID, cc.tag, f.FilePath, f.LinkTarget)
 	}
 
 	for _, f := range files.DependentFile {
@@ -1457,10 +1463,10 @@ func (cc *TaskCC) tryPump() ([]string, bool, error) {
 		if len(cc.serverSideArgs) > 0 {
 			cc.serverSideArgs[0] = filepath.Base(cc.serverSideArgs[0])
 		}
-		blog.Debugf("cc: [%s] get pump file: %s", cc.tag, f.FilePath)
+		blog.Debugf("cc(%s): [%s] get pump file: %s", cc.jobID, cc.tag, f.FilePath)
 	}
 
-	blog.Infof("cc: [%s] pump mode to compile", cc.tag)
+	blog.Infof("cc(%s): [%s] pump mode to compile", cc.jobID, cc.tag)
 	return nil, true, nil
 }
 
@@ -1471,7 +1477,7 @@ func (cc *TaskCC) addTmpFile(filename string) {
 func (cc *TaskCC) cleanTmpFile() {
 	for _, filename := range cc.tmpFileList {
 		if err := os.RemoveAll(filename); err != nil {
-			blog.Warnf("cc: [%s] clean tmp file %s failed: %v", cc.tag, filename, err)
+			blog.Warnf("cc(%s): [%s] clean tmp file %s failed: %v", cc.jobID, cc.tag, filename, err)
 		}
 	}
 }
@@ -1492,7 +1498,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	// debugRecordFileName(fmt.Sprintf("cc: doPreProcess in..."))
 
 	if isPreprocessedFile(inputFile) {
-		blog.Infof("cc: [%s] input \"%s\" is already preprocessed", cc.tag, inputFile)
+		blog.Infof("cc(%s): [%s] input \"%s\" is already preprocessed", cc.jobID, cc.tag, inputFile)
 
 		// input file already preprocessed
 		return inputFile, nil, nil
@@ -1500,15 +1506,15 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 
 	preprocessedF, err := outputFromSource(cc.inputFile, getPreprocessedExt(inputFile))
 	if err != nil {
-		blog.Warnf("cc: [%s] get preprocessed file name failed: %v", cc.tag, err)
+		blog.Warnf("cc(%s): [%s] get preprocessed file name failed: %v", cc.jobID, cc.tag, err)
 		return "", nil, err
 	}
-	blog.Infof("cc: [%s] get preprocessed file: %s", cc.tag, preprocessedF)
+	blog.Infof("cc(%s): [%s] get preprocessed file: %s", cc.jobID, cc.tag, preprocessedF)
 
 	outputFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc", preprocessedF)
 	cc.addTmpFile(outputFile)
 	if err != nil {
-		blog.Warnf("cc: [%s] do pre-process get output file failed: %v", cc.tag, err)
+		blog.Warnf("cc(%s): [%s] do pre-process get output file failed: %v", cc.jobID, cc.tag, err)
 		return "", nil, err
 	}
 
@@ -1533,14 +1539,14 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	// newArgs2 : arg without -fdirectives-only
 	newArgs1, newArgs2, err := setActionOptionE(stripDashO(args), cc.isUseDirectives(), cc.isPumpCheck())
 	if err != nil {
-		blog.Warnf("cc: [%s] set action option -E failed: %v", cc.tag, err)
+		blog.Warnf("cc(%s): [%s] set action option -E failed: %v", cc.jobID, cc.tag, err)
 		return "", nil, err
 	}
 
 	output, err := os.OpenFile(outputFile, os.O_WRONLY, 0666)
 	if err != nil {
-		blog.Errorf("cc: [%s] failed to open output file \"%s\" when pre-processing: %v",
-			cc.tag, outputFile, err)
+		blog.Errorf("cc(%s): [%s] failed to open output file \"%s\" when pre-processing: %v",
+			cc.jobID, cc.tag, outputFile, err)
 		return "", nil, err
 	}
 	defer func() {
@@ -1555,16 +1561,16 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	if newArgs1 != nil {
 		cc.preProcessArgs = newArgs1
 
-		blog.Debugf("cc: [%s] going to execute pre-process with -fdirectives-only: %s",
-			strings.Join(newArgs1, " "))
+		blog.Debugf("cc(%s): [%s] going to execute pre-process with -fdirectives-only: %s",
+			cc.jobID, cc.tag, strings.Join(newArgs1, " "))
 		if _, err = sandbox.ExecCommand(newArgs1[0], newArgs1[1:]...); err != nil {
-			blog.Warnf("cc: [%s] do pre-process with -fdirectives-only: %s, err: %v, %s",
-				cc.tag, strings.Join(newArgs1, " "), err, errBuf.String())
+			blog.Warnf("cc(%s): [%s] do pre-process with -fdirectives-only: %s, err: %v, %s",
+				cc.jobID, cc.tag, strings.Join(newArgs1, " "), err, errBuf.String())
 			_ = output.Truncate(0)
 		} else {
 			cc.supportDirectives = true
-			blog.Infof("cc: [%s] success to execute pre-process with -fdirectives-only and get %s: %s",
-				cc.tag, outputFile, strings.Join(newArgs1, " "))
+			blog.Infof("cc(%s): [%s] success to execute pre-process with -fdirectives-only and get %s: %s",
+				cc.jobID, cc.tag, outputFile, strings.Join(newArgs1, " "))
 			return outputFile, parseInspectHeader(errBuf.String()), nil
 		}
 	}
@@ -1572,13 +1578,13 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, []strin
 	// try preprocess with "-E"
 	cc.preProcessArgs = newArgs2
 
-	blog.Debugf("cc: [%s] going to execute pre-process: %s", cc.tag, strings.Join(newArgs2, " "))
+	blog.Debugf("cc(%s): [%s] going to execute pre-process: %s", cc.jobID, cc.tag, strings.Join(newArgs2, " "))
 	if _, err = sandbox.ExecCommand(newArgs2[0], newArgs2[1:]...); err != nil {
-		blog.Warnf("cc: [%s] do pre-process %v: %v, %s", cc.tag, newArgs2, err, errBuf.String())
+		blog.Warnf("cc(%s): [%s] do pre-process %v: %v, %s", cc.jobID, cc.tag, newArgs2, err, errBuf.String())
 		return "", nil, err
 	}
-	blog.Infof("cc: [%s] success to execute pre-process and get %s: %s",
-		cc.tag, outputFile, strings.Join(newArgs2, " "))
+	blog.Infof("cc(%s): [%s] success to execute pre-process and get %s: %s",
+		cc.jobID, cc.tag, outputFile, strings.Join(newArgs2, " "))
 	cc.preprocessedErrorBuf = errBuf.String()
 
 	return outputFile, parseInspectHeader(errBuf.String()), nil
@@ -1597,19 +1603,19 @@ func (cc *TaskCC) scanPchFile(args []string, isPump bool) []string {
 	existed, fileSize, modifyTime, fileMode := dcFile.Stat(filename).Batch()
 
 	if !existed {
-		blog.Debugf("cc: [%s] try to get pch file for %s but %s is not exist",
-			cc.tag, cc.firstIncludeFile, filename)
+		blog.Debugf("cc(%s): [%s] try to get pch file for %s but %s is not exist",
+			cc.jobID, cc.tag, cc.firstIncludeFile, filename)
 
 		filename = cc.sandbox.GetAbsPath(filename)
 		existed, fileSize, modifyTime, _ = dcFile.Stat(filename).Batch()
 		if !existed {
 			return args
 		}
-		blog.Infof("cc: find gch file in relative path(%s), filesize(%v), modifytime:(%v)", filename, fileSize, modifyTime)
+		blog.Infof("cc(%s): find gch file in relative path(%s), filesize(%v), modifytime:(%v)", cc.jobID, filename, fileSize, modifyTime)
 	}
 	cc.pchFile = filename
 
-	blog.Debugf("cc: [%s] success to find pch file %s for %s", cc.tag, filename, cc.firstIncludeFile)
+	blog.Debugf("cc(%s): [%s] success to find pch file %s for %s", cc.jobID, cc.tag, filename, cc.firstIncludeFile)
 
 	cc.pchFileDesc = &dcSDK.FileDesc{
 		FilePath:           filename,
@@ -1776,11 +1782,11 @@ func (cc *TaskCC) hasResultIndex() bool {
 
 func (cc *TaskCC) GetResultCacheKey(command []string) string {
 	if cc.preprocessedFile == "" {
-		blog.Infof("cc: cc.preprocessedFile is null , no need to get result cache key")
+		blog.Infof("cc(%s): cc.preprocessedFile is null , no need to get result cache key", cc.jobID)
 		return ""
 	}
 	if !dcFile.Stat(cc.preprocessedFile).Exist() {
-		blog.Warnf("cc: cc.preprocessedFile %s not existed when get result cache key", cc.preprocessedFile)
+		blog.Warnf("cc(%s): cc.preprocessedFile %s not existed when get result cache key", cc.jobID, cc.preprocessedFile)
 		return ""
 	}
 
@@ -1790,7 +1796,7 @@ func (cc *TaskCC) GetResultCacheKey(command []string) string {
 	// cc_mtime cc_name from compile tool
 	cchash, err := dcUtil.HashFile(command[0])
 	if err != nil {
-		blog.Warnf("cc: hash file %s with error: %v", command[0], err)
+		blog.Warnf("cc(%s): hash file %s with error: %v", cc.jobID, command[0], err)
 		return ""
 	}
 
@@ -1804,7 +1810,7 @@ func (cc *TaskCC) GetResultCacheKey(command []string) string {
 	// cpp content from cl.preprocessedFile
 	cpphash, err := dcUtil.HashFile(cc.preprocessedFile)
 	if err != nil {
-		blog.Warnf("cc: hash file %s with error: %v", cc.preprocessedFile, err)
+		blog.Warnf("cc(%s): hash file %s with error: %v", cc.jobID, cc.preprocessedFile, err)
 		return ""
 	}
 
@@ -1814,8 +1820,8 @@ func (cc *TaskCC) GetResultCacheKey(command []string) string {
 	fullstring := fmt.Sprintf("%s_%x_%x_%x_%x", ext, cchash, arghash, cpphash, cppstderrhash)
 	fullstringhash := xxhash.Sum64([]byte(fullstring))
 
-	blog.Infof("cc: got hash key %x for string[%s] cmd:[%s]",
-		fullstringhash, fullstring, strings.Join(command, " "))
+	blog.Infof("cc(%s): got hash key %x for string[%s] cmd:[%s]",
+		cc.jobID, fullstringhash, fullstring, strings.Join(command, " "))
 
 	return fmt.Sprintf("%x", fullstringhash)
 }

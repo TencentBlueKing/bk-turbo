@@ -30,7 +30,7 @@ import (
 // cl-filter是ue4拉起的编译器, 套了一层cl
 type TaskCLFilter struct {
 	sandbox *dcSyscall.Sandbox
-
+	jobID   string
 	// tmp file list to clean
 	tmpFileList []string
 
@@ -80,6 +80,14 @@ func (cf *TaskCLFilter) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	cf.sandbox = sandbox
 	if cf.clhandle != nil {
 		cf.clhandle.InitSandbox(sandbox)
+	}
+}
+
+// SetJobID set jobID to task
+func (cf *TaskCLFilter) SetJobID(jobID string) {
+	cf.jobID = jobID
+	if cf.clhandle != nil {
+		cf.clhandle.SetJobID(jobID)
 	}
 }
 
@@ -220,20 +228,20 @@ func (cf *TaskCLFilter) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 }
 
 func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("cf: start pre execute for: %v", command)
+	blog.Infof("cf(%s): start pre execute for: %v", cf.jobID, command)
 
 	// debugRecordFileName(fmt.Sprintf("cl: start pre execute for: %v", command))
 
 	cf.originArgs = command
 	dependFile, args, err := ensureCompiler(command)
 	if err != nil {
-		blog.Errorf("cf: pre execute ensure compiler failed %v: %v", args, err)
+		blog.Errorf("cf(%s): pre execute ensure compiler failed %v: %v", cf.jobID, args, err)
 		return nil, dcType.ErrorUnknown
 	}
 
 	cf.dependentFile = dependFile
 	cf.cldArgs = args
-	blog.Infof("cf: after pre execute, got depend file: [%s], cl cmd:[%s]", cf.dependentFile, cf.cldArgs)
+	blog.Infof("cf(%s): after pre execute, got depend file: [%s], cl cmd:[%s]", cf.jobID, cf.dependentFile, cf.cldArgs)
 
 	cf.clhandle.InitSandbox(cf.sandbox)
 	if cf.innertype == CompilerCL {
@@ -252,7 +260,7 @@ func (cf *TaskCLFilter) preExecute(command []string) (*dcSDK.BKDistCommand, dcTy
 }
 
 func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
-	blog.Infof("cf: start post execute for: %v", cf.originArgs)
+	blog.Infof("cf(%s): start post execute for: %v", cf.jobID, cf.originArgs)
 
 	var bkerr dcType.BKDistCommonError
 	if cf.innertype == CompilerCL {
@@ -274,20 +282,20 @@ func (cf *TaskCLFilter) postExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonEr
 	}
 
 	// save include to txt file
-	blog.Debugf("cf: ready parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
+	blog.Debugf("cf(%s): ready parse ouput [%s] for: %v", cf.jobID, r.Results[0].OutputMessage, cf.originArgs)
 	filteredout, err := cf.parseOutput(string(r.Results[0].OutputMessage))
 	if err != nil {
-		blog.Warnf("cf: parse output(%s) with error:%v", r.Results[0].OutputMessage, err)
+		blog.Warnf("cf(%s): parse output(%s) with error:%v", cf.jobID, r.Results[0].OutputMessage, err)
 		return dcType.ErrorUnknown
 	}
 
 	r.Results[0].OutputMessage = []byte(filteredout)
-	blog.Debugf("cf: after parse ouput [%s] for: %v", r.Results[0].OutputMessage, cf.originArgs)
+	blog.Debugf("cf(%s): after parse ouput [%s] for: %v", cf.jobID, r.Results[0].OutputMessage, cf.originArgs)
 	return dcType.ErrorNone
 }
 
 func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
-	blog.Debugf("cf: start parse output: %s", s)
+	blog.Debugf("cf(%s): start parse output: %s", cf.jobID, s)
 
 	output := make([]string, 0, 0)
 	includes := make([]string, 0, 0)
@@ -314,7 +322,7 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 			if existed {
 				includes = append(includes, includefile)
 			} else {
-				blog.Infof("cf: includefile [%s] not existed", includefile)
+				blog.Infof("cf(%s): includefile [%s] not existed", cf.jobID, includefile)
 				output = append(output, line)
 			}
 		} else if len(columns) == 4 {
@@ -324,7 +332,7 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 			if existed {
 				includes = append(includes, includefile)
 			} else {
-				blog.Infof("cf: includefile [%s] not existed", includefile)
+				blog.Infof("cf(%s): includefile [%s] not existed", cf.jobID, includefile)
 				output = append(output, line)
 			}
 		} else {
@@ -335,20 +343,20 @@ func (cf *TaskCLFilter) parseOutput(s string) (string, error) {
 			break
 		}
 	}
-	blog.Debugf("cf: got output: [%v], includes:[%v]", output, includes)
+	blog.Debugf("cf(%s): got output: [%v], includes:[%v]", cf.jobID, output, includes)
 
 	// save includes to cf.dependentFile
 	if len(includes) > 0 {
 		f, err := os.Create(cf.dependentFile)
 		if err != nil {
-			blog.Errorf("cf: create file %s error: [%s]", cf.dependentFile, err.Error())
+			blog.Errorf("cf(%s): create file %s error: [%s]", cf.jobID, cf.dependentFile, err.Error())
 		} else {
 			defer func() {
 				_ = f.Close()
 			}()
 			_, err := f.Write([]byte(strings.Join(includes, "\r\n")))
 			if err != nil {
-				blog.Errorf("cf: save depend file [%s] error: [%s]", cf.dependentFile, err.Error())
+				blog.Errorf("cf(%s): save depend file [%s] error: [%s]", cf.jobID, cf.dependentFile, err.Error())
 				return strings.Join(output, "\n"), err
 			}
 		}
