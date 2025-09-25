@@ -53,7 +53,7 @@ func NewMgr(conf *config.ServerConfig) types.Mgr {
 		netCounters:       make(map[string]net.IOCountersStat),
 		hasWorkUnregisted: false,
 		checkduration:     3600 * time.Second,
-		deleteduration:    3600 * 24 * 3 * time.Second,
+		deleteduration:    3600 * 12 * time.Second,
 	}
 }
 
@@ -79,6 +79,7 @@ type mgr struct {
 	localResourceTaskMutex sync.Mutex
 	localResourceTaskNum   int32
 
+	ubachecked       bool
 	lastcheckubatime time.Time
 	checkduration    time.Duration
 	deleteduration   time.Duration
@@ -961,6 +962,10 @@ func (m *mgr) GetFirstBazelNoLauncherWorkID() (string, error) {
 
 // GetAllWorkers return all workers
 func (m *mgr) GetAllWorkers(ubainfo types.UbaInfo) []string {
+	// 添加lock，避免该接口和register冲突
+	m.registerMutex.Lock()
+	defer m.registerMutex.Unlock()
+
 	var allworkers []string
 	if m.worksPool != nil {
 		for _, work := range m.worksPool.all() {
@@ -991,10 +996,13 @@ func (m *mgr) checkubadir(ubafile string) error {
 	m.checkubalock.Lock()
 	defer m.checkubalock.Unlock()
 
-	if m.lastcheckubatime.After(time.Now().Add(-1 * m.checkduration)) {
-		return nil
+	if m.ubachecked {
+		if m.lastcheckubatime.After(time.Now().Add(-1 * m.checkduration)) {
+			return nil
+		}
 	}
 
+	m.ubachecked = true
 	m.lastcheckubatime = time.Now()
 	// 获取uba目录路径（向上两级）
 	dir := filepath.Dir(filepath.Dir(ubafile))
@@ -1008,8 +1016,8 @@ func (m *mgr) checkubadir(ubafile string) error {
 	fis, _ := f.Readdir(-1)
 	f.Close()
 
-	t := time.Now().Add(-1 * m.deleteduration) // 3天之前的文件删除
-	blog.Infof("mgr: dir %s time:%s", dir, t)
+	t := time.Now().Add(-1 * m.deleteduration)
+	blog.Infof("mgr: uba dir %s time:%s", dir, t)
 	fullpath := ""
 	for _, fi := range fis {
 		if fi.ModTime().After(t) {
@@ -1019,7 +1027,7 @@ func (m *mgr) checkubadir(ubafile string) error {
 		if strings.HasPrefix(ubafile, fullpath) {
 			continue
 		}
-		blog.Infof("mgr: ready remove file:%s modify time:%s", fullpath, fi.ModTime())
+		blog.Infof("mgr: ready remove uba dir:%s modify time:%s", fullpath, fi.ModTime())
 		os.RemoveAll(fullpath)
 	}
 
