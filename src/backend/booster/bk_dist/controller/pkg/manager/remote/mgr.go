@@ -537,7 +537,7 @@ func (m *Mgr) callback4ResChanged() error {
 	hl := m.work.Resource().GetHosts()
 	// init pod name for hosts
 	info := m.work.Resource().GetStatus()
-	if info.HostNameMap != nil {
+	if info != nil && info.HostNameMap != nil {
 		for i, h := range hl {
 			if _, ok := info.HostNameMap[h.Server]; ok {
 				if hl[i].Name == "" {
