@@ -94,24 +94,24 @@ func newExecutor(mgr *Mgr,
 	if e.ioTimeout4Uba <= 0 {
 		e.ioTimeout4Uba = defaultIOTimeout4Uba
 	}
-	blog.Infof("executor: set ioTimeout4Uba to %d", e.ioTimeout4Uba)
+	blog.Infof("executor(%s): set ioTimeout4Uba to %d", e.req.Stats.ID, e.ioTimeout4Uba)
 	if strings.Contains(req.Commands[0], types.UbaAgent) {
 		e.isUbaCommand = true
 		e.ioTimeout = e.ioTimeout4Uba
-		blog.Infof("executor: set ioTimeout to %d for ubaagent", e.ioTimeout)
+		blog.Infof("executor(%s): set ioTimeout to %d for ubaagent", e.req.Stats.ID, e.ioTimeout)
 	}
 
 	if e.sandbox.Env.IsSet(env.KeyExecutorLocalRecord) && mgr.recorder != nil {
 		e.record = mgr.recorder.Inspect(recorder.RecordKey(req.Commands))
 		if e.record.SuggestTimeout > e.ioTimeout {
-			blog.Infof("executor: the command suggest timeout(%d) is greater than the setting(%d), just set it to %d",
-				e.record.SuggestTimeout, e.ioTimeout, e.record.SuggestTimeout)
+			blog.Infof("executor(%s): the command suggest timeout(%d) is greater than the setting(%d), just set it to %d",
+				e.req.Stats.ID, e.record.SuggestTimeout, e.ioTimeout, e.record.SuggestTimeout)
 			e.ioTimeout = e.record.SuggestTimeout
 			e.stats.RemoteWorkTimeoutUseSuggest = true
 		}
 	}
 
-	blog.Infof("executor: success to new an executor with boosterType(%s)", bt.String())
+	blog.Infof("executor(%s): success to new an executor with boosterType(%s)", e.req.Stats.ID, bt.String())
 	e.handler.InitSandbox(e.sandbox)
 
 	// TODO : 通过修改e.sandbox来影响e.handler，因为e.sandbox是个指针
@@ -183,7 +183,7 @@ func (e *executor) skipLocalRetry() bool {
 }
 
 func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
-	blog.Infof("executor: try to execute pre-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor(%s): try to execute pre-task from pid(%d)", e.req.Stats.ID, e.req.Pid)
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.PreWorkEnterTime)
@@ -192,7 +192,7 @@ func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
 
 	if e.handler.PreExecuteNeedLock(e.req.Commands) {
 		weight := e.handler.PreLockWeight(e.req.Commands)
-		blog.Infof("executor: try to execute pre-task from pid(%d) lockweight(%d)", e.req.Pid, weight)
+		blog.Infof("executor(%s): try to execute pre-task from pid(%d) lockweight(%d)", e.req.Stats.ID, e.req.Pid, weight)
 		if !e.lock(dcSDK.JobUsageLocalPre, weight) {
 			return nil, types.ErrSlotsLockFailed
 		}
@@ -213,7 +213,7 @@ func (e *executor) executePreTask() (*dcSDK.BKDistCommand, error) {
 	e.stats.PreWorkSuccess = true
 	// delta := e.req.Stats.PreWorkEndTime.Time().Sub(e.req.Stats.PreWorkStartTime.Time())
 	// blog.Infof("executor: success to execute pre-task from pid(%d) within %s", e.req.Pid, delta.String())
-	blog.Debugf("executor: success to execute pre-task from pid(%d) and got data: %v", e.req.Pid, r)
+	blog.Debugf("executor(%s): success to execute pre-task from pid(%d) and got data: %v", e.req.Stats.ID, e.req.Pid, r)
 	return r, nil
 }
 
@@ -234,7 +234,7 @@ func (e *executor) remoteTryTimes() int {
 }
 
 func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
-	blog.Infof("executor: try to execute onRemoteFail from pid(%d)", e.req.Pid)
+	blog.Infof("executor(%s): try to execute onRemoteFail from pid(%d)", e.req.Stats.ID, e.req.Pid)
 	// defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	// dcSDK.StatsTimeNow(&e.stats.PreWorkEnterTime)
@@ -242,13 +242,13 @@ func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
 	// e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	if !e.handler.NeedRetryOnRemoteFail(e.req.Commands) {
-		blog.Infof("executor: handle do not support retry on remote fail, do nothing")
+		blog.Infof("executor(%s): handle do not support retry on remote fail, do nothing", e.req.Stats.ID)
 		return nil, nil
 	}
 
 	if e.handler.PreExecuteNeedLock(e.req.Commands) {
 		weight := e.handler.PreLockWeight(e.req.Commands)
-		blog.Infof("executor: try to execute onRemoteFail from pid(%d) lockweight(%d)", e.req.Pid, weight)
+		blog.Infof("executor(%s): try to execute onRemoteFail from pid(%d) lockweight(%d)", e.req.Stats.ID, e.req.Pid, weight)
 		if !e.lock(dcSDK.JobUsageLocalPre, weight) {
 			return nil, types.ErrSlotsLockFailed
 		}
@@ -267,12 +267,12 @@ func (e *executor) onRemoteFail() (*dcSDK.BKDistCommand, error) {
 	}
 
 	// e.stats.PreWorkSuccess = true
-	blog.Infof("executor: success to execute onRemoteFail from pid(%d)", e.req.Pid)
+	blog.Infof("executor(%s): success to execute onRemoteFail from pid(%d)", e.req.Stats.ID, e.req.Pid)
 	return r, nil
 }
 
 func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
-	blog.Infof("executor: try to execute post-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor(%s): try to execute post-task from pid(%d)", e.req.Stats.ID, e.req.Pid)
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.PostWorkEnterTime)
@@ -284,13 +284,13 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 		if !e.lock(dcSDK.JobUsageLocalPost, weight) {
 			return types.ErrSlotsLockFailed
 		}
-		blog.Infof("executor: post-task from pid(%d) got lock", e.req.Pid)
+		blog.Infof("executor(%s): post-task from pid(%d) got lock", e.req.Stats.ID, e.req.Pid)
 		dcSDK.StatsTimeNow(&e.stats.PostWorkLockTime)
 		defer dcSDK.StatsTimeNow(&e.stats.PostWorkUnlockTime)
 		defer e.unlock(dcSDK.JobUsageLocalPost, weight)
 		e.mgr.work.Basic().UpdateJobStats(e.stats)
 	} else {
-		blog.Infof("executor: post-task from pid(%d) do not need lock", e.req.Pid)
+		blog.Infof("executor(%s): post-task from pid(%d) do not need lock", e.req.Stats.ID, e.req.Pid)
 	}
 
 	dcSDK.StatsTimeNow(&e.stats.PostWorkStartTime)
@@ -315,7 +315,7 @@ func (e *executor) executePostTask(result *dcSDK.BKDistResult) error {
 	}
 
 	e.stats.PostWorkSuccess = true
-	blog.Infof("executor: success to execute post-task from pid(%d)", e.req.Pid)
+	blog.Infof("executor(%s): success to execute post-task from pid(%d)", e.req.Stats.ID, e.req.Pid)
 	return nil
 }
 
@@ -329,8 +329,8 @@ func needRetryLocal(code int) bool {
 }
 
 func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
-	blog.Infof("executor: try to execute local-task from pid(%d) command:[%s]",
-		e.req.Pid, strings.Join(e.req.Commands, " "))
+	blog.Infof("executor(%s): try to execute local-task from pid(%d) command:[%s]",
+		e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "))
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
@@ -342,7 +342,7 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 		locallockweight = e.handler.LocalLockWeight(e.req.Commands)
 	}
 	if !e.lock(dcSDK.JobUsageLocalExe, locallockweight) {
-		blog.Errorf("executor:failed to lock with local job usage(%s) weight %d", dcSDK.JobUsageLocalExe, locallockweight)
+		blog.Errorf("executor(%s): failed to lock with local job usage(%s) weight %d", e.req.Stats.ID, dcSDK.JobUsageLocalExe, locallockweight)
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: -1,
@@ -358,24 +358,24 @@ func (e *executor) executeLocalTask() *types.LocalTaskExecuteResult {
 	if runtime.GOOS == "windows" && needRetryLocal(result.Result.ExitCode) {
 		for i := 0; i < localRetryTimes; i++ {
 			retryInterval := localRetryInterval * (i + 1)
-			blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, sleep %d seconds", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1, retryInterval)
+			blog.Infof("executor(%s): try to execute local-task from pid(%d) command:[%s] , but got error (code:%d, msg:%s ) in retry round %d, sleep %d seconds", e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1, retryInterval)
 
 			time.Sleep(time.Duration(retryInterval) * time.Second)
 			result = e.realExecuteLocalTask(locallockweight)
 
 			if !needRetryLocal(result.Result.ExitCode) {
-				blog.Infof("executor: try to execute local-task from pid(%d) command:[%s] , got result(code:%d, msg:%s) in retry round %d, no need retry again", e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
+				blog.Infof("executor(%s): try to execute local-task from pid(%d) command:[%s] , got result(code:%d, msg:%s) in retry round %d, no need retry again", e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "), result.Result.ExitCode, result.Result.Message, i+1)
 				return result
 			}
 		}
-		blog.Warnf("executor: local-task from pid(%d) command:[%s] failed after %d retries",
-			e.req.Pid, strings.Join(e.req.Commands, " "), localRetryTimes)
+		blog.Warnf("executor(%s): local-task from pid(%d) command:[%s] failed after %d retries",
+			e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "), localRetryTimes)
 	}
 	return result
 }
 
 func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskExecuteResult {
-	blog.Infof("executor: got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
+	blog.Infof("executor(%s): got lock to execute local-task from pid(%d) with weight %d", e.req.Stats.ID, e.req.Pid, locallockweight)
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkLockTime)
 	defer dcSDK.StatsTimeNow(&e.stats.LocalWorkUnlockTime)
 	defer e.unlock(dcSDK.JobUsageLocalExe, locallockweight)
@@ -398,12 +398,12 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 		var outBuf, errBuf bytes.Buffer
 		sandbox.Stdout = &outBuf
 		sandbox.Stderr = &errBuf
-		blog.Infof("executor: ready from pid(%d) run cmd:%v with command type:%d",
-			e.req.Pid, e.req.Commands, e.req.CommandType)
+		blog.Infof("executor(%s): ready from pid(%d) run cmd:%v with command type:%d",
+			e.req.Stats.ID, e.req.Pid, e.req.Commands, e.req.CommandType)
 		cmd := e.req.Commands[0]
 		switch e.req.CommandType {
 		case dcType.CommandInFile: //try to run cmd in file
-			blog.Infof("executor: ready from pid(%d) run cmd in file with command type:%d", e.req.Pid, e.req.CommandType)
+			blog.Infof("executor(%s): ready from pid(%d) run cmd in file with command type:%d", e.req.Stats.ID, e.req.Pid, e.req.CommandType)
 			var bt string
 			if sandbox == nil {
 				bt = env.GetEnv(env.BoosterType)
@@ -423,8 +423,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 	}
 
 	if err != nil {
-		blog.Errorf("executor: failed to execute local-task from pid(%d): %v(%d), %v",
-			e.req.Pid, err, code, string(stderr))
+		blog.Errorf("executor(%s): failed to execute local-task from pid(%d): %v(%d), %v",
+			e.req.Stats.ID, e.req.Pid, err, code, string(stderr))
 		return &types.LocalTaskExecuteResult{
 			Result: &dcSDK.LocalTaskResult{
 				ExitCode: code,
@@ -436,8 +436,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 	}
 
 	e.stats.LocalWorkSuccess = true
-	blog.Infof("executor: success to execute local-task from pid(%d) command:[%s]",
-		e.req.Pid, strings.Join(e.req.Commands, " "))
+	blog.Infof("executor(%s): success to execute local-task from pid(%d) command:[%s]",
+		e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "))
 	return &types.LocalTaskExecuteResult{
 		Result: &dcSDK.LocalTaskResult{
 			ExitCode: code,
@@ -448,8 +448,8 @@ func (e *executor) realExecuteLocalTask(locallockweight int32) *types.LocalTaskE
 }
 
 func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
-	blog.Infof("executor: try to execute local-task with trylock from pid(%d) command:[%s]",
-		e.req.Pid, strings.Join(e.req.Commands, " "))
+	blog.Infof("executor(%s): try to execute local-task with trylock from pid(%d) command:[%s]",
+		e.req.Stats.ID, e.req.Pid, strings.Join(e.req.Commands, " "))
 	defer e.mgr.work.Basic().UpdateJobStats(e.stats)
 
 	dcSDK.StatsTimeNow(&e.stats.LocalWorkEnterTime)
@@ -467,7 +467,8 @@ func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
 	}
 	ok, err := e.tryLock(dcSDK.JobUsageLocalExe, locallockweight)
 	if err != nil {
-		blog.Errorf("executor:failed to try lock with local job usage(%s) weight %d error:%v",
+		blog.Errorf("executor(%s): failed to try lock with local job usage(%s) weight %d error:%v",
+			e.req.Stats.ID,
 			dcSDK.JobUsageLocalExe,
 			locallockweight,
 			err)
@@ -482,7 +483,7 @@ func (e *executor) tryExecuteLocalTask() *types.LocalTaskExecuteResult {
 	}
 	if !ok {
 		gotLock = false
-		blog.Infof("executor: not got lock to execute local-task from pid(%d) with weight %d", e.req.Pid, locallockweight)
+		blog.Infof("executor(%s): not got lock to execute local-task from pid(%d) with weight %d", e.req.Stats.ID, e.req.Pid, locallockweight)
 		return nil
 	} else {
 		gotLock = true
@@ -558,7 +559,7 @@ func (e *executor) checkIOTimeoutRecord() {
 		e.record.SuggestTimeout = deltaTime
 		go func() {
 			if se := e.record.Save(); se != nil {
-				blog.Warnf("executor: save record failed: %v", se)
+				blog.Warnf("executor(%s): save record failed: %v", e.req.Stats.ID, se)
 			}
 		}()
 		return
@@ -568,7 +569,7 @@ func (e *executor) checkIOTimeoutRecord() {
 		e.record.SuggestTimeout = 0
 		go func() {
 			if se := e.record.Save(); se != nil {
-				blog.Warnf("executor: save record failed: %v", se)
+				blog.Warnf("executor(%s): save record failed: %v", e.req.Stats.ID, se)
 			}
 		}()
 	}
@@ -585,7 +586,7 @@ func (e *executor) checkRetryAndSuccessRecord() {
 		e.record.RetryAndSuccess++
 		go func() {
 			if se := e.record.Save(); se != nil {
-				blog.Warnf("executor: save record failed: %v", se)
+				blog.Warnf("executor(%s): save record failed: %v", e.req.Stats.ID, se)
 			}
 		}()
 		return
@@ -596,7 +597,7 @@ func (e *executor) checkRetryAndSuccessRecord() {
 		e.record.RetryAndSuccess = 0
 		go func() {
 			if se := e.record.Save(); se != nil {
-				blog.Warnf("executor: save record failed: %v", se)
+				blog.Warnf("executor(%s): save record failed: %v", e.req.Stats.ID, se)
 			}
 		}()
 	}
@@ -609,8 +610,8 @@ func (e *executor) retryAndSuccessTooManyAndDegradeDirectly() bool {
 	}
 
 	if e.record.RetryAndSuccess >= retryAndSuccessLimit {
-		blog.Infof("executor: command degrade to local for it retry-and-success > %d: %v",
-			retryAndSuccessLimit, e.req.Commands)
+		blog.Infof("executor(%s): command degrade to local for it retry-and-success > %d: %v",
+			e.req.Stats.ID, retryAndSuccessLimit, e.req.Commands)
 		e.stats.RemoteWorkOftenRetryAndDegraded = true
 		return true
 	}

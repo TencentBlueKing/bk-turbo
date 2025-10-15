@@ -51,6 +51,11 @@ func (lf *TaskLinkFilter) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	}
 }
 
+// SetJobID set jobID to task
+func (lf *TaskLinkFilter) SetJobID(jobID string) {
+	return
+}
+
 // InitExtra no need
 func (lf *TaskLinkFilter) InitExtra(extra []byte) {
 }
