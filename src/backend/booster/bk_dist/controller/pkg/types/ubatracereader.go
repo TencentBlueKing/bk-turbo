@@ -471,22 +471,22 @@ func callerInfo(skip int) string {
 }
 
 // ReadString reads a string
-func (r *BinaryReader) ReadString() string {
+func (r *BinaryReader) ReadString() (string, error) {
 	length := r.Read7BitEncoded()
 
 	// Check for unreasonably large string lengths (likely corrupted data)
 	if length > 1000000 { // 1MB limit for strings
 		blog.Infof("ubatrace: ReadString: caller(%s) Unreasonably large string length %d at position %d, likely corrupted data", callerInfo(1), length, r.pos)
-		return ""
+		return "", fmt.Errorf("string with size %d is too large", length)
 	}
 
 	if r.pos+int(length) > len(r.data) {
 		blog.Infof("ubatrace: ReadString: Trying to read %d bytes at position %d, but only %d bytes available", length, r.pos, len(r.data)-r.pos)
-		return ""
+		return "", fmt.Errorf("string with size %d is too large", length)
 	}
 	str := string(r.data[r.pos : r.pos+int(length)])
 	r.pos += int(length)
-	return str
+	return str, nil
 }
 
 // ReadGUID reads a GUID (16 bytes total)
@@ -1317,8 +1317,14 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 
 // handleSessionAdded handles TraceType_SessionAdded
 func (tr *TraceReader) handleSessionAdded(out *TraceView, reader *BinaryReader, time uint64) bool {
-	sessionName := reader.ReadString()
-	sessionInfo := reader.ReadString()
+	sessionName, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
+	sessionInfo, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 	clientUID := tr.ReadClientId(out, reader)
 	sessionIndex := reader.ReadU32()
 
@@ -1493,7 +1499,11 @@ func (tr *TraceReader) handleSessionNotification(out *TraceView, reader *BinaryR
 		blog.Infof("ubatrace: Warning: SessionNotification for sessionIndex %d but session not found, continuing...", sessionIndex)
 		return true
 	}
-	session.Notification = reader.ReadString()
+	var err error
+	session.Notification, err = reader.ReadString()
+	if err != nil {
+		return false
+	}
 	return true
 }
 
@@ -1510,7 +1520,11 @@ func (tr *TraceReader) handleSessionSummary(out *TraceView, reader *BinaryReader
 
 	session.Summary = make([]string, 0, lineCount)
 	for i := uint32(0); i < lineCount; i++ {
-		session.Summary = append(session.Summary, reader.ReadString())
+		line, err := reader.ReadString()
+		if err != nil {
+			return false
+		}
+		session.Summary = append(session.Summary, line)
 	}
 	return true
 }
@@ -1519,7 +1533,10 @@ func (tr *TraceReader) handleSessionSummary(out *TraceView, reader *BinaryReader
 func (tr *TraceReader) handleProcessAdded(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	sessionIndex := reader.ReadU32()
 	id := reader.ReadU32()
-	desc := reader.ReadString()
+	desc, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
@@ -1583,9 +1600,13 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 		copy(process.Stats, reader.data[dataStart:dataEnd])
 	}
 
+	var err error
 	// Read breadcrumbs if version >= 34 - exactly like C++
 	if out.Version >= 34 {
-		process.Breadcrumbs = reader.ReadString()
+		process.Breadcrumbs, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 	}
 
 	// Set timing fields from processStats - exactly like C++
@@ -1608,7 +1629,10 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 			if logType == 255 {
 				break
 			}
-			logLine := reader.ReadString()
+			logLine, err := reader.ReadString()
+			if err != nil {
+				return false
+			}
 			process.LogLines = append(process.LogLines, ProcessLogLine{
 				Text: logLine,
 				Type: logType,
@@ -1622,7 +1646,10 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 		process.LogLines = make([]ProcessLogLine, 0, logLineCount)
 		for i := uint64(0); i < logLineCount; i++ {
 			logType := reader.ReadByte()
-			logLine := reader.ReadString()
+			logLine, err := reader.ReadString()
+			if err != nil {
+				return false
+			}
 			process.LogLines = append(process.LogLines, ProcessLogLine{
 				Text: logLine,
 				Type: logType,
@@ -1642,7 +1669,10 @@ func (tr *TraceReader) handleProcessEnvironmentUpdated(out *TraceView, reader *B
 		return true
 	}
 
-	reason := reader.ReadString()
+	reason, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
 	}
@@ -1716,8 +1746,12 @@ func (tr *TraceReader) handleProcessReturned(out *TraceView, reader *BinaryReade
 	}
 
 	var reason string = "Unknown"
+	var err error
 	if out.Version >= 33 {
-		reason = reader.ReadString()
+		reason, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 		if reason == "" {
 			reason = "Unknown"
 		}
@@ -1755,8 +1789,12 @@ func (tr *TraceReader) handleFileBeginFetch(out *TraceView, reader *BinaryReader
 	size := reader.Read7BitEncoded()
 
 	var hint string
+	var err error
 	if out.Version < 14 {
-		hint = reader.ReadString()
+		hint, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 	} else {
 		stringIndex := reader.Read7BitEncoded()
 		if int(stringIndex) < len(out.Strings) {
@@ -1808,7 +1846,10 @@ func (tr *TraceReader) handleFileFetchLight(out *TraceView, reader *BinaryReader
 // handleProxyCreated handles TraceType_ProxyCreated
 func (tr *TraceReader) handleProxyCreated(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	clientUID := tr.ReadClientId(out, reader)
-	proxyName := reader.ReadString()
+	proxyName, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
@@ -1829,7 +1870,10 @@ func (tr *TraceReader) handleProxyCreated(out *TraceView, reader *BinaryReader, 
 // handleProxyUsed handles TraceType_ProxyUsed
 func (tr *TraceReader) handleProxyUsed(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	clientUID := tr.ReadClientId(out, reader)
-	proxyName := reader.ReadString()
+	proxyName, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
@@ -1879,8 +1923,12 @@ func (tr *TraceReader) handleFileBeginStore(out *TraceView, reader *BinaryReader
 	size := reader.Read7BitEncoded()
 
 	var hint string
+	var err error
 	if out.Version < 14 {
-		hint = reader.ReadString()
+		hint, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 	} else {
 		stringIndex := reader.Read7BitEncoded()
 		if int(stringIndex) < len(out.Strings) {
@@ -2076,10 +2124,20 @@ func (tr *TraceReader) handleStatusUpdate(out *TraceView, reader *BinaryReader) 
 			out.StatusMap = make(map[uint64]StatusUpdate)
 		}
 
+		text, err := reader.ReadString()
+		if err != nil {
+			return false
+		}
+
+		link, err := reader.ReadString()
+		if err != nil {
+			return false
+		}
+
 		status := StatusUpdate{
-			Text: reader.ReadString(),
+			Text: text,
 			Type: reader.ReadByte(),
-			Link: reader.ReadString(),
+			Link: link,
 		}
 		out.StatusMap[key] = status
 	}
@@ -2094,14 +2152,21 @@ func (tr *TraceReader) handleRemoteExecutionDisabled(out *TraceView, reader *Bin
 
 // handleString handles TraceType_String
 func (tr *TraceReader) handleString(out *TraceView, reader *BinaryReader) bool {
-	out.Strings = append(out.Strings, reader.ReadString())
+	outstr, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
+	out.Strings = append(out.Strings, outstr)
 	return true
 }
 
 // handleCacheBeginFetch handles TraceType_CacheBeginFetch
 func (tr *TraceReader) handleCacheBeginFetch(out *TraceView, reader *BinaryReader, time uint64) bool {
 	id := uint32(reader.Read7BitEncoded())
-	desc := reader.ReadString()
+	desc, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
 	process := tr.ProcessBegin(out, 0, id, time, desc)
 	if process != nil {
@@ -2212,7 +2277,7 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
-	blog.Infof("ubatrace: Successfully read UBA file: %s (%d bytes)", filename, len(data))
+	blog.Infof("ubatrace: read UBA file: %s (%d bytes)", filename, len(data))
 
 	// Create binary reader
 	reader := NewBinaryReader(data)
@@ -2289,6 +2354,8 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 			break
 		}
 	}
+
+	blog.Infof("ubatrace: finished read UBA file: %s", filename)
 
 	return traceView, nil
 }
