@@ -12,6 +12,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -614,7 +615,9 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 						stats.LocalWorkUnlockTime = stats.LeaveTime // 方便显示
 						stats.LocalWorkSuccess = stats.Success
 					}
-					stats.OriginArgs = []string{"ubacompile", process.Description}
+					if len(stats.OriginArgs) == 0 {
+						stats.OriginArgs = []string{guessCommand(process.Description), process.Description}
+					}
 					stats.TaskID = taskid
 					stats.WorkID = workid
 
@@ -625,6 +628,27 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 	}
 
 	return err
+}
+
+func guessCommand(describe string) string {
+	suffix := filepath.Ext(describe)
+	switch suffix {
+	case ".cpp", ".c", ".cc", ".cxx", ".C", ".CXX", ".h":
+		return "cl.exe"
+	case ".dll":
+		return "link.exe"
+	case ".lib":
+		return "lib.exe"
+	case ".rc2", ".rc":
+		return "rc.exe"
+	case ".ispc":
+		return "ispc.exe"
+	case ".bat":
+		return "cmd.exe"
+	case ".target", ".version":
+		return "dotnet.exe"
+	}
+	return "other.exe"
 }
 
 // DumpJobs encode WorkAnalysisStatus into json bytes
