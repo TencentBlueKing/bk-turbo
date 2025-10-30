@@ -206,11 +206,21 @@ type Session struct {
 	ProxyCreated       bool
 }
 
+// WorkRecordLogEntry represents a work record log entry
+type WorkRecordLogEntry struct
+{
+	Time uint64
+	StartTime uint64
+	Text string
+	Count uint32
+}
+
 // WorkRecord represents a work record
 type WorkRecord struct {
 	Description  string
 	Start        uint64
 	Stop         uint64
+	Entries 	 []WorkRecordLogEntry 
 	BitmapOffset uint32
 }
 
@@ -1256,7 +1266,7 @@ func (tr *TraceReader) GetSessionByUID(out *TraceView, clientUID GUID) *Session 
 }
 
 // ProcessBegin starts a new process
-func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, time uint64, description string) *Process {
+func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, time uint64, description string, breadcrumbs string) *Process {
 	session := tr.GetSession(out, sessionIndex)
 	if session == nil {
 		return nil
@@ -1273,6 +1283,7 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 		Start:       time,
 		Stop:        ^uint64(0), // Max uint64
 		ExitCode:    ^uint32(0), // Max uint32
+		Breadcrumbs:  breadcrumbs,
 		IsRemote:    sessionIndex != 0,
 	})
 
@@ -1365,7 +1376,7 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 			return true
 		}
 	}
-
+	
 	switch traceType {
 	case TraceTypeSessionAdded:
 		return tr.handleSessionAdded(out, reader, time)
@@ -1423,8 +1434,14 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 		return tr.handleCacheBeginWrite(out, reader, time)
 	case TraceTypeCacheEndWrite:
 		return tr.handleCacheEndWrite(out, reader, time)
+	case TraceTypeFileFetchSize: 
+		return tr.handleFileFetchSize(out, reader)
+	case TraceTypeProcessBreadcrumbs:
+		return tr.handleProcessBreadcrumbs(out, reader)
+	case TraceTypeWorkHint:
+		return tr.handleWorkHint(out, reader, time)
 	case TraceTypeDriveUpdate:
-		return tr.handleDriveStats(out, reader)
+		return tr.handleDriverUpdate(out, reader)
 	}
 
 	return true
@@ -1703,8 +1720,6 @@ func (tr *TraceReader) handleProcessAdded(out *TraceView, reader *BinaryReader, 
 		} else {
 			breadcrumbs, _ = reader.ReadLongString()
 		}
-		// TODO: 使用 breadcrumbs 数据，暂时避免未使用变量警告
-		_ = breadcrumbs
 	}
 	if err != nil {
 		return false
@@ -1718,7 +1733,7 @@ func (tr *TraceReader) handleProcessAdded(out *TraceView, reader *BinaryReader, 
 		}
 	}
 
-	tr.ProcessBegin(out, sessionIndex, id, time, desc)
+	tr.ProcessBegin(out, sessionIndex, id, time, desc, breadcrumbs)
 	return true
 }
 
@@ -2347,7 +2362,7 @@ func (tr *TraceReader) handleCacheBeginFetch(out *TraceView, reader *BinaryReade
 		return false
 	}
 
-	process := tr.ProcessBegin(out, 0, id, time, desc)
+	process := tr.ProcessBegin(out, 0, id, time, desc, "")
 	if process != nil {
 		process.CacheFetch = true
 	}
@@ -2427,7 +2442,179 @@ func (tr *TraceReader) handleCacheEndWrite(out *TraceView, reader *BinaryReader,
 
 	return true
 }
-func (tr *TraceReader) handleDriveStats(out *TraceView, reader *BinaryReader) bool {
+
+func (tr *TraceReader) handleFileFetchSize(out *TraceView, reader *BinaryReader) bool {
+	// 读取数据
+	clientUid := tr.ReadClientId(out, reader)
+	key := reader.ReadCasKey()
+	fileSize := reader.Read7BitEncoded()
+
+	// 获取会话
+	session := tr.GetSessionByUID(out, clientUid)
+	if session == nil {
+		return false
+	}
+
+	// 查找活跃文件
+	fileIndex, exists := session.FetchedFilesActive[key]
+	if !exists {
+		return false
+	}
+
+	// 更新文件大小
+	file := session.FetchedFiles[fileIndex]
+	if file == (FileTransfer{}) {
+		return false
+	}
+
+	file.Size = fileSize
+	return true
+}
+type BreadcrumbWriter func(process *Process)
+
+func createBreadcrumbWriter(breadcrumbs string, deleteOld bool) BreadcrumbWriter {
+	return func(process *Process) {
+		if deleteOld {
+			process.Breadcrumbs = ""
+		} else if process.Breadcrumbs != "" {
+			process.Breadcrumbs += "\n"
+		}
+		process.Breadcrumbs += string(breadcrumbs)
+	}
+}
+
+func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryReader) bool {
+	// 读取数据
+	processId := reader.ReadU32()
+	
+	var breadcrumbs string
+	var err error
+	if out.Version < 38 {
+		breadcrumbs, err = reader.ReadString()
+	} else {
+		breadcrumbs, err = reader.ReadLongString()
+	}
+	if err != nil {
+		return false
+	}
+
+	deleteOld := reader.ReadBool()
+
+	// 创建面包屑写入函数
+	writeBreadcrumb := createBreadcrumbWriter(breadcrumbs, deleteOld)
+
+	// 首先在活动进程中查找
+	if activeInfo, exists := tr.activeProcesses[processId]; exists {
+		session := tr.GetSession(out, activeInfo.SessionIndex)
+		if session == nil {
+			return false
+		}
+		
+		if int(activeInfo.ProcessorIndex) >= len(session.Processors) {
+			return false
+		}
+		processor := session.Processors[activeInfo.ProcessorIndex]
+		if int(activeInfo.ProcessIndex) >= len(processor.Processes) {
+			return false
+		}
+		
+		process := processor.Processes[activeInfo.ProcessIndex]
+		writeBreadcrumb(&process)
+		return true
+	}
+
+	// 如果不在活动进程中，进行全量搜索
+	found := false
+	for _, session := range out.Sessions {
+		for _, processor := range session.Processors {
+			for _, process := range processor.Processes {
+				if process.ID == processId {
+					writeBreadcrumb(&process)
+					found = true
+					// 注意：这里不立即返回，继续搜索所有匹配的进程
+					// 根据业务需求决定是否应该返回
+				}
+			}
+		}
+	}
+
+	return found 
+}
+func (tr *TraceReader) handleWorkHint(out *TraceView, reader *BinaryReader, time uint64) bool {
+	// 读取基本数据
+	workIndex := uint32(reader.Read7BitEncoded())
+	stringIndex := reader.Read7BitEncoded()
+	startTimeRaw := reader.Read7BitEncoded()
+	startTime := ConvertTime(out, startTimeRaw)
+
+	// 查找工作记录
+	active, exists := tr.activeWorkRecords[workIndex]
+	if !exists {
+		return false
+	}
+
+	// 获取文本
+	text:= out.Strings[stringIndex]
+	if text == "" {
+		return false
+
+	}
+
+	// 获取工作记录
+	track := out.WorkTracks[active.Track]
+	if int(active.Index) >= len(track.Records) {
+		return false
+	}
+
+	record := track.Records[active.Index]
+	handled := false
+
+	// 如果存在开始时间，尝试合并现有条目
+	if startTime > 0 {
+		// 反向遍历条目（从最新到最旧）
+		for i := len(record.Entries) - 1; i >= 0; i-- {
+			entry := &record.Entries[i]
+			
+			// 如果遇到没有开始时间的条目，停止搜索
+			if entry.StartTime == 0 {
+				break
+			}
+			
+			// 文本不匹配，继续搜索
+			if entry.Text != text {
+				continue
+			}
+
+			// 找到匹配的条目，增加计数并更新时间
+			entry.Count++
+			entryTime := entry.Time - entry.StartTime
+			newTime := time - startTime
+
+			if newTime > entryTime {
+				entry.Time = time
+				entry.StartTime = startTime
+			}
+
+			handled = true
+			break
+		}
+	}
+
+	// 如果没有处理过，添加新条目
+	if !handled {
+		newEntry := WorkRecordLogEntry{
+			Time:      time,
+			StartTime: startTime,
+			Text:      text,
+			Count:     1,
+		}
+		record.Entries = append(record.Entries, newEntry)
+	}
+
+	return true
+}
+
+func (tr *TraceReader) handleDriverUpdate(out *TraceView, reader *BinaryReader) bool {
 	// 读取驱动数据
 	driveLetter := reader.ReadByte()
 	busyPercent := reader.ReadByte()
