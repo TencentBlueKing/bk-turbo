@@ -1,8 +1,10 @@
 import com.tencent.devops.utils.findPropertyOrEmpty
+
 plugins {
 	id("com.tencent.devops.boot") version "0.0.6"
 	id("org.owasp.dependencycheck") version "7.1.0.1"
     kotlin("jvm") version "1.6.0"
+    id("io.github.gradle-nexus.publish-plugin")
 }
 
 allprojects {
