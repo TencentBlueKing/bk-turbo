@@ -12,6 +12,7 @@ package manager
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -51,6 +52,8 @@ func NewMgr(conf *config.ServerConfig) types.Mgr {
 		globalWork:        newGlobalWork(conf),
 		netCounters:       make(map[string]net.IOCountersStat),
 		hasWorkUnregisted: false,
+		checkduration:     3600 * time.Second,
+		deleteduration:    3600 * 12 * time.Second,
 	}
 }
 
@@ -75,6 +78,12 @@ type mgr struct {
 
 	localResourceTaskMutex sync.Mutex
 	localResourceTaskNum   int32
+
+	ubachecked       bool
+	lastcheckubatime time.Time
+	checkduration    time.Duration
+	deleteduration   time.Duration
+	checkubalock     sync.RWMutex
 }
 
 // Run brings up the manager handler
@@ -366,8 +375,8 @@ func (m *mgr) UnlockLocalSlots(workID string, usage dcSDK.JobUsage, weight int32
 // ExecuteLocalTask do task for work
 func (m *mgr) ExecuteLocalTask(
 	workID string, req *types.LocalTaskExecuteRequest) (*types.LocalTaskExecuteResult, error) {
-	blog.Infof("mgr: try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
-		workID, req.Pid, req.Environments, req.Commands)
+	blog.Infof("mgr(%s): try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
+		req.Stats.ID, workID, req.Pid, req.Environments, req.Commands)
 
 	var work *types.Work
 	var err error
@@ -375,7 +384,7 @@ func (m *mgr) ExecuteLocalTask(
 		if m.conf.UseDefaultWorker {
 			work, err = m.worksPool.getFirstBazelNoLauncherWork()
 			if err != nil {
-				blog.Errorf("mgr: get first work failed: %v", err)
+				blog.Errorf("mgr(%s): get first work failed: %v", req.Stats.ID, err)
 				return nil, err
 			}
 		} else {
@@ -384,14 +393,14 @@ func (m *mgr) ExecuteLocalTask(
 	} else {
 		work, err = m.worksPool.getWork(workID)
 		if err != nil {
-			blog.Errorf("mgr: get work(%s) failed: %v", workID, err)
+			blog.Errorf("mgr(%s): get work(%s) failed: %v", req.Stats.ID, workID, err)
 			return nil, err
 		}
 	}
 
 	if !work.Basic().Info().IsWorking() {
-		blog.Errorf("mgr: execute local task for work(%s) from pid(%d) failed: %v",
-			workID, req.Pid, types.ErrWorkIsNotWorking)
+		blog.Errorf("mgr(%s): execute local task for work(%s) from pid(%d) failed: %v",
+			req.Stats.ID, workID, req.Pid, types.ErrWorkIsNotWorking)
 		return nil, types.ErrWorkIsNotWorking
 	}
 
@@ -418,8 +427,8 @@ func (m *mgr) ExecuteLocalTask(
 	result, err := work.Local().ExecuteTask(req, globalWork, m.canUseLocalIdleResource(), func() string {
 		resExecMode = m.selectResourceExecutionMode(work)
 		if resExecMode != types.WaitResourceMode {
-			blog.Infof("mgr: check run with local resource for work(%s) from pid(%d) got mode %v",
-				workID, req.Pid, resExecMode)
+			blog.Infof("mgr(%s): check run with local resource for work(%s) from pid(%d) got mode %v",
+				req.Stats.ID, workID, req.Pid, resExecMode)
 		}
 		return resExecMode
 	})
@@ -433,12 +442,12 @@ func (m *mgr) ExecuteLocalTask(
 				Message:  "unknown reason",
 			}}
 		}
-		blog.Errorf("mgr: execute local task for work(%s) from pid(%d) failed: %v", workID, req.Pid, err)
+		blog.Errorf("mgr(%s): execute local task for work(%s) from pid(%d) failed: %v", req.Stats.ID, workID, req.Pid, err)
 		return result, nil
 	}
 
-	blog.Infof("mgr: success to execute local task for work(%s) from pid(%d) and get exit code(%d)",
-		workID, req.Pid, result.Result.ExitCode)
+	blog.Infof("mgr(%s): success to execute local task for work(%s) from pid(%d) and get exit code(%d)",
+		req.Stats.ID, workID, req.Pid, result.Result.ExitCode)
 	return result, nil
 }
 
@@ -952,19 +961,75 @@ func (m *mgr) GetFirstBazelNoLauncherWorkID() (string, error) {
 }
 
 // GetAllWorkers return all workers
-func (m *mgr) GetAllWorkers() []string {
+func (m *mgr) GetAllWorkers(ubainfo types.UbaInfo) []string {
+	// 添加lock，避免该接口和register冲突
+	m.registerMutex.Lock()
+	defer m.registerMutex.Unlock()
+
 	var allworkers []string
 	if m.worksPool != nil {
 		for _, work := range m.worksPool.all() {
 			if work.Remote() != nil {
 				allworkers = append(allworkers, work.Remote().GetAllWorkers()...)
 			}
+			if work.Basic() != nil {
+				work.Basic().SetUbaInfo(ubainfo)
+			}
 		}
 	}
 
 	if m.globalWork != nil && m.globalWork.Remote() != nil {
 		allworkers = append(allworkers, m.globalWork.Remote().GetAllWorkers()...)
+		if m.globalWork.Basic() != nil {
+			m.globalWork.Basic().SetUbaInfo(ubainfo)
+		}
+	}
+
+	if ubainfo.TraceFile != "" {
+		go m.checkubadir(ubainfo.TraceFile)
 	}
 
 	return allworkers
+}
+
+func (m *mgr) checkubadir(ubafile string) error {
+	m.checkubalock.Lock()
+	defer m.checkubalock.Unlock()
+
+	if m.ubachecked {
+		if m.lastcheckubatime.After(time.Now().Add(-1 * m.checkduration)) {
+			return nil
+		}
+	}
+
+	m.ubachecked = true
+	m.lastcheckubatime = time.Now()
+	// 获取uba目录路径（向上两级）
+	dir := filepath.Dir(filepath.Dir(ubafile))
+	blog.Infof("mgr: check uba file dir: %s", dir)
+
+	f, err := os.Open(dir)
+	if err != nil {
+		blog.Warnf("mgr: failed to open dir %s with error:%v", dir, err)
+		return err
+	}
+	fis, _ := f.Readdir(-1)
+	f.Close()
+
+	t := time.Now().Add(-1 * m.deleteduration)
+	blog.Infof("mgr: uba dir %s time:%s", dir, t)
+	fullpath := ""
+	for _, fi := range fis {
+		if fi.ModTime().After(t) {
+			continue
+		}
+		fullpath = filepath.Join(dir, fi.Name())
+		if strings.HasPrefix(ubafile, fullpath) {
+			continue
+		}
+		blog.Infof("mgr: ready remove uba dir:%s modify time:%s", fullpath, fi.ModTime())
+		os.RemoveAll(fullpath)
+	}
+
+	return nil
 }

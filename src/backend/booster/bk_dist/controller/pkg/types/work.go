@@ -12,6 +12,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,11 @@ const (
 
 	GlobalRecorderKey = "global_records"
 )
+
+type UbaInfo struct {
+	TraceFile  string            `json:"tracefile"`
+	SessionMap map[string]string `json:"sessionmap"`
+}
 
 // MgrSet describe the newer functions for work
 type MgrSet struct {
@@ -535,6 +541,7 @@ func (wcs *WorkCommonStatus) changeStatus(status dcSDK.WorkStatus) {
 // NewWorkAnalysisStatus get a new WorkAnalysisStatus
 func NewWorkAnalysisStatus() *WorkAnalysisStatus {
 	return &WorkAnalysisStatus{
+		ubainfos: make(map[string]UbaInfo),
 		indexMap: make(map[string]int),
 		jobs:     make([]*dcSDK.ControllerJobStats, 0, 1000),
 	}
@@ -543,12 +550,115 @@ func NewWorkAnalysisStatus() *WorkAnalysisStatus {
 // WorkAnalysisStatus describe the work analyasus status
 type WorkAnalysisStatus struct {
 	mutex    sync.RWMutex
+	ubainfos map[string]UbaInfo
 	indexMap map[string]int
 	jobs     []*dcSDK.ControllerJobStats
 }
 
+func (was *WorkAnalysisStatus) SetUbaInfo(ubainfo UbaInfo) {
+	was.mutex.Lock()
+	defer was.mutex.Unlock()
+	was.ubainfos[ubainfo.TraceFile] = ubainfo
+}
+
+// 将微秒时间戳转换为 time.Time
+func MicrosecondsToTime(us int64) time.Time {
+	// 1 微秒 = 1000 纳秒
+	return time.Unix(0, us*1000)
+}
+
+func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid string) error {
+	traceView, err := ReadUBAFile(ubainfo.TraceFile)
+	if err == nil && traceView != nil {
+		for _, s := range traceView.Sessions {
+			ip := ""
+			if sip, ok := ubainfo.SessionMap[s.Name]; ok {
+				ip = sip
+			}
+			for _, processor := range s.Processors {
+				// convert processes to []*dcSDK.ControllerJobStats
+				for _, process := range processor.Processes {
+					flag := s.FullName + "_" + process.Description
+					start := float64(process.Start) / float64(traceView.Frequency)
+					stop := float64(process.Stop) / float64(traceView.Frequency)
+
+					startus := uint64(start*1000000) + traceView.SystemStartTimeUs
+					stopus := uint64(stop*1000000) + traceView.SystemStartTimeUs
+					fmt.Printf("flag:[%s]start[%s]stop[%s]\n",
+						flag,
+						formatTimeUS(int64(startus)),
+						formatTimeUS(int64(stopus)))
+
+					var stats dcSDK.ControllerJobStats
+					stats.ID = flag
+					stats.EnterTime = dcSDK.StatsTime(MicrosecondsToTime(int64(startus)))
+					stats.LeaveTime = dcSDK.StatsTime(MicrosecondsToTime(int64(stopus)))
+					stats.Success = process.ExitCode == 0
+					if process.IsRemote {
+						stats.RemoteWorkEnterTime = stats.EnterTime
+						stats.RemoteWorkLeaveTime = stats.LeaveTime
+						stats.RemoteWorkStartTime = stats.EnterTime
+						stats.RemoteWorkEndTime = stats.LeaveTime
+						stats.RemoteWorkProcessStartTime = stats.EnterTime
+						stats.RemoteWorkProcessEndTime = stats.LeaveTime
+						stats.RemoteWorker = ip
+						stats.PreWorkSuccess = stats.Success
+						stats.RemoteWorkSuccess = stats.Success
+						stats.PostWorkSuccess = stats.Success
+						stats.FinalWorkSuccess = stats.Success
+					} else {
+						stats.LocalWorkEnterTime = stats.EnterTime
+						stats.LocalWorkLeaveTime = stats.LeaveTime
+						stats.LocalWorkStartTime = stats.EnterTime
+						stats.LocalWorkEndTime = stats.LeaveTime
+						stats.LocalWorkLockTime = stats.EnterTime
+						stats.LocalWorkUnlockTime = stats.LeaveTime // 方便显示
+						stats.LocalWorkSuccess = stats.Success
+					}
+					if len(stats.OriginArgs) == 0 {
+						stats.OriginArgs = []string{guessCommand(process.Description), process.Description}
+					}
+					stats.TaskID = taskid
+					stats.WorkID = workid
+
+					was.Update(&stats)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func guessCommand(describe string) string {
+	suffix := filepath.Ext(describe)
+	switch suffix {
+	case ".cpp", ".c", ".cc", ".cxx", ".C", ".CXX", ".h":
+		return "cl.exe"
+	case ".dll":
+		return "link.exe"
+	case ".lib":
+		return "lib.exe"
+	case ".rc2", ".rc":
+		return "rc.exe"
+	case ".ispc":
+		return "ispc.exe"
+	case ".bat":
+		return "cmd.exe"
+	case ".target", ".version":
+		return "dotnet.exe"
+	}
+	return "other.exe"
+}
+
 // DumpJobs encode WorkAnalysisStatus into json bytes
-func (was *WorkAnalysisStatus) DumpJobs() []byte {
+func (was *WorkAnalysisStatus) DumpJobs(taskid, workid string) []byte {
+	if len(was.ubainfos) > 0 {
+		for _, ubainfo := range was.ubainfos {
+			was.readUBAFile(ubainfo, taskid, workid)
+		}
+	}
+
 	var data []byte
 	_ = codec.EncJSON(was.jobs, &data)
 	return data

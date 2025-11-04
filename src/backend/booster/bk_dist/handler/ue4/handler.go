@@ -80,6 +80,13 @@ func (u *UE4) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	u.initInnerHandleSanbox()
 }
 
+// SetJobID set jobID to task
+func (u *UE4) SetJobID(jobID string) {
+	if u.innerhandler != nil {
+		u.innerhandler.SetJobID(jobID)
+	}
+}
+
 // InitExtra no need
 func (u *UE4) InitExtra(extra []byte) {
 }

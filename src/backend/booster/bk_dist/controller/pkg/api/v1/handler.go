@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
@@ -39,9 +40,29 @@ func available(_ *restful.Request, resp *restful.Response) {
 }
 
 func listresource(req *restful.Request, resp *restful.Response) {
-	blog.Infof("api: got listresource request body [%s]", req.Request.Body)
+	// blog.Infof("api: got listresource request body [%s]", req.Request.Body)
+	tracefile := req.QueryParameter(listresourceTraceFile)
+	sessionmapstr := req.QueryParameter(listresourceSessionmap)
+	blog.Infof("api: got listresource request with tracefile[%s] sessionmap[%s]",
+		tracefile,
+		sessionmapstr)
+
+	sessionmap := make(map[string]string)
+	if sessionmapstr != "" {
+		fields := strings.Split(sessionmapstr, "|")
+		for _, v := range fields {
+			kv := strings.Split(v, ":")
+			if len(kv) == 2 {
+				sessionmap[kv[0]] = kv[1]
+			}
+		}
+	}
+
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &ListResourceResp{
-		Resources: defaultManager.GetAllWorkers(),
+		Resources: defaultManager.GetAllWorkers(types.UbaInfo{
+			TraceFile:  tracefile,
+			SessionMap: sessionmap,
+		}),
 	}})
 }
 

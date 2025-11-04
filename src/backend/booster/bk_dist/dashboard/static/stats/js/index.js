@@ -636,7 +636,7 @@ function calculate_jobs_data() {
             tbs_direct_hit += 1
         }
 
-        if (data.remote_work_start_time > 0 && !data.remote_work_success) {
+        if (data.remote_work_start_time > 0 && (!data.remote_work_success || data.remote_work_fatal)) {
             remote_fatal_count += 1
             remote_fatal.push(data)
         }
@@ -800,7 +800,7 @@ function calculate_jobs_data() {
         }
 
         // remote work receive
-        if (data.remote_work_success) {
+        if (data.remote_work_success && !data.remote_work_fatal) {
             time = data.remote_work_receive_end_time - data.remote_work_receive_start_time
 
             if (time > remote_work_receive_longest_time) {

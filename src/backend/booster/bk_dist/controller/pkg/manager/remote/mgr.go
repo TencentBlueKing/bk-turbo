@@ -537,7 +537,7 @@ func (m *Mgr) callback4ResChanged() error {
 	hl := m.work.Resource().GetHosts()
 	// init pod name for hosts
 	info := m.work.Resource().GetStatus()
-	if info.HostNameMap != nil {
+	if info != nil && info.HostNameMap != nil {
 		for i, h := range hl {
 			if _, ok := info.HostNameMap[h.Server]; ok {
 				if hl[i].Name == "" {
@@ -901,8 +901,8 @@ func (m *Mgr) retryFailFiles(ctx context.Context) {
 
 func checkHttpConn(req *types.RemoteTaskExecuteRequest) (*types.RemoteTaskExecuteResult, error) {
 	if !types.IsHttpConnStatusOk(req.HttpConnCache, req.HttpConnKey) {
-		blog.Errorf("remote: httpconncache exit execute pid(%d) for http connection[%s] error",
-			req.Pid, req.HttpConnKey)
+		blog.Errorf("remote(%s): httpconncache exit execute pid(%d) for http connection[%s] error",
+			req.Stats.ID, req.Pid, req.HttpConnKey)
 		return nil, types.ErrLocalHttpConnDisconnected
 	}
 
@@ -919,8 +919,8 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		req.Sandbox = &dcSyscall.Sandbox{}
 	}
 
-	blog.Infof("remote: try to execute remote task for work(%s) from pid(%d) with timeout(%d)",
-		m.work.ID(), req.Pid, req.IOTimeout)
+	blog.Infof("remote(%s): try to execute remote task for work(%s) from pid(%d) with timeout(%d)",
+		req.Stats.ID, m.work.ID(), req.Pid, req.IOTimeout)
 	defer m.work.Basic().UpdateJobStats(req.Stats)
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkEnterTime)
@@ -972,8 +972,8 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 		if len(availableHost) > 0 {
 			if strings.Contains(req.Req.Commands[0].ExeToolChainKey, types.UbaAgent) {
-				blog.Infof("remote: work(%s) pid(%d) found ubaagent, cancel resource check",
-					m.work.ID(), req.Pid)
+				blog.Infof("remote(%s): work(%s) pid(%d) found ubaagent, cancel resource check",
+					req.Stats.ID, m.work.ID(), req.Pid)
 				m.needResourceCheck = false
 			}
 
@@ -1009,8 +1009,8 @@ func (m *Mgr) realExecuteRequest(
 	req *types.RemoteTaskExecuteRequest,
 	host *dcProtocol.Host,
 	needAdjustInputStatus bool) (*types.RemoteTaskExecuteResult, error) {
-	blog.Debugf("remote: try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v",
-		m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
+	blog.Debugf("remote(%s): try to execute remote task for work(%s) from pid(%d) with ban worker list %d, %v",
+		req.Stats.ID, m.work.ID(), req.Pid, len(req.BanWorkerList), req.BanWorkerList)
 
 	var fpath string
 	if host == nil {
@@ -1022,12 +1022,12 @@ func (m *Mgr) realExecuteRequest(
 	}
 
 	if req.Server == nil {
-		blog.Infof("remote: no available worker for work(%s) from pid(%d) with(%d) ban worker",
-			m.work.ID(), req.Pid, len(req.BanWorkerList))
+		blog.Infof("remote(%s): no available worker for work(%s) from pid(%d) with(%d) ban worker",
+			req.Stats.ID, m.work.ID(), req.Pid, len(req.BanWorkerList))
 		return nil, errors.New("no available worker")
 	}
-	blog.Infof("remote: selected host(%s) with large file(%s) for work(%s) from pid(%d)",
-		req.Server.Server, fpath, m.work.ID(), req.Pid)
+	blog.Infof("remote(%s): selected host(%s) with large file(%s) for work(%s) from pid(%d)",
+		req.Stats.ID, req.Server.Server, fpath, m.work.ID(), req.Pid)
 
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkLockTime)
 	defer dcSDK.StatsTimeNow(&req.Stats.RemoteWorkUnlockTime)
@@ -1052,9 +1052,9 @@ func (m *Mgr) realExecuteRequest(
 	// 1. send toolchain if required  2. adjust exe remote path for req
 	err = m.sendToolchain(handler, req)
 	if err != nil {
-		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
+		blog.Errorf("remote(%s): execute remote task for work(%s) from pid(%d) to server(%s), "+
 			"ensure tool chain failed: %v, going to disable host(%s)",
-			m.work.ID(), req.Pid, req.Server.Server, err, req.Server.Server)
+			req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err, req.Server.Server)
 
 		m.resource.DisableWorker(req.Server)
 		return nil, err
@@ -1064,8 +1064,9 @@ func (m *Mgr) realExecuteRequest(
 	if err != nil {
 		return ret, err
 	}
-
-	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
+	blog.Infof("remote(%s): try to ensure files before real remote execute for work(%s) from pid(%d)",
+		req.Stats.ID, m.work.ID(), req.Pid)
+	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Stats.ID, req.Sandbox, getFileDetailsFromExecuteRequest(req))
 	if err != nil {
 		matched := false
 		for _, h := range req.BanWorkerList {
@@ -1081,16 +1082,16 @@ func (m *Mgr) realExecuteRequest(
 		for _, s := range req.BanWorkerList {
 			banlistStr = banlistStr + s.Server + ","
 		}
-		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
+		blog.Errorf("(remote(%s)): execute remote task for work(%s) from pid(%d) to server(%s), "+
 			"ensure files failed: %v, after add failed server, banworkerlist is %s",
-			m.work.ID(), req.Pid, req.Server.Server, err, banlistStr)
+			req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err, banlistStr)
 		return nil, err
 	}
 
 	if needAdjustInputStatus {
 		if err = updateTaskRequestInputFilesReady(req, remoteDirs); err != nil {
-			blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-				"update task input files ready failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+			blog.Errorf("remote(%s): execute remote task for work(%s) from pid(%d) to server(%s), "+
+				"update task input files ready failed: %v", req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err)
 			return nil, err
 		}
 	}
@@ -1098,8 +1099,8 @@ func (m *Mgr) realExecuteRequest(
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkStartTime)
 	m.work.Basic().UpdateJobStats(req.Stats)
 
-	blog.Infof("remote: try to real execute remote task for work(%s) from pid(%d) with timeout(%d) after send files",
-		m.work.ID(), req.Pid, req.IOTimeout)
+	blog.Infof("remote(%s): try to real execute remote task for work(%s) from pid(%d) with timeout(%d) after send files",
+		req.Stats.ID, m.work.ID(), req.Pid, req.IOTimeout)
 
 	ret, err = checkHttpConn(req)
 	if err != nil {
@@ -1128,14 +1129,14 @@ func (m *Mgr) realExecuteRequest(
 		}
 
 		req.BanWorkerList = append(req.BanWorkerList, req.Server)
-		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-			"remote execute failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+		blog.Errorf("remote(%s): execute remote task for work(%s) from pid(%d) to server(%s), "+
+			"remote execute failed: %v", req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err)
 		return nil, err
 	}
 
 	req.Stats.RemoteWorkSuccess = true
-	blog.Infof("remote: success to execute remote task for work(%s) from pid(%d) to server(%s)",
-		m.work.ID(), req.Pid, req.Server.Server)
+	blog.Infof("remote(%s): success to execute remote task for work(%s) from pid(%d) to server(%s)",
+		req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server)
 	return &types.RemoteTaskExecuteResult{
 		Result: result,
 	}, nil
@@ -1153,6 +1154,7 @@ func (m *Mgr) SendFiles(req *types.RemoteTaskSendFileRequest) ([]string, error) 
 			nil,
 		),
 		req.Pid,
+		req.Stats.ID,
 		req.Sandbox,
 		getFileDetailsFromSendFileRequest(req),
 	)
@@ -1181,14 +1183,16 @@ func (m *Mgr) retrySendFiles(h *dcProtocol.Host, failFiles []dcSDK.FileDesc, hos
 func (m *Mgr) ensureFilesWithPriority(
 	handler dcSDK.RemoteWorkerHandler,
 	pid int,
+	id string,
 	sandbox *dcSyscall.Sandbox,
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
 	// 刷新优先级，windows的先不实现
-	if runtime.GOOS != osWindows && runtime.GOOS != osDarwin {
+	// if runtime.GOOS != osWindows && runtime.GOOS != osDarwin {
+	if runtime.GOOS != osWindows {
 		freshPriority(fileDetails)
 		for _, v := range fileDetails {
-			blog.Debugf("remote: after fresh Priority, file:%+v", *v)
+			blog.Debugf("remote(%s): after fresh Priority, file:%+v", id, *v)
 		}
 	}
 
@@ -1224,9 +1228,9 @@ func (m *Mgr) ensureFilesWithPriority(
 			continue
 		}
 
-		blog.Infof("remote: try to ensure priority(%d) files(%d) for work(%s) from pid(%d) dir(%s) to server",
-			i, len(*f), m.work.ID(), pid, sandbox.Dir)
-		r, err := m.ensureFiles(handler, pid, sandbox, *f)
+		blog.Infof("remote(%s): try to ensure priority(%d) files(%d) for work(%s) from pid(%d) dir(%s) to server",
+			id, i, len(*f), m.work.ID(), pid, sandbox.Dir)
+		r, err := m.ensureFiles(handler, pid, id, sandbox, *f)
 		if err != nil {
 			return nil, err
 		}
@@ -1289,11 +1293,12 @@ func (m *Mgr) checkAndSendCorkFiles(fs []*corkFile, server string, wg chan error
 func (m *Mgr) ensureFiles(
 	handler dcSDK.RemoteWorkerHandler,
 	pid int,
+	id string,
 	sandbox *dcSyscall.Sandbox,
 	fileDetails []*types.FilesDetails) ([]string, error) {
 
 	//settings := m.work.Basic().Settings()
-	blog.Infof("remote: try to ensure multi %d files for work(%s) from pid(%d) dir(%s) to server",
+	blog.Infof("remote(%s): try to ensure multi %d files for work(%s) from pid(%d) dir(%s) to server", id,
 		len(fileDetails), m.work.ID(), pid, sandbox.Dir)
 	//blog.Debugf("remote: try to ensure multi %d files for work(%s) from pid(%d) dir(%s) to server: %v",
 	//	len(fileDetails), m.work.ID(), pid, sandbox.Dir, fileDetails)
@@ -1312,7 +1317,7 @@ func (m *Mgr) ensureFiles(
 	// allServerCorkFiles := make(map[string]*[]*corkFile, 0)
 	filesNum := len(fileDetails)
 	for _, fd := range fileDetails {
-		blog.Debugf("remote: debug try to ensure file %+v", *fd)
+		blog.Debugf("remote(%s): debug try to ensure file %+v", id, *fd)
 
 		// 修改远程目录
 		f := fd.File
@@ -1335,7 +1340,7 @@ func (m *Mgr) ensureFiles(
 			r = append(r, "")
 			continue
 		}
-		blog.Debugf("remote: ensure file %s and match rule %d", fd.File.FilePath, t)
+		blog.Debugf("remote(%s): ensure file %s and match rule %d", id, fd.File.FilePath, t)
 		servers := make([]*dcProtocol.Host, 0, 0)
 		switch t {
 		//此处会导致文件不被发送，注释掉保证文件都在此处发送，共用内存锁避免OOM
@@ -1413,8 +1418,8 @@ func (m *Mgr) ensureFiles(
 		go func() {
 			for i := 0; i < count; i++ {
 				if err = <-wg; err != nil {
-					blog.Warnf("remote: failed to ensure multi %d files for work(%s) from pid(%d) to server with err:%v",
-						count, m.work.ID(), pid, err)
+					blog.Warnf("remote(%s): failed to ensure multi %d files for work(%s) from pid(%d) to server with err:%v",
+						id, count, m.work.ID(), pid, err)
 
 					// 异常情况下启动一个协程将剩余消息收完，避免发送协程阻塞
 					i++
@@ -1437,8 +1442,8 @@ func (m *Mgr) ensureFiles(
 		// 发送
 		if m.conf.SendCork {
 			// 批量发送模式
-			blog.Debugf("remote: ready to ensure multi %d cork files for work(%s) from pid(%d) to server",
-				count, m.work.ID(), pid)
+			blog.Debugf("remote(%s): ready to ensure multi %d cork files for work(%s) from pid(%d) to server",
+				id, count, m.work.ID(), pid)
 
 			for server, fs := range corkFiles {
 				totalFileNum := len(*fs)
@@ -1469,8 +1474,8 @@ func (m *Mgr) ensureFiles(
 					err <- m.ensureSingleFile(handler, host, req, sandbox)
 					d := time.Now().Local().Sub(t)
 					if d > 200*time.Millisecond {
-						blog.Debugf("remote: single file cost time for work(%s) from pid(%d) to server(%s): %s, %s",
-							m.work.ID(), pid, host.Server, d.String(), req.Files[0].FilePath)
+						blog.Debugf("remote(%s): single file cost time for work(%s) from pid(%d) to server(%s): %s, %s",
+							id, m.work.ID(), pid, host.Server, d.String(), req.Files[0].FilePath)
 					}
 				}(wg, f.host, sender)
 			}
@@ -1479,18 +1484,17 @@ func (m *Mgr) ensureFiles(
 		// 等待接收协程完成或者报错
 		err := <-receiveResult
 		if err != nil {
-			blog.Infof("remote: failed to ensure multi %d files for work(%s) from pid(%d) to server with error:%v",
-				count, m.work.ID(), pid, err)
+			blog.Infof("remote(%s): failed to ensure multi %d files for work(%s) from pid(%d) to server with error:%v",
+				id, count, m.work.ID(), pid, err)
 			return nil, err
 		}
 
-		blog.Infof("remote: success to ensure multi %d files for work(%s) from pid(%d) to server",
-			count, m.work.ID(), pid)
+		blog.Infof("remote(%s): success to ensure multi %d files for work(%s) from pid(%d) to server",
+			id, count, m.work.ID(), pid)
 		return r, nil
 	}
 
-	blog.Infof("remote: success to ensure multi %d files for work(%s) from pid(%d) to server",
-		count, m.work.ID(), pid)
+	blog.Infof("remote(%s): success to ensure multi %d files for work(%s) from pid(%d) to server", id, count, m.work.ID(), pid)
 
 	return r, nil
 }
@@ -1915,13 +1919,15 @@ func (m *Mgr) updateSendFile(server string, desc dcSDK.FileDesc, status types.Fi
 }
 
 func (m *Mgr) sendToolchain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest) error {
+	blog.Infof("remote(%s): execute remote task for work(%s) from pid(%d) to server(%s), ensure tool chain files",
+		req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server)
 	// TODO : update all file path for p2p
 	fileCollections := m.getToolChainFromExecuteRequest(req)
 	if fileCollections != nil && len(fileCollections) > 0 {
-		err := m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections)
+		err := m.sendFileCollectionOnce(handler, req.Pid, req.Stats.ID, req.Sandbox, req.Server, fileCollections)
 		if err != nil {
-			blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-				"ensure tool chain files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+			blog.Errorf("remote(%s): execute remote task for work(%s) from pid(%d) to server(%s), "+
+				"ensure tool chain files failed: %v", req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err)
 			return err
 		}
 
@@ -1930,16 +1936,16 @@ func (m *Mgr) sendToolchain(handler dcSDK.RemoteWorkerHandler, req *types.Remote
 		toolChainChanged, _ := m.isToolChainChanged(req, req.Server.Server)
 		finished, _ := m.isToolChainFinished(req, req.Server.Server)
 		for toolChainChanged || !finished {
-			blog.Infof("remote: found tool chain changed, ready clear tool chain status")
+			blog.Infof("remote(%s): found tool chain changed, ready clear tool chain status", req.Stats.ID)
 			m.clearOldFileCollectionFromCache(req.Server.Server, fileCollections)
 			fileCollections = m.getToolChainFromExecuteRequest(req)
 			if fileCollections != nil && len(fileCollections) > 0 {
-				blog.Infof("remote: found tool chain changed, send toolchain to server[%s] again",
-					req.Server.Server)
-				err = m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections)
+				blog.Infof("remote(%s): found tool chain changed, send toolchain to server[%s] again",
+					req.Stats.ID, req.Server.Server)
+				err = m.sendFileCollectionOnce(handler, req.Pid, req.Stats.ID, req.Sandbox, req.Server, fileCollections)
 				if err != nil {
-					blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
-						"ensure tool chain files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+					blog.Errorf("remote(%s): execute remote task for work(%s) from pid(%d) to server(%s), "+
+						"ensure tool chain files failed: %v", req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err)
 					return err
 				}
 			}
@@ -1983,18 +1989,18 @@ func (m *Mgr) getFailedFileCollectionByHost(server string) []*types.FileCollecti
 
 // retry send failed tool chain
 func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.RemoteTaskExecuteRequest, fileCollections []*types.FileCollectionInfo, host chan string) {
-	blog.Infof("remote: retry send tool chain for work(%s) from pid(%d) to server(%s)",
-		m.work.ID(), req.Pid, req.Server.Server)
-	err := m.sendFileCollectionOnce(handler, req.Pid, req.Sandbox, req.Server, fileCollections)
+	blog.Infof("remote(%s): retry send tool chain for work(%s) from pid(%d) to server(%s)",
+		req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server)
+	err := m.sendFileCollectionOnce(handler, req.Pid, req.Stats.ID, req.Sandbox, req.Server, fileCollections)
 	if err != nil {
-		blog.Errorf("remote: retry send tool chain for work(%s) from pid(%d) to server(%s), "+
-			"send tool chain files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
+		blog.Errorf("remote(%s): retry send tool chain for work(%s) from pid(%d) to server(%s), "+
+			"send tool chain files failed: %v", req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server, err)
 
 	} else {
 		// enable worker
 		m.resource.EnableWorker(req.Server)
-		blog.Infof("remote: success to retry send tool chain for work(%s) from pid(%d) to server(%s)",
-			m.work.ID(), req.Pid, req.Server.Server)
+		blog.Infof("remote(%s): success to retry send tool chain for work(%s) from pid(%d) to server(%s)",
+			req.Stats.ID, m.work.ID(), req.Pid, req.Server.Server)
 	}
 	host <- req.Server.Server
 }
@@ -2002,11 +2008,12 @@ func (m *Mgr) retrySendToolChain(handler dcSDK.RemoteWorkerHandler, req *types.R
 func (m *Mgr) sendFileCollectionOnce(
 	handler dcSDK.RemoteWorkerHandler,
 	pid int,
+	id string,
 	sandbox *dcSyscall.Sandbox,
 	server *dcProtocol.Host,
 	filecollections []*types.FileCollectionInfo) error {
-	blog.Infof("remote: try to send %d file collection for work(%s) from pid(%d) dir(%s) to server",
-		len(filecollections), m.work.ID(), pid, sandbox.Dir)
+	blog.Infof("remote(%s): try to send %d file collection for work(%s) from pid(%d) dir(%s) to server",
+		id, len(filecollections), m.work.ID(), pid, sandbox.Dir)
 
 	var err error
 	wg := make(chan error, len(filecollections)+1)
@@ -2014,7 +2021,7 @@ func (m *Mgr) sendFileCollectionOnce(
 	for _, fc := range filecollections {
 		count++
 		go func(err chan<- error, host *dcProtocol.Host, filecollection *types.FileCollectionInfo) {
-			err <- m.ensureOneFileCollection(handler, pid, host, filecollection, sandbox)
+			err <- m.ensureOneFileCollection(handler, pid, id, host, filecollection, sandbox)
 			// err <- m.ensureOneFileCollectionByFiles(handler, pid, host, filecollection, sandbox)
 		}(wg, server, fc)
 	}
@@ -2034,8 +2041,8 @@ func (m *Mgr) sendFileCollectionOnce(
 			return err
 		}
 	}
-	blog.Infof("remote: success to send %d file collection for work(%s) from pid(%d) to server",
-		count, m.work.ID(), pid)
+	blog.Infof("remote(%s): success to send %d file collection for work(%s) from pid(%d) to server",
+		id, count, m.work.ID(), pid)
 
 	return nil
 }
@@ -2080,18 +2087,19 @@ func (m *Mgr) getRetryFileDetails(server string, fc *types.FileCollectionInfo, s
 func (m *Mgr) ensureOneFileCollection(
 	handler dcSDK.RemoteWorkerHandler,
 	pid int,
+	id string,
 	host *dcProtocol.Host,
 	fc *types.FileCollectionInfo,
 	sandbox *dcSyscall.Sandbox) (err error) {
-	blog.Infof("remote: try to ensure one file collection(%s) for work(%s) to server(%s)",
-		fc.UniqID, m.work.ID(), host.Server)
+	blog.Infof("remote(%s): try to ensure one file collection(%s) for work(%s) to server(%s)",
+		id, fc.UniqID, m.work.ID(), host.Server)
 
 	status, ok := m.checkOrLockFileCollection(host.Server, fc)
 
 	// 已经有人发送了文件, 等待文件就绪
 	if ok {
-		blog.Infof("remote: try to ensure one file collection(%s) timestamp(%d) for work(%s) to server(%s), "+
-			"dealing(dealed) by other", fc.UniqID, fc.Timestamp, m.work.ID(), host.Server)
+		blog.Infof("remote(%s): try to ensure one file collection(%s) timestamp(%d) for work(%s) to server(%s), "+
+			"dealing(dealed) by other", id, fc.UniqID, fc.Timestamp, m.work.ID(), host.Server)
 		tick := time.NewTicker(m.checkSendFileTick)
 		defer tick.Stop()
 
@@ -2110,8 +2118,8 @@ func (m *Mgr) ensureOneFileCollection(
 		case types.FileSendFailed:
 			return types.ErrSendFileFailed
 		case types.FileSendSucceed:
-			blog.Infof("remote: success to ensure one file collection(%s) timestamp(%d) "+
-				"for work(%s) to server(%s)", fc.UniqID, fc.Timestamp, m.work.ID(), host.Server)
+			blog.Infof("remote(%s): success to ensure one file collection(%s) timestamp(%d) "+
+				"for work(%s) to server(%s)", id, fc.UniqID, fc.Timestamp, m.work.ID(), host.Server)
 			return nil
 		default:
 			return fmt.Errorf("unknown file send status: %s", status.String())
@@ -2129,9 +2137,9 @@ func (m *Mgr) ensureOneFileCollection(
 		needSentFiles = append(needSentFiles, fc.Files[i])
 	}
 
-	blog.Infof("remote: try to ensure one file collection(%s) timestamp(%d) filenum(%d) cache-hit(%d) "+
+	blog.Infof("remote(%s): try to ensure one file collection(%s) timestamp(%d) filenum(%d) cache-hit(%d) "+
 		"for work(%s) to server(%s), going to send this collection",
-		fc.UniqID, fc.Timestamp, len(needSentFiles), hit, m.work.ID(), host.Server)
+		id, fc.UniqID, fc.Timestamp, len(needSentFiles), hit, m.work.ID(), host.Server)
 
 	// ！！ 这个地方不需要了，需要注释掉，影响性能
 	// req := &dcSDK.BKDistFileSender{Files: needSentFiles}
@@ -2180,7 +2188,7 @@ func (m *Mgr) ensureOneFileCollection(
 		}
 	}
 
-	_, err = m.ensureFilesWithPriority(handler, pid, sandbox, fileDetails)
+	_, err = m.ensureFilesWithPriority(handler, pid, id, sandbox, fileDetails)
 	defer func() {
 		status := types.FileSendSucceed
 		if err != nil {
@@ -2190,13 +2198,13 @@ func (m *Mgr) ensureOneFileCollection(
 	}()
 
 	if err != nil {
-		blog.Errorf("remote: execute send file collection(%s) for work(%s) to server(%s) failed : %v ",
-			fc.UniqID, m.work.ID(), host.Server, err)
+		blog.Errorf("remote(%s): execute send file collection(%s) for work(%s) to server(%s) failed : %v ",
+			id, fc.UniqID, m.work.ID(), host.Server, err)
 		return err
 	}
 
-	blog.Debugf("remote: success to execute send file collection(%s) files(%+v) timestamp(%d) filenum(%d) "+
-		"for work(%s) to server(%s)", fc.UniqID, fc.Files, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
+	blog.Debugf("remote(%s): success to execute send file collection(%s) files(%+v) timestamp(%d) filenum(%d) "+
+		"for work(%s) to server(%s)", id, fc.UniqID, fc.Files, fc.Timestamp, len(fc.Files), m.work.ID(), host.Server)
 	return nil
 }
 
@@ -2542,11 +2550,11 @@ func (m *Mgr) getToolFileInfoByKey(key string) *types.FileCollectionInfo {
 }
 
 func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest) []*types.FileCollectionInfo {
-	blog.Debugf("remote: get toolchain with req:[%+v]", *req)
+	blog.Debugf("remote(%s): get toolchain with req:[%+v]", req.Stats.ID, *req)
 	fd := make([]*types.FileCollectionInfo, 0, 2)
 
 	for _, c := range req.Req.Commands {
-		blog.Debugf("remote: ready get toolchain with key:[%s]", c.ExeToolChainKey)
+		blog.Debugf("remote(%s): ready get toolchain with key:[%s]", req.Stats.ID, c.ExeToolChainKey)
 		//add additional files to all workers
 		if additionfd := m.getToolFileInfoByKey(dcSDK.GetAdditionFileKey()); additionfd != nil {
 			fd = append(fd, additionfd)
@@ -2559,9 +2567,9 @@ func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest
 				// TODO : 如果环境变量中指定了需要自动探测工具链，则需要自动探测
 				if dcSyscall.NeedSearchToolchain(req.Sandbox.Env) {
 					path := req.Sandbox.Env.GetOriginEnv("PATH")
-					blog.Infof("remote: start search toolchain with key:%s path:%s", c.ExeToolChainKey, path)
+					blog.Infof("remote(%s): start search toolchain with key:%s path:%s", req.Stats.ID, c.ExeToolChainKey, path)
 					err := m.work.Basic().SearchToolChain(c.ExeToolChainKey, path)
-					blog.Infof("remote: end search toolchain with key:%s error:%v", c.ExeToolChainKey, err)
+					blog.Infof("remote(%s): end search toolchain with key:%s error:%v", req.Stats.ID, c.ExeToolChainKey, err)
 
 					if err == nil {
 						toolfd = m.getToolFileInfoByKey(c.ExeToolChainKey)
@@ -2578,10 +2586,10 @@ func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest
 }
 
 func (m *Mgr) isToolChainChanged(req *types.RemoteTaskExecuteRequest, server string) (bool, error) {
-	blog.Debugf("remote: check tool chain changed with req:[%+v]", *req)
+	blog.Debugf("remote(%s): check tool chain changed with req:[%+v]", req.Stats.ID, *req)
 
 	for _, c := range req.Req.Commands {
-		blog.Debugf("remote: ready check toolchain changed with key:[%s]", c.ExeToolChainKey)
+		blog.Debugf("remote(%s): ready check toolchain changed with key:[%s]", req.Stats.ID, c.ExeToolChainKey)
 		//check additional files toolchain
 		timestamp, err := m.work.Basic().GetToolChainTimestamp(dcSDK.GetAdditionFileKey())
 		if err == nil {
@@ -2598,8 +2606,8 @@ func (m *Mgr) isToolChainChanged(req *types.RemoteTaskExecuteRequest, server str
 			if err == nil {
 				timestampcached, _ := m.getCachedToolChainTimestamp(server, c.ExeToolChainKey)
 				if timestamp != timestampcached {
-					blog.Infof("remote: found collection(%s) server(%s) cached timestamp(%d) "+
-						"newly timestamp(%d) changed", c.ExeToolChainKey, server, timestampcached, timestamp)
+					blog.Infof("remote(%s): found collection(%s) server(%s) cached timestamp(%d) "+
+						"newly timestamp(%d) changed", req.Stats.ID, c.ExeToolChainKey, server, timestampcached, timestamp)
 					return true, nil
 				}
 			}
@@ -2610,18 +2618,18 @@ func (m *Mgr) isToolChainChanged(req *types.RemoteTaskExecuteRequest, server str
 }
 
 func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server string) (bool, error) {
-	blog.Debugf("remote: check tool chain finished with req:[%+v]", *req)
+	blog.Debugf("remote(%s): check tool chain finished with req:[%+v]", req.Stats.ID, *req)
 
 	allfinished := true
 	for _, c := range req.Req.Commands {
-		blog.Debugf("remote: ready check toolchain finished with key:[%s]", c.ExeToolChainKey)
+		blog.Debugf("remote(%s): ready check toolchain finished with key:[%s]", req.Stats.ID, c.ExeToolChainKey)
 		//check additional files toolchain
 		if m.work.Basic().IsToolChainExsited(dcSDK.GetAdditionFileKey()) {
 			status, err := m.getCachedToolChainStatus(server, dcSDK.GetAdditionFileKey())
 			if err == nil {
 				if status != types.FileSendSucceed && status != types.FileSendFailed {
-					blog.Infof("remote: found collection(%s) server(%s) status(%d) not finished",
-						dcSDK.GetAdditionFileKey(), server, status)
+					blog.Infof("remote(%s): found collection(%s) server(%s) status(%d) not finished",
+						req.Stats.ID, dcSDK.GetAdditionFileKey(), server, status)
 					allfinished = false
 					return allfinished, nil
 				}
@@ -2632,8 +2640,8 @@ func (m *Mgr) isToolChainFinished(req *types.RemoteTaskExecuteRequest, server st
 				status, err := m.getCachedToolChainStatus(server, c.ExeToolChainKey)
 				if err == nil {
 					if status != types.FileSendSucceed && status != types.FileSendFailed {
-						blog.Infof("remote: found collection(%s) server(%s) status(%d) not finished",
-							c.ExeToolChainKey, server, status)
+						blog.Infof("remote(%s): found collection(%s) server(%s) status(%d) not finished",
+							req.Stats.ID, c.ExeToolChainKey, server, status)
 						allfinished = false
 						return allfinished, nil
 					}
@@ -2658,18 +2666,19 @@ func (m *Mgr) updateToolChainPath(req *types.RemoteTaskExecuteRequest) error {
 			if err != nil {
 				return fmt.Errorf("not found remote path for toolchain %s", c.ExeToolChainKey)
 			}
-			blog.Debugf("remote: before update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
-				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
+			blog.Debugf("remote(%s): before update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
+				req.Stats.ID, c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
 			req.Req.Commands[i].Inputfiles = append(req.Req.Commands[i].Inputfiles, dcSDK.FileDesc{
 				FilePath:           c.ExeName,
 				Compresstype:       dcProtocol.CompressLZ4,
 				FileSize:           -1,
+				InitFileSize:       -1,
 				Lastmodifytime:     0,
 				Md5:                "",
 				Targetrelativepath: remotepath,
 			})
-			blog.Debugf("remote: after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
-				c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
+			blog.Debugf("remote(%s): after update toolchain with key:[%s],remotepath:[%s],inputfiles:%+v",
+				req.Stats.ID, c.ExeToolChainKey, remotepath, req.Req.Commands[i].Inputfiles)
 		}
 	}
 	return nil
@@ -2952,13 +2961,14 @@ func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
 		m.resource.CountWorkerError(w)
 		if m.resource.IsWorkerDead(w, m.conf.NetErrorLimit) {
 			m.resource.WorkerDead(w)
-			blog.Errorf("remote: server(%s) in work(%s) has the %dth continuous net errors:(%v), "+
-				"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
+			blog.Errorf("remote(%s): server(%s) in work(%s) has the %dth continuous net errors:(%v), "+
+				"make it dead", req.Stats.ID, req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
 		}
 		break
 	}
 }
 
+// GetAllWorkers get all workers
 func (m *Mgr) GetAllWorkers() []string {
 	if m.resource == nil {
 		return nil

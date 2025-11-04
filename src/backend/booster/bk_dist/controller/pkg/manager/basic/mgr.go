@@ -550,3 +550,9 @@ func (m *Mgr) SearchToolChain(cmd, path string) error {
 
 	return nil
 }
+
+func (m *Mgr) SetUbaInfo(ubaInfo types.UbaInfo) {
+	if m.analysisStatus != nil {
+		m.analysisStatus.SetUbaInfo(ubaInfo)
+	}
+}
