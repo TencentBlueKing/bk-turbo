@@ -6,7 +6,6 @@ plugins {
 
 nexusPublishing {
     repositories {
-
         sonatype {
             nexusUrl.set(uri(MavenUtil.getUrl(project)))
             snapshotRepositoryUrl.set(uri(MavenUtil.getUrl(project)))

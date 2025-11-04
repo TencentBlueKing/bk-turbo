@@ -11,7 +11,7 @@ allprojects {
     group = "com.tencent.bk.devops.turbo"
 
     version = (System.getProperty("turbo_version") ?: "0.0.2") +
-        if (System.getProperty("snapshot") == "true") "-SNAPSHOT" else "-RELEASE"
+        if (System.getProperty("snapshot") == "true") "-SNAPSHOT" else ""
 
     apply(plugin = "com.tencent.devops.boot")
 
