@@ -98,6 +98,15 @@ publishing {
                     developerConnection.set("scm:git:git@github.com:Tencent/bk-ci.git")
                 }
             }
+
+            versionMapping {
+                usage("java-api") {
+                    fromResolutionOf("runtimeClasspath")
+                }
+                usage("java-runtime") {
+                    fromResolutionResult()
+                }
+            }
         }
     }
     repositories {
