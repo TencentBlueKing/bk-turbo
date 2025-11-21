@@ -207,12 +207,11 @@ type Session struct {
 }
 
 // WorkRecordLogEntry represents a work record log entry
-type WorkRecordLogEntry struct
-{
-	Time uint64
+type WorkRecordLogEntry struct {
+	Time      uint64
 	StartTime uint64
-	Text string
-	Count uint32
+	Text      string
+	Count     uint32
 }
 
 // WorkRecord represents a work record
@@ -220,7 +219,7 @@ type WorkRecord struct {
 	Description  string
 	Start        uint64
 	Stop         uint64
-	Entries 	 []WorkRecordLogEntry 
+	Entries      []WorkRecordLogEntry
 	BitmapOffset uint32
 }
 
@@ -1283,7 +1282,7 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 		Start:       time,
 		Stop:        ^uint64(0), // Max uint64
 		ExitCode:    ^uint32(0), // Max uint32
-		Breadcrumbs:  breadcrumbs,
+		Breadcrumbs: breadcrumbs,
 		IsRemote:    sessionIndex != 0,
 	})
 
@@ -1355,6 +1354,8 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 	traceType := reader.ReadByte()
 	var time uint64 = 0
 
+	blog.Debugf("ubatrace: got trace type: %d", traceType)
+
 	// Count trace types
 	if traceTypeCounts != nil {
 		traceTypeCounts[traceType]++
@@ -1376,7 +1377,7 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 			return true
 		}
 	}
-	
+
 	switch traceType {
 	case TraceTypeSessionAdded:
 		return tr.handleSessionAdded(out, reader, time)
@@ -1434,7 +1435,7 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 		return tr.handleCacheBeginWrite(out, reader, time)
 	case TraceTypeCacheEndWrite:
 		return tr.handleCacheEndWrite(out, reader, time)
-	case TraceTypeFileFetchSize: 
+	case TraceTypeFileFetchSize:
 		return tr.handleFileFetchSize(out, reader)
 	case TraceTypeProcessBreadcrumbs:
 		return tr.handleProcessBreadcrumbs(out, reader)
@@ -1881,7 +1882,10 @@ func (tr *TraceReader) handleProcessEnvironmentUpdated(out *TraceView, reader *B
 
 	// Read ProcessStats, SessionStats, StorageStats, KernelStats
 	processStats := reader.ReadProcessStats(out.Version)
-	sessionStats := reader.ReadSessionStats(out.Version)
+	var sessionStats SessionStats
+	if process.IsRemote || out.Version < 35 {
+		sessionStats = reader.ReadSessionStats(out.Version)
+	}
 	storageStats := reader.ReadStorageStats(out.Version)
 	kernelStats := reader.ReadKernelStats(out.Version)
 
@@ -1898,6 +1902,24 @@ func (tr *TraceReader) handleProcessEnvironmentUpdated(out *TraceView, reader *B
 		copy(process.Stats, reader.data[dataStart:dataEnd])
 	}
 
+	var breadcrumbs string
+	if out.Version >= 35 {
+		if out.Version < 38 {
+			breadcrumbs, err = reader.ReadString()
+		} else if out.Version < 42 {
+			if reader.ReadBool() {
+				breadcrumbs, err = reader.ReadString()
+			} else {
+				reader.Read7BitEncoded()
+				reader.Skip(reader.Read7BitEncoded())
+				breadcrumbs = "Upgrade your visualizer"
+			}
+		} else {
+			breadcrumbs, err = reader.ReadLongString()
+		}
+	}
+
+	process.Breadcrumbs = breadcrumbs
 	process.ExitCode = 0
 	process.Stop = time
 	process.BitmapDirty = true
@@ -2323,6 +2345,8 @@ func (tr *TraceReader) handleStatusUpdate(out *TraceView, reader *BinaryReader) 
 			return false
 		}
 
+		temptype := reader.ReadByte()
+
 		link, err := reader.ReadString()
 		if err != nil {
 			return false
@@ -2330,7 +2354,7 @@ func (tr *TraceReader) handleStatusUpdate(out *TraceView, reader *BinaryReader) 
 
 		status := StatusUpdate{
 			Text: text,
-			Type: reader.ReadByte(),
+			Type: temptype,
 			Link: link,
 		}
 		out.StatusMap[key] = status
@@ -2470,6 +2494,7 @@ func (tr *TraceReader) handleFileFetchSize(out *TraceView, reader *BinaryReader)
 	file.Size = fileSize
 	return true
 }
+
 type BreadcrumbWriter func(process *Process)
 
 func createBreadcrumbWriter(breadcrumbs string, deleteOld bool) BreadcrumbWriter {
@@ -2486,7 +2511,7 @@ func createBreadcrumbWriter(breadcrumbs string, deleteOld bool) BreadcrumbWriter
 func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryReader) bool {
 	// 读取数据
 	processId := reader.ReadU32()
-	
+
 	var breadcrumbs string
 	var err error
 	if out.Version < 38 {
@@ -2509,7 +2534,7 @@ func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryRe
 		if session == nil {
 			return false
 		}
-		
+
 		if int(activeInfo.ProcessorIndex) >= len(session.Processors) {
 			return false
 		}
@@ -2517,7 +2542,7 @@ func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryRe
 		if int(activeInfo.ProcessIndex) >= len(processor.Processes) {
 			return false
 		}
-		
+
 		process := processor.Processes[activeInfo.ProcessIndex]
 		writeBreadcrumb(&process)
 		return true
@@ -2538,7 +2563,7 @@ func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryRe
 		}
 	}
 
-	return found 
+	return found
 }
 func (tr *TraceReader) handleWorkHint(out *TraceView, reader *BinaryReader, time uint64) bool {
 	// 读取基本数据
@@ -2554,7 +2579,7 @@ func (tr *TraceReader) handleWorkHint(out *TraceView, reader *BinaryReader, time
 	}
 
 	// 获取文本
-	text:= out.Strings[stringIndex]
+	text := out.Strings[stringIndex]
 	if text == "" {
 		return false
 
@@ -2574,12 +2599,12 @@ func (tr *TraceReader) handleWorkHint(out *TraceView, reader *BinaryReader, time
 		// 反向遍历条目（从最新到最旧）
 		for i := len(record.Entries) - 1; i >= 0; i-- {
 			entry := &record.Entries[i]
-			
+
 			// 如果遇到没有开始时间的条目，停止搜索
 			if entry.StartTime == 0 {
 				break
 			}
-			
+
 			// 文本不匹配，继续搜索
 			if entry.Text != text {
 				continue
@@ -2682,18 +2707,38 @@ func formatTimeUS(timeus int64) string {
 
 // ReadUBAFile reads and parses a UBA trace file
 func ReadUBAFile(filename string) (*TraceView, error) {
+	blog.Infof("ubatrace: start read UBA file: %s", filename)
+
 	// Track trace type counts
 	traceTypeCounts := make(map[uint8]int)
+
 	// Open the file
-	file, err := os.Open(filename)
-	if err != nil {
+	trycounter := 0
+	var file *os.File
+	var err error
+	succeed := false
+	for trycounter < 20 {
+		trycounter++
+		file, err = os.Open(filename)
+		if err != nil {
+			blog.Infof("failed to open file:%s with try:%d with error: %v", filename, trycounter, err)
+			time.Sleep(time.Second * 1)
+			continue
+		} else {
+			succeed = true
+			break
+		}
+	}
+	if !succeed {
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
+
 	defer file.Close()
 
 	// Read the entire file into memory
 	data, err := io.ReadAll(file)
 	if err != nil {
+		blog.Infof("failed to read file:%s with error: %v", filename, err)
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
