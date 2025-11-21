@@ -1,7 +1,7 @@
 ---
 name: Client功能增强
 about: Suggest an enhancement for this project
-title: "【Enhancement】"
+title: "【Client Enhance】"
 labels: client, todo
 assignees: ''
 
