@@ -54,6 +54,8 @@ const (
 	CheckOldFilesTickSecs            = 600
 	CheckCommitSuicideSecs           = 20
 	CheckQuitTicksecs                = 1
+	HeartbeatTimeoutSecs             = 60
+	CheckHeartbeatTicksecs           = 5
 
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
 
@@ -86,6 +88,7 @@ func NewShaderTool(flagsparam *common.Flags) *ShaderTool {
 		// removelist:     []string{},
 		failedActions: make(map[int][]*common.FailedAction),
 		availableTime: make(map[int]time.Time),
+		heartbeatTime: make(map[string]time.Time),
 	}
 }
 
@@ -137,6 +140,10 @@ type ShaderTool struct {
 
 	// whether use web socket
 	usewebsocket bool
+
+	// record heartbeat time
+	heartbeatTimelock sync.RWMutex
+	heartbeatTime     map[string]time.Time
 }
 
 // Run run the tool
@@ -167,6 +174,7 @@ func (h *ShaderTool) run(pCtx context.Context) (int, error) {
 
 	go h.executeShaders(pCtx)
 	go h.checkQuit(pCtx)
+	go h.checkHeartbeat(pCtx)
 
 	// main loop
 	err = h.server(pCtx)
@@ -332,6 +340,11 @@ func (h *ShaderTool) checkQuit(ctx context.Context) error {
 
 	if h.settings.ShaderToolIdleRunSeconds < 0 {
 		blog.Infof("ShaderTool: do not check quit for setting is %d, less 0", h.settings.ShaderToolIdleRunSeconds)
+		return nil
+	}
+
+	if h.flags.NoIdleQuit {
+		blog.Infof("ShaderTool: do not check quit for flag is true")
 		return nil
 	}
 
@@ -772,7 +785,7 @@ func (h *ShaderTool) watchResource() error {
 	for {
 		select {
 		case <-ticker.C:
-			if h.lastjobfinishedtime > 0 && !h.hasJobs() {
+			if h.lastjobfinishedtime > 0 && !h.hasJobs() && len(h.heartbeatTime) == 0 {
 				nowsecs := time.Now().Unix()
 				if nowsecs-h.lastjobfinishedtime > int64(keepseconds) {
 					blog.Infof("ShaderTool: resource idle for %d seconds, ready to release now", nowsecs-h.lastjobfinishedtime)
@@ -1133,4 +1146,78 @@ func (h *ShaderTool) dealWorkNotFound(retcode int, retmsg string) error {
 	}
 
 	return nil
+}
+
+func (h *ShaderTool) heartbeat(processid, messagetype string) error {
+	blog.Infof("ShaderTool: heartbeat with processid[%s], messagetype[%s]", processid, messagetype)
+
+	if messagetype == messageTypeUba {
+		h.heartbeatTimelock.Lock()
+		defer h.heartbeatTimelock.Unlock()
+
+		t := time.Now()
+		h.heartbeatTime[processid] = t
+		blog.Infof("ShaderTool: update heartbeat processid[%s] with time[%s]", processid, t)
+	}
+
+	return nil
+}
+
+func (h *ShaderTool) release(processid, messagetype string) error {
+	blog.Infof("ShaderTool: release with processid[%s], messagetype[%s]", processid, messagetype)
+
+	if messagetype == messageTypeUba {
+		h.heartbeatTimelock.Lock()
+		defer h.heartbeatTimelock.Unlock()
+
+		delete(h.heartbeatTime, processid)
+	}
+
+	if len(h.heartbeatTime) == 0 {
+		blog.Infof("ShaderTool: all uba agents are released, exit")
+		h.ReleaseResource()
+	} else {
+		blog.Infof("ShaderTool: still has %d uba agents not released", len(h.heartbeatTime))
+	}
+
+	return nil
+}
+
+func (h *ShaderTool) checkHeartbeatOnce() error {
+	blog.Debugf("ShaderTool: check heartbeat")
+	h.heartbeatTimelock.Lock()
+	defer h.heartbeatTimelock.Unlock()
+
+	hastimeout := false
+	for processid, t := range h.heartbeatTime {
+		if time.Since(t) > time.Duration(HeartbeatTimeoutSecs)*time.Second {
+			blog.Infof("ShaderTool: heartbeat timeout for processid [%s], delete it", processid)
+			delete(h.heartbeatTime, processid)
+			hastimeout = true
+		}
+	}
+
+	if hastimeout {
+		if len(h.heartbeatTime) == 0 {
+			blog.Infof("ShaderTool: after some timeout, all uba agents are released, exit")
+			h.ReleaseResource()
+		}
+	}
+
+	return nil
+}
+
+func (h *ShaderTool) checkHeartbeat(ctx context.Context) {
+	ticker := time.NewTicker(CheckHeartbeatTicksecs * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			blog.Infof("ShaderTool: run heartbeat check canceled by context")
+			return
+
+		case <-ticker.C:
+			h.checkHeartbeatOnce()
+		}
+	}
 }
