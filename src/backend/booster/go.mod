@@ -1,10 +1,10 @@
 module github.com/TencentBlueKing/bk-turbo/src/backend/booster
 
-go 1.20
+go 1.24
 
 replace (
 	github.com/coreos/bbolt v1.3.4 => go.etcd.io/bbolt v1.3.4
-	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
+	golang.org/x/crypto => golang.org/x/crypto v0.35.0
 	golang.org/x/text => golang.org/x/text v0.14.0
 	google.golang.org/grpc => google.golang.org/grpc v1.58.3
 	k8s.io/client-go => k8s.io/client-go v0.19.2
@@ -15,7 +15,7 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/denisbrodbeck/machineid v1.0.1
-	github.com/emicklei/go-restful v2.15.0+incompatible
+	github.com/emicklei/go-restful v2.16.0+incompatible
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-yaml/yaml v2.1.0+incompatible
 	github.com/gobwas/ws v1.1.0
@@ -34,8 +34,8 @@ require (
 	github.com/ugorji/go/codec v1.2.11
 	github.com/urfave/cli v1.22.5
 	go.etcd.io/etcd/client/v3 v3.5.10
-	golang.org/x/text v0.14.0
-	google.golang.org/protobuf v1.31.0
+	golang.org/x/text v0.23.0
+	google.golang.org/protobuf v1.33.0
 	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2
 	k8s.io/client-go v0.0.0-00010101000000-000000000000
@@ -73,14 +73,13 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/crypto v0.18.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
-	golang.org/x/oauth2 v0.10.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
-	golang.org/x/term v0.16.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230711160842-782d3b101e98 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
