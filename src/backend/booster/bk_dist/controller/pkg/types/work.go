@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -618,7 +619,8 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 						stats.LocalWorkSuccess = stats.Success
 					}
 					if len(stats.OriginArgs) == 0 {
-						stats.OriginArgs = []string{guessCommand(process.Description), process.Description}
+						fileds := strings.Split(process.Description, " ")
+						stats.OriginArgs = []string{guessCommand(fileds[0]), process.Description}
 					}
 					stats.TaskID = taskid
 					stats.WorkID = workid
