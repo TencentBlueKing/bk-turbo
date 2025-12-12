@@ -12,7 +12,6 @@ package manager
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -985,51 +984,51 @@ func (m *mgr) GetAllWorkers(ubainfo types.UbaInfo) []string {
 		}
 	}
 
-	if ubainfo.TraceFile != "" {
-		go m.checkubadir(ubainfo.TraceFile)
-	}
+	// if ubainfo.TraceFile != "" {
+	// 	go m.checkubadir(ubainfo.TraceFile)
+	// }
 
 	return allworkers
 }
 
-func (m *mgr) checkubadir(ubafile string) error {
-	m.checkubalock.Lock()
-	defer m.checkubalock.Unlock()
+// func (m *mgr) checkubadir(ubafile string) error {
+// 	m.checkubalock.Lock()
+// 	defer m.checkubalock.Unlock()
 
-	if m.ubachecked {
-		if m.lastcheckubatime.After(time.Now().Add(-1 * m.checkduration)) {
-			return nil
-		}
-	}
+// 	if m.ubachecked {
+// 		if m.lastcheckubatime.After(time.Now().Add(-1 * m.checkduration)) {
+// 			return nil
+// 		}
+// 	}
 
-	m.ubachecked = true
-	m.lastcheckubatime = time.Now()
-	// 获取uba目录路径（向上两级）
-	dir := filepath.Dir(filepath.Dir(ubafile))
-	blog.Infof("mgr: check uba file dir: %s", dir)
+// 	m.ubachecked = true
+// 	m.lastcheckubatime = time.Now()
+// 	// 获取uba目录路径（向上两级）
+// 	dir := filepath.Dir(filepath.Dir(ubafile))
+// 	blog.Infof("mgr: check uba file dir: %s", dir)
 
-	f, err := os.Open(dir)
-	if err != nil {
-		blog.Warnf("mgr: failed to open dir %s with error:%v", dir, err)
-		return err
-	}
-	fis, _ := f.Readdir(-1)
-	f.Close()
+// 	f, err := os.Open(dir)
+// 	if err != nil {
+// 		blog.Warnf("mgr: failed to open dir %s with error:%v", dir, err)
+// 		return err
+// 	}
+// 	fis, _ := f.Readdir(-1)
+// 	f.Close()
 
-	t := time.Now().Add(-1 * m.deleteduration)
-	blog.Infof("mgr: uba dir %s time:%s", dir, t)
-	fullpath := ""
-	for _, fi := range fis {
-		if fi.ModTime().After(t) {
-			continue
-		}
-		fullpath = filepath.Join(dir, fi.Name())
-		if strings.HasPrefix(ubafile, fullpath) {
-			continue
-		}
-		blog.Infof("mgr: ready remove uba dir:%s modify time:%s", fullpath, fi.ModTime())
-		os.RemoveAll(fullpath)
-	}
+// 	t := time.Now().Add(-1 * m.deleteduration)
+// 	blog.Infof("mgr: uba dir %s time:%s", dir, t)
+// 	fullpath := ""
+// 	for _, fi := range fis {
+// 		if fi.ModTime().After(t) {
+// 			continue
+// 		}
+// 		fullpath = filepath.Join(dir, fi.Name())
+// 		if strings.HasPrefix(ubafile, fullpath) {
+// 			continue
+// 		}
+// 		blog.Infof("mgr: ready remove uba dir:%s modify time:%s", fullpath, fi.ModTime())
+// 		os.RemoveAll(fullpath)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
