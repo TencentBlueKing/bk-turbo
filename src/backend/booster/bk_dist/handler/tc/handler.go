@@ -107,6 +107,11 @@ func (tc *TextureCompressor) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	tc.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (tc *TextureCompressor) SetJobID(jobID string) {
+	return
+}
+
 // InitExtra no need
 func (tc *TextureCompressor) InitExtra(extra []byte) {
 

@@ -12,6 +12,8 @@ package types
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -558,6 +560,7 @@ func (was *WorkAnalysisStatus) SetUbaInfo(ubainfo UbaInfo) {
 	was.mutex.Lock()
 	defer was.mutex.Unlock()
 	was.ubainfos[ubainfo.TraceFile] = ubainfo
+	blog.Debugf("ubatrace: save UBA file: %s to map", ubainfo.TraceFile)
 }
 
 // 将微秒时间戳转换为 time.Time
@@ -567,6 +570,7 @@ func MicrosecondsToTime(us int64) time.Time {
 }
 
 func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid string) error {
+	blog.Infof("ubatrace: start read UBA file: %s", ubainfo.TraceFile)
 	traceView, err := ReadUBAFile(ubainfo.TraceFile)
 	if err == nil && traceView != nil {
 		for _, s := range traceView.Sessions {
@@ -614,7 +618,10 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 						stats.LocalWorkUnlockTime = stats.LeaveTime // 方便显示
 						stats.LocalWorkSuccess = stats.Success
 					}
-					stats.OriginArgs = []string{"ubacompile", process.Description}
+					if len(stats.OriginArgs) == 0 {
+						fileds := strings.Split(process.Description, " ")
+						stats.OriginArgs = []string{guessCommand(fileds[0]), process.Description}
+					}
 					stats.TaskID = taskid
 					stats.WorkID = workid
 
@@ -627,9 +634,33 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 	return err
 }
 
+func guessCommand(describe string) string {
+	suffix := filepath.Ext(describe)
+	switch suffix {
+	case ".cpp", ".c", ".cc", ".cxx", ".C", ".CXX", ".h":
+		return "cl.exe"
+	case ".dll":
+		return "link.exe"
+	case ".lib":
+		return "lib.exe"
+	case ".rc2", ".rc":
+		return "rc.exe"
+	case ".ispc":
+		return "ispc.exe"
+	case ".bat":
+		return "cmd.exe"
+	case ".target", ".version":
+		return "dotnet.exe"
+	case ".in":
+		return "ShaderCompileWorker.exe"
+	}
+	return "other.exe"
+}
+
 // DumpJobs encode WorkAnalysisStatus into json bytes
 func (was *WorkAnalysisStatus) DumpJobs(taskid, workid string) []byte {
 	if len(was.ubainfos) > 0 {
+		blog.Infof("ubatrace: len(was.ubainfos) > 0")
 		for _, ubainfo := range was.ubainfos {
 			was.readUBAFile(ubainfo, taskid, workid)
 		}

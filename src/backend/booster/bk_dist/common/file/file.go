@@ -13,6 +13,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -98,6 +99,9 @@ type Info struct {
 	filePath   string
 	LinkTarget string
 	FileType   FileType
+
+	IsNetworkLink   bool
+	NetworkLinkMode fs.FileMode
 
 	// info and err are return from os.Stat
 	info os.FileInfo

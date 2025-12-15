@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+	"unsafe"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
@@ -43,6 +44,10 @@ const (
 	TraceTypeCacheEndWrite
 	TraceTypeProgressUpdate
 	TraceTypeRemoteExecutionDisabled
+	TraceTypeFileFetchSize
+	TraceTypeProcessBreadcrumbs
+	TraceTypeWorkHint
+	TraceTypeDriveUpdate
 )
 
 // TraceTypeNames maps trace type constants to their string names
@@ -75,6 +80,10 @@ var TraceTypeNames = map[uint8]string{
 	TraceTypeCacheEndWrite:             "CacheEndWrite",
 	TraceTypeProgressUpdate:            "ProgressUpdate",
 	TraceTypeRemoteExecutionDisabled:   "RemoteExecutionDisabled",
+	TraceTypeFileFetchSize:             "FileFetchSize",
+	TraceTypeProcessBreadcrumbs:        "ProcessBreadcrumbs",
+	TraceTypeWorkHint:                  "WorkHint",
+	TraceTypeDriveUpdate:               "DriveUpdate",
 }
 
 // GUID represents a Windows GUID
@@ -132,6 +141,20 @@ type SessionUpdate struct {
 	ConnectionCount uint8
 }
 
+// Drive represents a drive
+type Drive struct {
+	BusyHighest     uint8
+	TotalReadCount  uint32
+	TotalWriteCount uint32
+	TotalReadBytes  uint64
+	TotalWriteBytes uint64
+	BusyPercent     []uint8
+	ReadCount       []uint32
+	WriteCount      []uint32
+	ReadBytes       []uint64
+	WriteBytes      []uint64
+}
+
 // FileTransfer represents a file transfer operation
 type FileTransfer struct {
 	Key   CasKey
@@ -145,16 +168,30 @@ type FileTransfer struct {
 type Session struct {
 	Name               string
 	FullName           string
+	Hyperlink          string
 	ClientUID          GUID
 	Processors         []Processor
-	Updates            []SessionUpdate
+	Updates            []uint64
+	NetworkSend        []uint64
+	NetworkRecv        []uint64
+	Ping               []uint64
+	MemAvail           []uint64
+	CpuLoad            []float32
+	ConnectionCount    []uint16
+	ReconnectIndices   []uint32
 	Summary            []string
+	FetchedFilesActive map[CasKey]uint32
 	FetchedFiles       []FileTransfer
+	StoredFilesActive  map[CasKey]uint32
 	StoredFiles        []FileTransfer
+	Drives             map[uint8]Drive
 	Notification       string
 	FetchedFilesBytes  uint64
 	StoredFilesBytes   uint64
+	FetchedFilesCount  uint32
+	StoredFilesCount   uint32
 	MaxVisibleFiles    uint32
+	FullNameWidth      uint32
 	HighestSendPerS    float32
 	HighestRecvPerS    float32
 	IsReset            bool
@@ -169,11 +206,20 @@ type Session struct {
 	ProxyCreated       bool
 }
 
+// WorkRecordLogEntry represents a work record log entry
+type WorkRecordLogEntry struct {
+	Time      uint64
+	StartTime uint64
+	Text      string
+	Count     uint32
+}
+
 // WorkRecord represents a work record
 type WorkRecord struct {
 	Description  string
 	Start        uint64
 	Stop         uint64
+	Entries      []WorkRecordLogEntry
 	BitmapOffset uint32
 }
 
@@ -247,6 +293,12 @@ type ProcessStats struct {
 	WallTime      uint64
 	CPUTime       uint64
 	UsedMemory    uint32
+	DetoursMemory uint64
+	PeakMemory    uint64
+
+	IopsRead      uint64
+	IopsWrite     uint64
+	IopsOther     uint64
 	HostTotalTime uint64
 }
 
@@ -391,6 +443,14 @@ func (r *BinaryReader) GetPositionData() []byte {
 	return r.data[r.pos:]
 }
 
+// Skip skips n bytes forward
+func (r *BinaryReader) Skip(n uint64) {
+	r.pos += int(n)
+	if r.pos > len(r.data) {
+		r.pos = len(r.data)
+	}
+}
+
 // ReadByte reads a single byte
 func (r *BinaryReader) ReadByte() uint8 {
 	if r.pos >= len(r.data) {
@@ -471,22 +531,65 @@ func callerInfo(skip int) string {
 }
 
 // ReadString reads a string
-func (r *BinaryReader) ReadString() string {
+func (r *BinaryReader) ReadString() (string, error) {
 	length := r.Read7BitEncoded()
 
 	// Check for unreasonably large string lengths (likely corrupted data)
 	if length > 1000000 { // 1MB limit for strings
 		blog.Infof("ubatrace: ReadString: caller(%s) Unreasonably large string length %d at position %d, likely corrupted data", callerInfo(1), length, r.pos)
-		return ""
+		return "", fmt.Errorf("string with size %d is too large", length)
 	}
 
 	if r.pos+int(length) > len(r.data) {
 		blog.Infof("ubatrace: ReadString: Trying to read %d bytes at position %d, but only %d bytes available", length, r.pos, len(r.data)-r.pos)
-		return ""
+		return "", fmt.Errorf("string with size %d is too large", length)
 	}
 	str := string(r.data[r.pos : r.pos+int(length)])
 	r.pos += int(length)
-	return str
+	return str, nil
+}
+
+func (r *BinaryReader) ReadLongString() (string, error) {
+	// 读取第一个字节
+	s := r.ReadByte()
+
+	// 如果 s 为 0，直接读取普通字符串
+	if s == 0 {
+		return r.ReadString()
+	}
+
+	// 读取 7-bit 编码的字符串长度
+	stringLength := r.Read7BitEncoded()
+
+	uncompressedSize := stringLength * uint64(s)
+	compressedSize := r.Read7BitEncoded()
+
+	// 获取当前位置数据
+	data := r.GetPositionData()
+
+	// 跳过压缩数据
+	r.Skip(uint64(compressedSize))
+
+	// 根据 s 的值决定如何处理
+	if s == uint8(unsafe.Sizeof(rune(0))) { // 假设 TString 是宽字符
+		// 解压缩宽字符字符串 - 临时实现，直接返回空字符串
+		_ = uncompressedSize // 避免未使用变量警告
+		_ = data             // 避免未使用变量警告
+		// TODO: 实现真正的解压缩算法
+		blog.Infof("ubatrace: ReadLongString: Wide character string decompression not implemented yet, length=%d", stringLength)
+		return "", nil
+	} else {
+		// 解压缩单字节字符串
+		if s != 1 {
+			return "", nil
+		}
+
+		_ = uncompressedSize // 避免未使用变量警告
+		_ = data             // 避免未使用变量警告
+		// TODO: 实现真正的解压缩算法
+		blog.Infof("ubatrace: ReadLongString: Single byte string decompression not implemented yet, length=%d", stringLength)
+		return "", nil
+	}
 }
 
 // ReadGUID reads a GUID (16 bytes total)
@@ -716,13 +819,27 @@ func (r *BinaryReader) ReadProcessStats(version uint32) ProcessStats {
 	}
 
 	// Read the fixed fields at the end
-	stats.StartupTime = r.ReadU64()
-	stats.ExitTime = r.ReadU64()
-	stats.WallTime = r.ReadU64()
-	stats.CPUTime = r.ReadU64()
-	stats.UsedMemory = r.ReadU32()
-	stats.HostTotalTime = r.ReadU64()
-
+	if version >= 37 {
+		stats.StartupTime = r.Read7BitEncoded()
+		stats.ExitTime = r.Read7BitEncoded()
+		stats.WallTime = r.Read7BitEncoded()
+		stats.CPUTime = r.Read7BitEncoded()
+		stats.DetoursMemory = r.Read7BitEncoded()
+		stats.PeakMemory = r.Read7BitEncoded()
+		if version >= 39 {
+			stats.IopsRead = r.Read7BitEncoded()
+			stats.IopsWrite = r.Read7BitEncoded()
+			stats.IopsOther = r.Read7BitEncoded()
+		}
+		stats.HostTotalTime = r.Read7BitEncoded()
+	} else {
+		stats.StartupTime = r.ReadU64()
+		stats.ExitTime = r.ReadU64()
+		stats.WallTime = r.ReadU64()
+		stats.CPUTime = r.ReadU64()
+		stats.DetoursMemory = uint64(r.ReadU32())
+		stats.HostTotalTime = r.ReadU64()
+	}
 	return stats
 }
 
@@ -995,8 +1112,13 @@ func (r *BinaryReader) ReadKernelStats(version uint32) KernelStats {
 			stats.VirtualAlloc = r.ReadExtendedTimer(version)
 		}
 	} else {
-		bits := r.ReadU16() // KernelStats uses u16 bits
+		var bits uint64
 		// Read stats based on bits (14 bits for 14 fields)
+		if version < 43 {
+			bits = uint64(r.ReadU16())
+		} else {
+			bits = r.Read7BitEncoded()
+		}
 		if (bits & (1 << 0)) != 0 {
 			stats.CreateFile = r.ReadExtendedTimer(version)
 		}
@@ -1143,7 +1265,7 @@ func (tr *TraceReader) GetSessionByUID(out *TraceView, clientUID GUID) *Session 
 }
 
 // ProcessBegin starts a new process
-func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, time uint64, description string) *Process {
+func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, time uint64, description string, breadcrumbs string) *Process {
 	session := tr.GetSession(out, sessionIndex)
 	if session == nil {
 		return nil
@@ -1160,6 +1282,7 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 		Start:       time,
 		Stop:        ^uint64(0), // Max uint64
 		ExitCode:    ^uint32(0), // Max uint32
+		Breadcrumbs: breadcrumbs,
 		IsRemote:    sessionIndex != 0,
 	})
 
@@ -1231,6 +1354,8 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 	traceType := reader.ReadByte()
 	var time uint64 = 0
 
+	blog.Debugf("ubatrace: got trace type: %d", traceType)
+
 	// Count trace types
 	if traceTypeCounts != nil {
 		traceTypeCounts[traceType]++
@@ -1245,7 +1370,7 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 		return false
 	}
 
-	if out.Version >= 15 && traceType != TraceTypeString {
+	if out.Version >= 15 && traceType != TraceTypeString && traceType != TraceTypeDriveUpdate {
 		time = ConvertTime(out, reader.Read7BitEncoded())
 		if time > maxTime {
 			reader.SetPosition(readPos)
@@ -1310,15 +1435,43 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 		return tr.handleCacheBeginWrite(out, reader, time)
 	case TraceTypeCacheEndWrite:
 		return tr.handleCacheEndWrite(out, reader, time)
+	case TraceTypeFileFetchSize:
+		return tr.handleFileFetchSize(out, reader)
+	case TraceTypeProcessBreadcrumbs:
+		return tr.handleProcessBreadcrumbs(out, reader)
+	case TraceTypeWorkHint:
+		return tr.handleWorkHint(out, reader, time)
+	case TraceTypeDriveUpdate:
+		return tr.handleDriverUpdate(out, reader)
 	}
 
 	return true
 }
 
+// resize 通用切片调整大小函数，支持任意类型的切片
+func resize[T any](arr []T, newSize int) []T {
+	if newSize > len(arr) {
+		// 一次性分配足够的容量，避免多次内存分配
+		newArr := make([]T, newSize)
+		copy(newArr, arr)
+		// 剩余部分已经是零值，无需额外填充
+		return newArr
+	} else if newSize < len(arr) {
+		return arr[:newSize]
+	}
+	return arr
+}
+
 // handleSessionAdded handles TraceType_SessionAdded
 func (tr *TraceReader) handleSessionAdded(out *TraceView, reader *BinaryReader, time uint64) bool {
-	sessionName := reader.ReadString()
-	sessionInfo := reader.ReadString()
+	sessionName, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
+	sessionInfo, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 	clientUID := tr.ReadClientId(out, reader)
 	sessionIndex := reader.ReadU32()
 
@@ -1334,6 +1487,17 @@ func (tr *TraceReader) handleSessionAdded(out *TraceView, reader *BinaryReader, 
 		if oldSession.DisconnectTime == ^uint64(0) {
 			break
 		}
+		updateCount := len(oldSession.Updates)
+		// 批量调整session统计数据的slice大小
+		oldSession.NetworkSend, oldSession.NetworkRecv, oldSession.Ping, oldSession.MemAvail =
+			resize(oldSession.NetworkSend, updateCount),
+			resize(oldSession.NetworkRecv, updateCount),
+			resize(oldSession.Ping, updateCount),
+			resize(oldSession.MemAvail, updateCount)
+		oldSession.CpuLoad = resize(oldSession.CpuLoad, updateCount)
+		oldSession.ConnectionCount = resize(oldSession.ConnectionCount, updateCount)
+
+		oldSession.ReconnectIndices = append(oldSession.ReconnectIndices, uint32(updateCount))
 		oldSession.IsReset = true
 		oldSession.DisconnectTime = ^uint64(0)
 		oldSession.ProxyName = ""
@@ -1421,28 +1585,40 @@ func (tr *TraceReader) handleSessionUpdate(out *TraceView, reader *BinaryReader,
 		session.PrevRecv = 0
 		session.MemTotal = 0
 		if len(session.Updates) > 0 {
-			session.Updates = append(session.Updates, SessionUpdate{
-				Time: time, Send: 0, Recv: 0, Ping: lastPing,
-				MemAvail: memAvail, CPULoad: cpuLoad, ConnectionCount: connectionCount,
-			})
+			session.Updates = append(session.Updates, time)
+			session.NetworkSend = append(session.NetworkSend, 0)
+			session.NetworkRecv = append(session.NetworkRecv, 0)
+			session.Ping = append(session.Ping, lastPing)
+			session.MemAvail = append(session.MemAvail, memAvail)
+			session.CpuLoad = append(session.CpuLoad, cpuLoad)
+			session.ConnectionCount = append(session.ConnectionCount, uint16(connectionCount))
 		}
 	} else if len(session.Updates) > 0 {
-		prevUpdate := &session.Updates[len(session.Updates)-1]
-		session.PrevSend = prevUpdate.Send
-		session.PrevRecv = prevUpdate.Recv
-		session.PrevUpdateTime = prevUpdate.Time
+		session.PrevSend = session.NetworkSend[len(session.NetworkSend)-1]
+		session.PrevRecv = session.NetworkRecv[len(session.NetworkRecv)-1]
+		session.PrevUpdateTime = session.Updates[len(session.Updates)-1]
+	}
+
+	if totalSend < session.PrevSend {
+		totalSend = session.PrevSend
+	}
+	if totalRecv < session.PrevRecv {
+		totalRecv = session.PrevRecv
 	}
 
 	session.MemTotal = memTotal
-	session.Updates = append(session.Updates, SessionUpdate{
-		Time: time, Send: totalSend, Recv: totalRecv, Ping: lastPing,
-		MemAvail: memAvail, CPULoad: cpuLoad, ConnectionCount: connectionCount,
-	})
+	session.Updates = append(session.Updates, time)
+	session.NetworkSend = append(session.NetworkSend, totalSend)
+	session.NetworkRecv = append(session.NetworkRecv, totalRecv)
+	session.Ping = append(session.Ping, lastPing)
+	session.MemAvail = append(session.MemAvail, memAvail)
+	session.CpuLoad = append(session.CpuLoad, cpuLoad)
+	session.ConnectionCount = append(session.ConnectionCount, uint16(connectionCount))
 
-	send := totalSend - session.PrevSend
-	recv := totalRecv - session.PrevRecv
-	session.HighestSendPerS = Max(session.HighestSendPerS, float32(send)/TimeToS(time-session.PrevUpdateTime))
-	session.HighestRecvPerS = Max(session.HighestRecvPerS, float32(recv)/TimeToS(time-session.PrevUpdateTime))
+	if session.PrevUpdateTime > 0 {
+		session.HighestSendPerS = Max(session.HighestSendPerS, float32(totalSend-session.PrevSend)/TimeToS(time-session.PrevUpdateTime))
+		session.HighestRecvPerS = Max(session.HighestRecvPerS, float32(totalRecv-session.PrevRecv)/TimeToS(time-session.PrevUpdateTime))
+	}
 
 	return true
 }
@@ -1493,7 +1669,11 @@ func (tr *TraceReader) handleSessionNotification(out *TraceView, reader *BinaryR
 		blog.Infof("ubatrace: Warning: SessionNotification for sessionIndex %d but session not found, continuing...", sessionIndex)
 		return true
 	}
-	session.Notification = reader.ReadString()
+	var err error
+	session.Notification, err = reader.ReadString()
+	if err != nil {
+		return false
+	}
 	return true
 }
 
@@ -1510,7 +1690,11 @@ func (tr *TraceReader) handleSessionSummary(out *TraceView, reader *BinaryReader
 
 	session.Summary = make([]string, 0, lineCount)
 	for i := uint32(0); i < lineCount; i++ {
-		session.Summary = append(session.Summary, reader.ReadString())
+		line, err := reader.ReadString()
+		if err != nil {
+			return false
+		}
+		session.Summary = append(session.Summary, line)
 	}
 	return true
 }
@@ -1519,7 +1703,28 @@ func (tr *TraceReader) handleSessionSummary(out *TraceView, reader *BinaryReader
 func (tr *TraceReader) handleProcessAdded(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	sessionIndex := reader.ReadU32()
 	id := reader.ReadU32()
-	desc := reader.ReadString()
+	desc, err := reader.ReadString()
+
+	var breadcrumbs string
+	if out.Version >= 35 {
+		if out.Version < 38 {
+			breadcrumbs, _ = reader.ReadString()
+		} else if out.Version < 42 {
+			if reader.ReadBool() {
+				breadcrumbs, _ = reader.ReadString()
+			} else {
+				reader.Read7BitEncoded()
+				reader.Skip(reader.Read7BitEncoded())
+				//reader.Skip(reader.Read7BitEncoded());
+				breadcrumbs = "Upgrade your visualizer"
+			}
+		} else {
+			breadcrumbs, _ = reader.ReadLongString()
+		}
+	}
+	if err != nil {
+		return false
+	}
 
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
@@ -1529,7 +1734,7 @@ func (tr *TraceReader) handleProcessAdded(out *TraceView, reader *BinaryReader, 
 		}
 	}
 
-	tr.ProcessBegin(out, sessionIndex, id, time, desc)
+	tr.ProcessBegin(out, sessionIndex, id, time, desc, breadcrumbs)
 	return true
 }
 
@@ -1571,6 +1776,9 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 			kernelStats = reader.ReadKernelStats(out.Version)
 		}
 	} else if out.Version >= 30 {
+		if out.Version >= 36 {
+			sessionStats = reader.ReadSessionStats(out.Version)
+		}
 		storageStats = reader.ReadStorageStats(out.Version)
 		kernelStats = reader.ReadKernelStats(out.Version)
 	}
@@ -1583,9 +1791,13 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 		copy(process.Stats, reader.data[dataStart:dataEnd])
 	}
 
+	var err error
 	// Read breadcrumbs if version >= 34 - exactly like C++
-	if out.Version >= 34 {
-		process.Breadcrumbs = reader.ReadString()
+	if out.Version >= 34 && out.Version < 35 {
+		process.Breadcrumbs, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 	}
 
 	// Set timing fields from processStats - exactly like C++
@@ -1608,7 +1820,10 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 			if logType == 255 {
 				break
 			}
-			logLine := reader.ReadString()
+			logLine, err := reader.ReadString()
+			if err != nil {
+				return false
+			}
 			process.LogLines = append(process.LogLines, ProcessLogLine{
 				Text: logLine,
 				Type: logType,
@@ -1622,7 +1837,10 @@ func (tr *TraceReader) handleProcessExited(out *TraceView, reader *BinaryReader,
 		process.LogLines = make([]ProcessLogLine, 0, logLineCount)
 		for i := uint64(0); i < logLineCount; i++ {
 			logType := reader.ReadByte()
-			logLine := reader.ReadString()
+			logLine, err := reader.ReadString()
+			if err != nil {
+				return false
+			}
 			process.LogLines = append(process.LogLines, ProcessLogLine{
 				Text: logLine,
 				Type: logType,
@@ -1642,7 +1860,10 @@ func (tr *TraceReader) handleProcessEnvironmentUpdated(out *TraceView, reader *B
 		return true
 	}
 
-	reason := reader.ReadString()
+	reason, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
 	}
@@ -1661,7 +1882,10 @@ func (tr *TraceReader) handleProcessEnvironmentUpdated(out *TraceView, reader *B
 
 	// Read ProcessStats, SessionStats, StorageStats, KernelStats
 	processStats := reader.ReadProcessStats(out.Version)
-	sessionStats := reader.ReadSessionStats(out.Version)
+	var sessionStats SessionStats
+	if process.IsRemote || out.Version < 35 {
+		sessionStats = reader.ReadSessionStats(out.Version)
+	}
 	storageStats := reader.ReadStorageStats(out.Version)
 	kernelStats := reader.ReadKernelStats(out.Version)
 
@@ -1678,6 +1902,24 @@ func (tr *TraceReader) handleProcessEnvironmentUpdated(out *TraceView, reader *B
 		copy(process.Stats, reader.data[dataStart:dataEnd])
 	}
 
+	var breadcrumbs string
+	if out.Version >= 35 {
+		if out.Version < 38 {
+			breadcrumbs, err = reader.ReadString()
+		} else if out.Version < 42 {
+			if reader.ReadBool() {
+				breadcrumbs, err = reader.ReadString()
+			} else {
+				reader.Read7BitEncoded()
+				reader.Skip(reader.Read7BitEncoded())
+				breadcrumbs = "Upgrade your visualizer"
+			}
+		} else {
+			breadcrumbs, err = reader.ReadLongString()
+		}
+	}
+
+	process.Breadcrumbs = breadcrumbs
 	process.ExitCode = 0
 	process.Stop = time
 	process.BitmapDirty = true
@@ -1716,8 +1958,12 @@ func (tr *TraceReader) handleProcessReturned(out *TraceView, reader *BinaryReade
 	}
 
 	var reason string = "Unknown"
+	var err error
 	if out.Version >= 33 {
-		reason = reader.ReadString()
+		reason, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 		if reason == "" {
 			reason = "Unknown"
 		}
@@ -1752,11 +1998,19 @@ func (tr *TraceReader) handleProcessReturned(out *TraceView, reader *BinaryReade
 func (tr *TraceReader) handleFileBeginFetch(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	clientUID := tr.ReadClientId(out, reader)
 	key := reader.ReadCasKey()
-	size := reader.Read7BitEncoded()
+	var size uint64
+	size = 0
+	if out.Version < 36 {
+		size = reader.Read7BitEncoded()
+	}
 
 	var hint string
+	var err error
 	if out.Version < 14 {
-		hint = reader.ReadString()
+		hint, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 	} else {
 		stringIndex := reader.Read7BitEncoded()
 		if int(stringIndex) < len(out.Strings) {
@@ -1808,7 +2062,10 @@ func (tr *TraceReader) handleFileFetchLight(out *TraceView, reader *BinaryReader
 // handleProxyCreated handles TraceType_ProxyCreated
 func (tr *TraceReader) handleProxyCreated(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	clientUID := tr.ReadClientId(out, reader)
-	proxyName := reader.ReadString()
+	proxyName, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
@@ -1829,7 +2086,10 @@ func (tr *TraceReader) handleProxyCreated(out *TraceView, reader *BinaryReader, 
 // handleProxyUsed handles TraceType_ProxyUsed
 func (tr *TraceReader) handleProxyUsed(out *TraceView, reader *BinaryReader, time uint64, maxTime uint64, readPos uint64) bool {
 	clientUID := tr.ReadClientId(out, reader)
-	proxyName := reader.ReadString()
+	proxyName, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
 	if out.Version < 15 {
 		time = reader.Read7BitEncoded()
@@ -1879,8 +2139,12 @@ func (tr *TraceReader) handleFileBeginStore(out *TraceView, reader *BinaryReader
 	size := reader.Read7BitEncoded()
 
 	var hint string
+	var err error
 	if out.Version < 14 {
-		hint = reader.ReadString()
+		hint, err = reader.ReadString()
+		if err != nil {
+			return false
+		}
 	} else {
 		stringIndex := reader.Read7BitEncoded()
 		if int(stringIndex) < len(out.Strings) {
@@ -2076,10 +2340,22 @@ func (tr *TraceReader) handleStatusUpdate(out *TraceView, reader *BinaryReader) 
 			out.StatusMap = make(map[uint64]StatusUpdate)
 		}
 
+		text, err := reader.ReadString()
+		if err != nil {
+			return false
+		}
+
+		temptype := reader.ReadByte()
+
+		link, err := reader.ReadString()
+		if err != nil {
+			return false
+		}
+
 		status := StatusUpdate{
-			Text: reader.ReadString(),
-			Type: reader.ReadByte(),
-			Link: reader.ReadString(),
+			Text: text,
+			Type: temptype,
+			Link: link,
 		}
 		out.StatusMap[key] = status
 	}
@@ -2094,16 +2370,23 @@ func (tr *TraceReader) handleRemoteExecutionDisabled(out *TraceView, reader *Bin
 
 // handleString handles TraceType_String
 func (tr *TraceReader) handleString(out *TraceView, reader *BinaryReader) bool {
-	out.Strings = append(out.Strings, reader.ReadString())
+	outstr, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
+	out.Strings = append(out.Strings, outstr)
 	return true
 }
 
 // handleCacheBeginFetch handles TraceType_CacheBeginFetch
 func (tr *TraceReader) handleCacheBeginFetch(out *TraceView, reader *BinaryReader, time uint64) bool {
 	id := uint32(reader.Read7BitEncoded())
-	desc := reader.ReadString()
+	desc, err := reader.ReadString()
+	if err != nil {
+		return false
+	}
 
-	process := tr.ProcessBegin(out, 0, id, time, desc)
+	process := tr.ProcessBegin(out, 0, id, time, desc, "")
 	if process != nil {
 		process.CacheFetch = true
 	}
@@ -2184,6 +2467,233 @@ func (tr *TraceReader) handleCacheEndWrite(out *TraceView, reader *BinaryReader,
 	return true
 }
 
+func (tr *TraceReader) handleFileFetchSize(out *TraceView, reader *BinaryReader) bool {
+	// 读取数据
+	clientUid := tr.ReadClientId(out, reader)
+	key := reader.ReadCasKey()
+	fileSize := reader.Read7BitEncoded()
+
+	// 获取会话
+	session := tr.GetSessionByUID(out, clientUid)
+	if session == nil {
+		return false
+	}
+
+	// 查找活跃文件
+	fileIndex, exists := session.FetchedFilesActive[key]
+	if !exists {
+		return false
+	}
+
+	// 更新文件大小
+	file := session.FetchedFiles[fileIndex]
+	if file == (FileTransfer{}) {
+		return false
+	}
+
+	file.Size = fileSize
+	return true
+}
+
+type BreadcrumbWriter func(process *Process)
+
+func createBreadcrumbWriter(breadcrumbs string, deleteOld bool) BreadcrumbWriter {
+	return func(process *Process) {
+		if deleteOld {
+			process.Breadcrumbs = ""
+		} else if process.Breadcrumbs != "" {
+			process.Breadcrumbs += "\n"
+		}
+		process.Breadcrumbs += string(breadcrumbs)
+	}
+}
+
+func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryReader) bool {
+	// 读取数据
+	processId := reader.ReadU32()
+
+	var breadcrumbs string
+	var err error
+	if out.Version < 38 {
+		breadcrumbs, err = reader.ReadString()
+	} else {
+		breadcrumbs, err = reader.ReadLongString()
+	}
+	if err != nil {
+		return false
+	}
+
+	deleteOld := reader.ReadBool()
+
+	// 创建面包屑写入函数
+	writeBreadcrumb := createBreadcrumbWriter(breadcrumbs, deleteOld)
+
+	// 首先在活动进程中查找
+	if activeInfo, exists := tr.activeProcesses[processId]; exists {
+		session := tr.GetSession(out, activeInfo.SessionIndex)
+		if session == nil {
+			return false
+		}
+
+		if int(activeInfo.ProcessorIndex) >= len(session.Processors) {
+			return false
+		}
+		processor := session.Processors[activeInfo.ProcessorIndex]
+		if int(activeInfo.ProcessIndex) >= len(processor.Processes) {
+			return false
+		}
+
+		process := processor.Processes[activeInfo.ProcessIndex]
+		writeBreadcrumb(&process)
+		return true
+	}
+
+	// 如果不在活动进程中，进行全量搜索
+	found := false
+	for _, session := range out.Sessions {
+		for _, processor := range session.Processors {
+			for _, process := range processor.Processes {
+				if process.ID == processId {
+					writeBreadcrumb(&process)
+					found = true
+					// 注意：这里不立即返回，继续搜索所有匹配的进程
+					// 根据业务需求决定是否应该返回
+				}
+			}
+		}
+	}
+
+	return found
+}
+func (tr *TraceReader) handleWorkHint(out *TraceView, reader *BinaryReader, time uint64) bool {
+	// 读取基本数据
+	workIndex := uint32(reader.Read7BitEncoded())
+	stringIndex := reader.Read7BitEncoded()
+	startTimeRaw := reader.Read7BitEncoded()
+	startTime := ConvertTime(out, startTimeRaw)
+
+	// 查找工作记录
+	active, exists := tr.activeWorkRecords[workIndex]
+	if !exists {
+		return false
+	}
+
+	// 获取文本
+	text := out.Strings[stringIndex]
+	if text == "" {
+		return false
+
+	}
+
+	// 获取工作记录
+	track := out.WorkTracks[active.Track]
+	if int(active.Index) >= len(track.Records) {
+		return false
+	}
+
+	record := track.Records[active.Index]
+	handled := false
+
+	// 如果存在开始时间，尝试合并现有条目
+	if startTime > 0 {
+		// 反向遍历条目（从最新到最旧）
+		for i := len(record.Entries) - 1; i >= 0; i-- {
+			entry := &record.Entries[i]
+
+			// 如果遇到没有开始时间的条目，停止搜索
+			if entry.StartTime == 0 {
+				break
+			}
+
+			// 文本不匹配，继续搜索
+			if entry.Text != text {
+				continue
+			}
+
+			// 找到匹配的条目，增加计数并更新时间
+			entry.Count++
+			entryTime := entry.Time - entry.StartTime
+			newTime := time - startTime
+
+			if newTime > entryTime {
+				entry.Time = time
+				entry.StartTime = startTime
+			}
+
+			handled = true
+			break
+		}
+	}
+
+	// 如果没有处理过，添加新条目
+	if !handled {
+		newEntry := WorkRecordLogEntry{
+			Time:      time,
+			StartTime: startTime,
+			Text:      text,
+			Count:     1,
+		}
+		record.Entries = append(record.Entries, newEntry)
+	}
+
+	return true
+}
+
+func (tr *TraceReader) handleDriverUpdate(out *TraceView, reader *BinaryReader) bool {
+	// 读取驱动数据
+	driveLetter := reader.ReadByte()
+	busyPercent := reader.ReadByte()
+	readCount := reader.Read7BitEncoded()
+	readBytes := reader.Read7BitEncoded()
+	writeCount := reader.Read7BitEncoded()
+	writeBytes := reader.Read7BitEncoded()
+
+	// 检查是否有会话
+	if len(out.Sessions) == 0 {
+		return true
+	}
+
+	session := &out.Sessions[0]
+
+	// 初始化驱动映射
+	if session.Drives == nil {
+		session.Drives = make(map[uint8]Drive)
+	}
+
+	drive, exists := session.Drives[driveLetter]
+	if !exists {
+		session.Drives[driveLetter] = Drive{}
+	}
+
+	// 初始化切片
+	if len(drive.BusyPercent) == 0 {
+		updatesCount := len(session.Updates)
+		drive.BusyPercent = make([]uint8, updatesCount)
+		drive.ReadCount = make([]uint32, updatesCount)
+		drive.WriteCount = make([]uint32, updatesCount)
+		drive.ReadBytes = make([]uint64, updatesCount)
+		drive.WriteBytes = make([]uint64, updatesCount)
+	}
+
+	// 更新最高繁忙百分比
+	if busyPercent > drive.BusyHighest {
+		drive.BusyHighest = busyPercent
+	}
+
+	// 添加新数据
+	drive.BusyPercent = append(drive.BusyPercent, busyPercent)
+	drive.TotalReadCount += uint32(readCount)
+	drive.TotalWriteCount += uint32(writeCount)
+	drive.TotalReadBytes += readBytes
+	drive.TotalWriteBytes += writeBytes
+	drive.ReadCount = append(drive.ReadCount, uint32(readCount))
+	drive.ReadBytes = append(drive.ReadBytes, readBytes)
+	drive.WriteCount = append(drive.WriteCount, uint32(writeCount))
+	drive.WriteBytes = append(drive.WriteBytes, writeBytes)
+
+	return true
+}
+
 func formatTimeUS(timeus int64) string {
 	// 将微秒转换为秒和纳秒
 	seconds := timeus / 1e6
@@ -2197,22 +2707,42 @@ func formatTimeUS(timeus int64) string {
 
 // ReadUBAFile reads and parses a UBA trace file
 func ReadUBAFile(filename string) (*TraceView, error) {
+	blog.Infof("ubatrace: start read UBA file: %s", filename)
+
 	// Track trace type counts
 	traceTypeCounts := make(map[uint8]int)
+
 	// Open the file
-	file, err := os.Open(filename)
-	if err != nil {
+	trycounter := 0
+	var file *os.File
+	var err error
+	succeed := false
+	for trycounter < 20 {
+		trycounter++
+		file, err = os.Open(filename)
+		if err != nil {
+			blog.Infof("failed to open file:%s with try:%d with error: %v", filename, trycounter, err)
+			time.Sleep(time.Second * 1)
+			continue
+		} else {
+			succeed = true
+			break
+		}
+	}
+	if !succeed {
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
+
 	defer file.Close()
 
 	// Read the entire file into memory
 	data, err := io.ReadAll(file)
 	if err != nil {
+		blog.Infof("failed to read file:%s with error: %v", filename, err)
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
-	blog.Infof("ubatrace: Successfully read UBA file: %s (%d bytes)", filename, len(data))
+	blog.Infof("ubatrace: read UBA file: %s (%d bytes)", filename, len(data))
 
 	// Create binary reader
 	reader := NewBinaryReader(data)
@@ -2289,6 +2819,8 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 			break
 		}
 	}
+
+	blog.Infof("ubatrace: finished read UBA file: %s", filename)
 
 	return traceView, nil
 }

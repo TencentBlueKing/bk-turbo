@@ -86,6 +86,7 @@ func newCustomProcess(c *commandCli.Context) *pkg.ShaderTool {
 		LogLevel:        c.String(FlagLog),
 		LogDir:          getLogDir(c.String(FlagLogDir)),
 		ProcessInfoFile: c.String(FlagProcessInfoFile),
+		NoIdleQuit:      c.Bool(FlagNoIdleQuit),
 	})
 }
 

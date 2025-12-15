@@ -27,11 +27,17 @@ func NewUbaAgent() handler.Handler {
 // UbaAgent describe the handler of UbaAgent.exe
 type UbaAgent struct {
 	sandbox *dcSyscall.Sandbox
+	jobID   string
 }
 
 // InitSandbox init sandbox
 func (ua *UbaAgent) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	ua.sandbox = sandbox
+}
+
+// SetJobID set jobID to task
+func (ua *UbaAgent) SetJobID(jobID string) {
+	ua.jobID = jobID
 }
 
 // InitExtra no need
@@ -89,7 +95,7 @@ func (ua *UbaAgent) PreLockWeight(command []string) int32 {
 
 // PreExecute just return the origin cmd
 func (ua *UbaAgent) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("ua: PreExecute with command: %v", command)
+	blog.Infof("ua(%s): PreExecute with command: %v", ua.jobID, command)
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
@@ -129,7 +135,7 @@ func (ua *UbaAgent) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 
 // PostExecute judge the result
 func (ua *UbaAgent) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
-	blog.Infof("ua: PostExecute with result: %+v", *r)
+	blog.Infof("ua(%s): PostExecute with result: %+v", ua.jobID, *r)
 	return dcType.ErrorNone
 }
 

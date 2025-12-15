@@ -43,7 +43,7 @@ func listresource(req *restful.Request, resp *restful.Response) {
 	// blog.Infof("api: got listresource request body [%s]", req.Request.Body)
 	tracefile := req.QueryParameter(listresourceTraceFile)
 	sessionmapstr := req.QueryParameter(listresourceSessionmap)
-	blog.Infof("api: got listresource request with tracefile[%s] sessionmap[%s]",
+	blog.Debugf("api: got listresource request with tracefile[%s] sessionmap[%s]",
 		tracefile,
 		sessionmapstr)
 

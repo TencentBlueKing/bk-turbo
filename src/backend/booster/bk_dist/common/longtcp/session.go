@@ -250,7 +250,7 @@ func NewSession(ip string, port int32, timeout int, handshakedata []byte, callba
 
 	s.clientStart()
 
-	blog.Infof("[longtcp] Dial to :%s:%d succeed", ip, port)
+	blog.Debugf("[longtcp] Dial to :%s:%d succeed", ip, port)
 
 	return s
 }
@@ -269,9 +269,9 @@ func (s *Session) sendRoutine(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			blog.Infof("[longtcp] internal send canceled by context")
+			blog.Debugf("[longtcp] internal send canceled by context")
 			for range s.sendNotifyChan {
-				blog.Infof("[longtcp] [trace message] [session:%s] empty sendNotifyChan when context cancel",
+				blog.Debugf("[longtcp] [trace message] [session:%s] empty sendNotifyChan when context cancel",
 					s.Desc())
 			}
 			return
@@ -295,7 +295,7 @@ func (s *Session) copyMessages() []*Message {
 		for _, msg := range s.sendQueue {
 			ids = append(ids, msg.Desc())
 		}
-		blog.Infof("[longtcp] [trace message] %v copied to real send queue", ids)
+		blog.Debugf("[longtcp] [trace message] %v copied to real send queue", ids)
 		s.sendQueue = make([]*Message, 0, 10)
 		return ret
 	} else {
@@ -311,7 +311,7 @@ func (s *Session) putWait(msg *Message) error {
 	if s.waitMap != nil {
 		msg.WaitStart = time.Now()
 		s.waitMap[msg.TCPHead.UniqID] = msg
-		blog.Infof("[longtcp] [trace message] [%s] put to wait queue", msg.Desc())
+		blog.Debugf("[longtcp] [trace message] [%s] put to wait queue", msg.Desc())
 	} else {
 		blog.Warnf("[longtcp] [trace message] [%s] session invalid when put to wait queue", msg.Desc())
 		return ErrorConnectionInvalid
@@ -344,7 +344,7 @@ func (s *Session) returnWait(ret *MessageResult) error {
 		if m, ok := s.waitMap[ret.TCPHead.UniqID]; ok {
 			m.RetChan <- ret
 			delete(s.waitMap, ret.TCPHead.UniqID)
-			blog.Infof("[longtcp] [trace message] [%s] notified with response data ", ret.TCPHead.UniqID)
+			blog.Debugf("[longtcp] [trace message] [%s] notified with response data ", ret.TCPHead.UniqID)
 			return nil
 		}
 	}
@@ -437,7 +437,7 @@ func (s *Session) sendReal() {
 	msgs := s.copyMessages()
 
 	for _, m := range msgs {
-		blog.Infof("[longtcp] [trace message] [session:%s] [%s] start real send now",
+		blog.Debugf("[longtcp] [trace message] [session:%s] [%s] start real send now",
 			s.Desc(), m.Desc())
 		if m.WaitResponse {
 			err := s.putWait(m)
@@ -508,7 +508,7 @@ func (s *Session) sendReal() {
 		blog.Debugf("[longtcp] session[%s] real sent body with ID [%s] ", s.Desc(), m.Desc())
 
 		if !m.WaitResponse {
-			blog.Infof("[longtcp] [trace message] [%s] notified after sent", m.Desc())
+			blog.Debugf("[longtcp] [trace message] [%s] notified after sent", m.Desc())
 			m.RetChan <- &MessageResult{
 				Err:  nil,
 				Data: nil,
@@ -561,7 +561,7 @@ func (s *Session) receiveRoutine(wg *sync.WaitGroup) {
 		}
 
 		// blog.Debugf("[longtcp] session[%s] received %d data", s.Desc(), recvlen)
-		blog.Infof("[longtcp] [trace message] [%s] received response data", head.UniqID)
+		blog.Debugf("[longtcp] [trace message] [%s] received response data", head.UniqID)
 		// TODO : decode msg, and call funtions to deal, and return response
 		ret := &MessageResult{
 			Err:     nil,
@@ -622,7 +622,7 @@ func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	}
 
 	s.sendQueue = append(s.sendQueue, msg)
-	blog.Infof("[longtcp] [trace message] [%s] appended to send queue", msg.Desc())
+	blog.Debugf("[longtcp] [trace message] [%s] appended to send queue", msg.Desc())
 
 	s.sendMutex.Unlock()
 
@@ -637,11 +637,11 @@ func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 		}
 	}
 
-	blog.Infof("[longtcp] [trace message] [session:%s] [%s] notify and wait result after append",
+	blog.Debugf("[longtcp] [trace message] [session:%s] [%s] notify and wait result after append",
 		s.Desc(), msg.Desc())
 	msgresult := <-msg.RetChan
 
-	blog.Infof("[longtcp] [trace message] [session:%s] [%s] notify and wait got result now",
+	blog.Debugf("[longtcp] [trace message] [session:%s] [%s] notify and wait got result now",
 		s.Desc(), msg.Desc())
 
 	return msgresult
@@ -668,10 +668,10 @@ func (s *Session) Send(
 	// data 转到 message
 	msg := s.encData2Message(data, waitresponse, waitsecs, f)
 
-	blog.Infof("[longtcp] [trace message] [session:%s] [%s] start notify and wait result with waitsecs:%d",
+	blog.Debugf("[longtcp] [trace message] [session:%s] [%s] start notify and wait result with waitsecs:%d",
 		s.Desc(), msg.Desc(), waitsecs)
 	ret := s.notifyAndWait(msg)
-	blog.Infof("[longtcp] [trace message] [session:%s] [%s] end notify and wait result with waitsecs:%d",
+	blog.Debugf("[longtcp] [trace message] [session:%s] [%s] end notify and wait result with waitsecs:%d",
 		s.Desc(), msg.Desc(), waitsecs)
 
 	return ret
@@ -703,21 +703,21 @@ func (s *Session) clientStart() {
 	wg1.Add(1)
 	go s.receiveRoutine(&wg1)
 	wg1.Wait()
-	blog.Infof("[longtcp] go routine of client receive started!")
+	blog.Debugf("[longtcp] go routine of client receive started!")
 
 	// 再启动发送协程
 	var wg2 = sync.WaitGroup{}
 	wg2.Add(1)
 	go s.sendRoutine(&wg2)
 	wg2.Wait()
-	blog.Infof("[longtcp] go routine of client send started!")
+	blog.Debugf("[longtcp] go routine of client send started!")
 
 	// 最后启动状态检查协程
 	var wg3 = sync.WaitGroup{}
 	wg3.Add(1)
 	go s.check(&wg3)
 	wg3.Wait()
-	blog.Infof("[longtcp] go routine of client check started!")
+	blog.Debugf("[longtcp] go routine of client check started!")
 }
 
 // 启动收发协程
@@ -729,21 +729,21 @@ func (s *Session) serverStart() {
 	wg1.Add(1)
 	go s.sendRoutine(&wg1)
 	wg1.Wait()
-	blog.Infof("[longtcp] go routine of server send started!")
+	blog.Debugf("[longtcp] go routine of server send started!")
 
 	// 再启动接收协程
 	var wg2 = sync.WaitGroup{}
 	wg2.Add(1)
 	go s.receiveRoutine(&wg2)
 	wg2.Wait()
-	blog.Infof("[longtcp] go routine of server receive started!")
+	blog.Debugf("[longtcp] go routine of server receive started!")
 
 	// 最后启动状态检查协程
 	var wg3 = sync.WaitGroup{}
 	wg3.Add(1)
 	go s.check(&wg3)
 	wg3.Wait()
-	blog.Infof("[longtcp] go routine of server check started!")
+	blog.Debugf("[longtcp] go routine of server check started!")
 }
 
 func (s *Session) check(wg *sync.WaitGroup) {
@@ -783,15 +783,15 @@ func (s *Session) safeClose(ch chan bool) (err error) {
 // 清理资源，包括关闭连接，停止协程等
 func (s *Session) Clean(err error) {
 	// blog.Debugf("[longtcp] session %s clean now", s.Desc())
-	blog.Infof("[longtcp] [trace message] [session:%s] ready clean now", s.Desc())
+	blog.Debugf("[longtcp] [trace message] [session:%s] ready clean now", s.Desc())
 
 	s.sendMutex.Lock()
 
 	// 通知发送队列中的任务
-	blog.Infof("[longtcp] [trace message] [session:%s] has %d in send queue when clean",
+	blog.Debugf("[longtcp] [trace message] [session:%s] has %d in send queue when clean",
 		s.Desc(), len(s.sendQueue))
 	if !s.valid { // 避免重复clean
-		blog.Infof("[longtcp] session %s has cleaned before", s.Desc())
+		blog.Debugf("[longtcp] session %s has cleaned before", s.Desc())
 		return
 	} else {
 		s.valid = false
@@ -813,7 +813,7 @@ func (s *Session) Clean(err error) {
 
 	// 通知等待结果的队列中的任务
 	s.waitMutex.Lock()
-	blog.Infof("[longtcp] [trace message] [session:%s] has %d in wait queue when clean",
+	blog.Debugf("[longtcp] [trace message] [session:%s] has %d in wait queue when clean",
 		s.Desc(), len(s.waitMap))
 	for k, m := range s.waitMap {
 		blog.Warnf("[longtcp] [trace message] [session:%s] [%s] notified in wait queue with error:%v",
@@ -839,7 +839,7 @@ func (s *Session) checkWaitTimeout() {
 	for _, m := range s.waitMap {
 		if m.MaxWaitSecs > 0 &&
 			m.WaitStart.Add(time.Duration(m.MaxWaitSecs)*time.Second).Before(time.Now()) {
-			blog.Infof("[longtcp] [trace message] [%s] found message in session:[%s] timeout with %d seconds",
+			blog.Debugf("[longtcp] [trace message] [%s] found message in session:[%s] timeout with %d seconds",
 				m.Desc(),
 				s.Desc(),
 				m.MaxWaitSecs)
@@ -1002,7 +1002,7 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 		cleaned:         false,
 	}
 
-	blog.Infof("[longtcp] client pool ready new client sessions to [%s:%d]", ip, port)
+	blog.Debugf("[longtcp] client pool ready new client sessions to [%s:%d]", ip, port)
 	failed := false
 	for i := 0; i < int(size); i++ {
 		if failed {
@@ -1022,7 +1022,7 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 	}
 
 	// 启动检查 session的协程，用于检查和恢复
-	blog.Infof("[longtcp] client pool ready start check go routine")
+	blog.Debugf("[longtcp] client pool ready start check go routine")
 	var wg = sync.WaitGroup{}
 	wg.Add(1)
 	go tempSessionPool.check(&wg)
@@ -1042,7 +1042,7 @@ func GetGlobalSessionPool(ip string, port int32, timeout int, callbackhandshake 
 
 // 用于清理相应的session pool
 func CleanGlobalSessionPool(ip string, port int32) {
-	blog.Infof("[longtcp] clean session pool %s:%d in", ip, port)
+	blog.Debugf("[longtcp] clean session pool %s:%d in", ip, port)
 
 	// globalmutex.Lock()
 	// defer globalmutex.Unlock()
@@ -1064,7 +1064,7 @@ func CleanGlobalSessionPool(ip string, port int32) {
 	delete(globalSessionPoolsLocks, key)
 	globalmutex.Unlock()
 
-	blog.Infof("[longtcp] clean session pool %s:%d out", ip, port)
+	blog.Debugf("[longtcp] clean session pool %s:%d out", ip, port)
 }
 
 // 获取可用session
@@ -1108,7 +1108,7 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 }
 
 func (sp *ClientSessionPool) Clean(err error) error {
-	blog.Infof("[longtcp] clean sessions of pool %s:%d in", sp.ip, sp.port)
+	blog.Debugf("[longtcp] clean sessions of pool %s:%d in", sp.ip, sp.port)
 	sp.cancel()
 
 	sp.mutex.Lock()
@@ -1123,7 +1123,7 @@ func (sp *ClientSessionPool) Clean(err error) error {
 		}
 	}
 
-	blog.Infof("[longtcp] clean sessions of %s:%d out", sp.ip, sp.port)
+	blog.Debugf("[longtcp] clean sessions of %s:%d out", sp.ip, sp.port)
 
 	return nil
 }
@@ -1136,10 +1136,10 @@ func (sp *ClientSessionPool) check(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-sp.ctx.Done():
-			blog.Infof("[longtcp] session pool %s:%d check routine canceled by context", sp.ip, sp.port)
+			blog.Debugf("[longtcp] session pool %s:%d check routine canceled by context", sp.ip, sp.port)
 			return
 		case <-sp.checkNotifyChan:
-			blog.Infof("[longtcp] session pool %s:%d check triggled by notify", sp.ip, sp.port)
+			blog.Debugf("[longtcp] session pool %s:%d check triggled by notify", sp.ip, sp.port)
 			sp.checkSessions()
 		case <-ticker.C:
 			blog.Debugf("[longtcp] session pool %s:%d check triggled by ticker", sp.ip, sp.port)
@@ -1153,7 +1153,7 @@ func (sp *ClientSessionPool) checkSessions() {
 	defer sp.mutex.Unlock()
 
 	if sp.cleaned {
-		blog.Infof("[longtcp] session pool %s:%d has cleaned, do not check now", sp.ip, sp.port)
+		blog.Debugf("[longtcp] session pool %s:%d has cleaned, do not check now", sp.ip, sp.port)
 		return
 	}
 
@@ -1165,7 +1165,7 @@ func (sp *ClientSessionPool) checkSessions() {
 	}
 
 	if len(invalidIndex) > 0 {
-		blog.Infof("[longtcp] session pool %s:%d check found %d invalid sessions", sp.ip, sp.port, len(invalidIndex))
+		blog.Debugf("[longtcp] session pool %s:%d check found %d invalid sessions", sp.ip, sp.port, len(invalidIndex))
 
 		for i := 0; i < len(invalidIndex); i++ {
 			client := NewSession(sp.ip, sp.port, sp.timeout, sp.handshakedata, sp.callback)
@@ -1175,7 +1175,7 @@ func (sp *ClientSessionPool) checkSessions() {
 					sp.sessions[sessionid].Clean(ErrorConnectionInvalid)
 				}
 				sp.sessions[sessionid] = client
-				blog.Infof("[longtcp] update %dth session to new %s", sessionid, client.Desc())
+				blog.Debugf("[longtcp] update %dth session to new %s", sessionid, client.Desc())
 			} else {
 				// TODO : if failed ,we should try later?
 				blog.Warnf("[longtcp] check session pool %s:%d, failed to NewSession", sp.ip, sp.port)
