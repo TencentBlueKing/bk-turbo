@@ -48,6 +48,13 @@ const (
 	TraceTypeProcessBreadcrumbs
 	TraceTypeWorkHint
 	TraceTypeDriveUpdate
+	TraceTypeCacheSummary
+	TraceTypeTaskBegin
+	TraceTypeTaskHint
+	TraceTypeTaskEnd
+	TraceTypeSchedulerUpdate
+	TraceTypeSchedulerKillProcess
+	TraceTypeSessionInfo
 )
 
 // TraceTypeNames maps trace type constants to their string names
@@ -84,6 +91,13 @@ var TraceTypeNames = map[uint8]string{
 	TraceTypeProcessBreadcrumbs:        "ProcessBreadcrumbs",
 	TraceTypeWorkHint:                  "WorkHint",
 	TraceTypeDriveUpdate:               "DriveUpdate",
+	TraceTypeCacheSummary:              "CacheSummary",
+	TraceTypeTaskBegin:                 "TaskBegin",
+	TraceTypeTaskHint:                  "TaskHint",
+	TraceTypeTaskEnd:                   "TaskEnd",
+	TraceTypeSchedulerUpdate:           "SchedulerUpdate",
+	TraceTypeSchedulerKillProcess:      "SchedulerKillProcess",
+	TraceTypeSessionInfo:               "SessionInfo",
 }
 
 // GUID represents a Windows GUID
@@ -101,6 +115,15 @@ type CasKey [20]byte
 
 var CasKeyZero = CasKey{}
 
+type ProcessType uint8
+
+const (
+	ProcessType_Normal ProcessType = iota
+	ProcessType_CacheFetchTest
+	ProcessType_CacheFetchDownload
+	ProcessType_Task
+)
+
 // Process represents a traced process
 type Process struct {
 	ID              uint32
@@ -111,6 +134,7 @@ type Process struct {
 	ReturnedReason  string
 	Breadcrumbs     string
 	BitmapDirty     bool
+	Type            ProcessType
 	CacheFetch      bool
 	IsRemote        bool
 	CreateFilesTime uint64
@@ -163,6 +187,8 @@ type FileTransfer struct {
 	Start uint64
 	Stop  uint64
 }
+type SessionInfo struct {
+}
 
 // Session represents a traced session
 type Session struct {
@@ -170,6 +196,7 @@ type Session struct {
 	FullName           string
 	Hyperlink          string
 	ClientUID          GUID
+	Infos              []SessionInfo
 	Processors         []Processor
 	Updates            []uint64
 	NetworkSend        []uint64
@@ -237,10 +264,10 @@ type StatusUpdate struct {
 
 // CacheWrite represents a cache write operation
 type CacheWrite struct {
-	Start     uint64
-	End       uint64
-	Success   bool
-	BytesSent uint64
+	Start   uint64
+	End     uint64
+	Success bool
+	Stats   []uint8
 }
 
 // Timer represents a timer with time and count
@@ -288,10 +315,13 @@ type ProcessStats struct {
 	LongPathName       Timer
 
 	// Fixed fields
-	StartupTime   uint64
-	ExitTime      uint64
-	WallTime      uint64
-	CPUTime       uint64
+	StartupTime       uint64
+	ExitTime          uint64
+	WallTime          uint64
+	CPUTime           uint64
+	PeakProcessMemory uint64
+	PeakJobMemory     uint64
+
 	UsedMemory    uint32
 	DetoursMemory uint64
 	PeakMemory    uint64
@@ -382,26 +412,55 @@ type CacheStats struct {
 	FetchBytesComp uint64
 }
 
+// CacheSendStats represents cache send statistics - complete implementation
+type CacheSendStats struct {
+	Build              Timer
+	SendPathTable      Timer
+	SendCasTable       Timer
+	SendTableWait      Timer
+	SendEntry          Timer
+	CreateCas          Timer
+	SendFile           TimeAndBytes
+	SendNormalizedFile TimeAndBytes
+}
+
+// CacheSummary represents a cache summary
+type CacheSummary struct {
+	Lines []string
+}
+
+// Output represents the output of the trace reader
+type Output struct {
+	CacheSummaries             []CacheSummary
+	LastSpawningDelayStartTime uint64
+	LastSpawningDelayEndTime   uint64
+	LastKillProcessTime        uint64
+}
+
 // TraceView represents the main trace view structure
 type TraceView struct {
-	Sessions                []Session
-	WorkTracks              []WorkTrack
-	Strings                 []string
-	StatusMap               map[uint64]StatusUpdate
-	CacheWrites             map[uint32]CacheWrite
-	RealStartTime           uint64
-	StartTime               uint64
-	SystemStartTimeUs       uint64
-	Frequency               uint64
-	TotalProcessActiveCount uint32
-	TotalProcessExitedCount uint32
-	ActiveSessionCount      uint32
-	Version                 uint32
-	ProgressProcessesTotal  uint32
-	ProgressProcessesDone   uint32
-	ProgressErrorCount      uint32
-	RemoteExecutionDisabled bool
-	Finished                bool
+	Sessions                   []Session
+	CacheSummaries             []CacheSummary
+	WorkTracks                 []WorkTrack
+	Strings                    []string
+	StatusMap                  map[uint64]StatusUpdate
+	CacheWrites                map[uint32]CacheWrite
+	RealStartTime              uint64
+	StartTime                  uint64
+	SystemStartTimeUs          uint64
+	Frequency                  uint64
+	LastKillProcessTime        uint64
+	LastSpawningDelayStartTime uint64
+	LastSpawningDelayEndTime   uint64
+	TotalProcessActiveCount    uint32
+	TotalProcessExitedCount    uint32
+	ActiveSessionCount         uint32
+	Version                    uint32
+	ProgressProcessesTotal     uint32
+	ProgressProcessesDone      uint32
+	ProgressErrorCount         uint32
+	RemoteExecutionDisabled    bool
+	Finished                   bool
 }
 
 // ProcessLocation represents the location of a process
@@ -824,6 +883,10 @@ func (r *BinaryReader) ReadProcessStats(version uint32) ProcessStats {
 		stats.ExitTime = r.Read7BitEncoded()
 		stats.WallTime = r.Read7BitEncoded()
 		stats.CPUTime = r.Read7BitEncoded()
+		if version >= 49 {
+			stats.PeakProcessMemory = r.Read7BitEncoded()
+			stats.PeakJobMemory = r.Read7BitEncoded()
+		}
 		stats.DetoursMemory = r.Read7BitEncoded()
 		stats.PeakMemory = r.Read7BitEncoded()
 		if version >= 39 {
@@ -1189,6 +1252,22 @@ func (r *BinaryReader) ReadCacheStats(version uint32) CacheStats {
 	return stats
 }
 
+// ReadCacheSendStats
+func (r *BinaryReader) ReadCacheSendStats(version uint32) CacheSendStats {
+	stats := CacheSendStats{}
+	stats.Build = r.ReadTimer()
+	stats.SendPathTable = r.ReadTimer()
+	stats.SendCasTable = r.ReadTimer()
+	stats.SendTableWait = r.ReadTimer()
+	stats.SendEntry = r.ReadTimer()
+	stats.CreateCas = r.ReadTimer()
+
+	stats.SendFile = r.ReadTimeAndBytes(version)
+	stats.SendNormalizedFile = r.ReadTimeAndBytes(version)
+
+	return stats
+}
+
 // TraceReader handles trace reading operations
 type TraceReader struct {
 	activeProcesses       map[uint32]ProcessLocation
@@ -1265,7 +1344,7 @@ func (tr *TraceReader) GetSessionByUID(out *TraceView, clientUID GUID) *Session 
 }
 
 // ProcessBegin starts a new process
-func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, time uint64, description string, breadcrumbs string) *Process {
+func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, time uint64, description string, breadcrumbs string, processType ProcessType) *Process {
 	session := tr.GetSession(out, sessionIndex)
 	if session == nil {
 		return nil
@@ -1273,6 +1352,11 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 
 	if len(session.Processors) == 0 {
 		session.Processors = append(session.Processors, Processor{})
+	}
+
+	if processType == ProcessType_Normal {
+		session.ProcessActiveCount++
+		out.TotalProcessActiveCount++
 	}
 
 	processor := &session.Processors[0]
@@ -1293,9 +1377,6 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 		ProcessIndex:   processIndex,
 	}
 
-	session.ProcessActiveCount++
-	out.TotalProcessActiveCount++
-
 	return &processor.Processes[processIndex]
 }
 
@@ -1313,15 +1394,15 @@ func (tr *TraceReader) ProcessEnd(out *TraceView, id uint32, time uint64) (*Proc
 		return nil, location.SessionIndex
 	}
 
-	session.ProcessActiveCount--
-	out.TotalProcessActiveCount--
-
 	process := &session.Processors[location.ProcessorIndex].Processes[location.ProcessIndex]
 	process.Stop = time
 	process.BitmapDirty = true
-
-	session.ProcessExitedCount++
-	out.TotalProcessExitedCount++
+	if process.Type == ProcessType_Normal {
+		session.ProcessActiveCount--
+		out.TotalProcessActiveCount--
+		session.ProcessExitedCount++
+		out.TotalProcessExitedCount++
+	}
 
 	return process, location.SessionIndex
 }
@@ -1354,7 +1435,7 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 	traceType := reader.ReadByte()
 	var time uint64 = 0
 
-	blog.Debugf("ubatrace: got trace type: %d", traceType)
+	blog.Debugf("ubatrace: got trace type: %s", TraceTypeNames[traceType])
 
 	// Count trace types
 	if traceTypeCounts != nil {
@@ -1443,6 +1524,20 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 		return tr.handleWorkHint(out, reader, time)
 	case TraceTypeDriveUpdate:
 		return tr.handleDriverUpdate(out, reader)
+	case TraceTypeCacheSummary:
+		return tr.handleCacheSummary(out, reader)
+	case TraceTypeTaskBegin:
+		return tr.handleTaskBegin(out, reader, time)
+	case TraceTypeTaskHint:
+		return tr.handleTaskHint(out, reader)
+	case TraceTypeTaskEnd:
+		return tr.handleTaskEnd(out, reader, time)
+	case TraceTypeSchedulerUpdate:
+		return tr.handleSchedulerUpdate(out, reader, time)
+	case TraceTypeSchedulerKillProcess:
+		return tr.handleSchedulerKillProcess(out, reader, time)
+	case TraceTypeSessionInfo:
+		return tr.handleSessionInfo(out, reader)
 	}
 
 	return true
@@ -1450,6 +1545,9 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 
 // resize 通用切片调整大小函数，支持任意类型的切片
 func resize[T any](arr []T, newSize int) []T {
+	if newSize < 0 {
+		return arr // 防止负数长度
+	}
 	if newSize > len(arr) {
 		// 一次性分配足够的容量，避免多次内存分配
 		newArr := make([]T, newSize)
@@ -1503,6 +1601,7 @@ func (tr *TraceReader) handleSessionAdded(out *TraceView, reader *BinaryReader, 
 		oldSession.ProxyName = ""
 		oldSession.ProxyCreated = false
 		oldSession.Notification = ""
+		oldSession.Infos = nil
 		virtualSessionIndex = uint32(i)
 		break
 	}
@@ -1734,7 +1833,7 @@ func (tr *TraceReader) handleProcessAdded(out *TraceView, reader *BinaryReader, 
 		}
 	}
 
-	tr.ProcessBegin(out, sessionIndex, id, time, desc, breadcrumbs)
+	tr.ProcessBegin(out, sessionIndex, id, time, desc, breadcrumbs, ProcessType_Normal)
 	return true
 }
 
@@ -2386,7 +2485,7 @@ func (tr *TraceReader) handleCacheBeginFetch(out *TraceView, reader *BinaryReade
 		return false
 	}
 
-	process := tr.ProcessBegin(out, 0, id, time, desc, "")
+	process := tr.ProcessBegin(out, 0, id, time, desc, "", ProcessType_CacheFetchTest)
 	if process != nil {
 		process.CacheFetch = true
 	}
@@ -2460,7 +2559,29 @@ func (tr *TraceReader) handleCacheEndWrite(out *TraceView, reader *BinaryReader,
 
 	cacheWrite := out.CacheWrites[processID]
 	cacheWrite.Success = reader.ReadBool()
-	cacheWrite.BytesSent = reader.Read7BitEncoded()
+
+	var cacheSendStats CacheSendStats
+	dataStart := reader.GetPositionData()
+	if out.Version < 45 {
+		cacheSendStats.SendFile.Bytes = reader.Read7BitEncoded()
+	} else {
+		cacheSendStats = reader.ReadCacheSendStats(out.Version)
+	}
+
+	dataEnd := reader.GetPositionData()
+
+	// 计算读取的数据大小
+	dataSize := len(dataEnd) - len(dataStart)
+	if dataSize < 0 {
+		dataSize = 0
+	}
+
+	// 复制数据到write.Stats
+	cacheWrite.Stats = make([]byte, dataSize)
+	if dataSize > 0 {
+		// 假设dataStart是字节切片的某个位置
+		copy(cacheWrite.Stats, dataStart[:dataSize])
+	}
 	cacheWrite.End = time
 	out.CacheWrites[processID] = cacheWrite
 
@@ -2482,6 +2603,7 @@ func (tr *TraceReader) handleFileFetchSize(out *TraceView, reader *BinaryReader)
 	// 查找活跃文件
 	fileIndex, exists := session.FetchedFilesActive[key]
 	if !exists {
+		blog.Infof("ubatrace: Warning: FileFetchSize for key not found in active files, continuing...")
 		return false
 	}
 
@@ -2491,7 +2613,7 @@ func (tr *TraceReader) handleFileFetchSize(out *TraceView, reader *BinaryReader)
 		return false
 	}
 
-	file.Size = fileSize
+	file.Size = fileSize	
 	return true
 }
 
@@ -2543,8 +2665,8 @@ func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryRe
 			return false
 		}
 
-		process := processor.Processes[activeInfo.ProcessIndex]
-		writeBreadcrumb(&process)
+		process := &processor.Processes[activeInfo.ProcessIndex]
+		writeBreadcrumb(process)
 		return true
 	}
 
@@ -2556,8 +2678,6 @@ func (tr *TraceReader) handleProcessBreadcrumbs(out *TraceView, reader *BinaryRe
 				if process.ID == processId {
 					writeBreadcrumb(&process)
 					found = true
-					// 注意：这里不立即返回，继续搜索所有匹配的进程
-					// 根据业务需求决定是否应该返回
 				}
 			}
 		}
@@ -2650,6 +2770,7 @@ func (tr *TraceReader) handleDriverUpdate(out *TraceView, reader *BinaryReader) 
 
 	// 检查是否有会话
 	if len(out.Sessions) == 0 {
+		blog.Infof("ubatrace: Warning: DriverUpdate but no sessions available, continuing...")
 		return true
 	}
 
@@ -2660,19 +2781,16 @@ func (tr *TraceReader) handleDriverUpdate(out *TraceView, reader *BinaryReader) 
 		session.Drives = make(map[uint8]Drive)
 	}
 
-	drive, exists := session.Drives[driveLetter]
-	if !exists {
-		session.Drives[driveLetter] = Drive{}
-	}
-
-	// 初始化切片
+	// 获取驱动，如果不存在则创建
+	drive := session.Drives[driveLetter]
 	if len(drive.BusyPercent) == 0 {
+		// 首次初始化，根据当前更新次数设置容量
 		updatesCount := len(session.Updates)
-		drive.BusyPercent = make([]uint8, updatesCount)
-		drive.ReadCount = make([]uint32, updatesCount)
-		drive.WriteCount = make([]uint32, updatesCount)
-		drive.ReadBytes = make([]uint64, updatesCount)
-		drive.WriteBytes = make([]uint64, updatesCount)
+		drive.BusyPercent = make([]uint8, 0, updatesCount+1) // 预分配额外空间
+		drive.ReadCount = make([]uint32, 0, updatesCount+1)
+		drive.WriteCount = make([]uint32, 0, updatesCount+1)
+		drive.ReadBytes = make([]uint64, 0, updatesCount+1)
+		drive.WriteBytes = make([]uint64, 0, updatesCount+1)
 	}
 
 	// 更新最高繁忙百分比
@@ -2680,7 +2798,7 @@ func (tr *TraceReader) handleDriverUpdate(out *TraceView, reader *BinaryReader) 
 		drive.BusyHighest = busyPercent
 	}
 
-	// 添加新数据
+	// 添加新数据 - 使用append避免切片重新分配的问题
 	drive.BusyPercent = append(drive.BusyPercent, busyPercent)
 	drive.TotalReadCount += uint32(readCount)
 	drive.TotalWriteCount += uint32(writeCount)
@@ -2690,6 +2808,82 @@ func (tr *TraceReader) handleDriverUpdate(out *TraceView, reader *BinaryReader) 
 	drive.ReadBytes = append(drive.ReadBytes, readBytes)
 	drive.WriteCount = append(drive.WriteCount, uint32(writeCount))
 	drive.WriteBytes = append(drive.WriteBytes, writeBytes)
+
+	// 更新回映射
+	session.Drives[driveLetter] = drive
+
+	return true
+}
+
+func (tr *TraceReader) handleCacheSummary(out *TraceView, reader *BinaryReader) bool {
+	var cacheSummary CacheSummary
+	lineCount := reader.ReadU32()
+	cacheSummary.Lines = make([]string, 0, lineCount)
+	for i := uint32(0); i < lineCount; i++ {
+		line, _ := reader.ReadString()
+		cacheSummary.Lines = append(cacheSummary.Lines, line)
+	}
+	out.CacheSummaries = append(out.CacheSummaries, cacheSummary)
+	return true
+}
+
+func (tr *TraceReader) handleTaskBegin(out *TraceView, reader *BinaryReader, time uint64) bool {
+	id := uint32(reader.Read7BitEncoded())
+	desc, _ := reader.ReadString()
+	details, _ := reader.ReadString()
+	color := reader.ReadU32()
+	_ = color
+	tr.ProcessBegin(out, 0, id, time, desc, details, ProcessType_Task)
+	return true
+}
+
+func (tr *TraceReader) handleTaskHint(out *TraceView, reader *BinaryReader) bool {
+	id := uint32(reader.Read7BitEncoded())
+	_ = id // 忽略未使用的id变量
+	hint, _ := reader.ReadString()
+	_ = hint // 注意：这里hint变量未被使用，可能需要处理
+	return true
+}
+
+func (tr *TraceReader) handleTaskEnd(out *TraceView, reader *BinaryReader, time uint64) bool {
+	id := uint32(reader.Read7BitEncoded())
+	success := reader.ReadBool()
+	process, sessionIndex := tr.ProcessEnd(out, id, time)
+	if process != nil {
+		if success {
+			process.ExitCode = 0
+		} else {
+			process.ExitCode = 0xFFFFFFFF
+		}
+	}
+
+	_ = sessionIndex // 如果sessionIndex不需要使用
+	return true
+}
+
+func (tr *TraceReader) handleSchedulerUpdate(out *TraceView, reader *BinaryReader, time uint64) bool {
+	if reader.ReadBool() {
+		out.LastSpawningDelayStartTime = time
+		out.LastSpawningDelayEndTime = math.MaxUint64
+	} else {
+		out.LastSpawningDelayEndTime = time
+	}
+	return true
+}
+
+func (tr *TraceReader) handleSchedulerKillProcess(out *TraceView, reader *BinaryReader, time uint64) bool {
+	processId := reader.ReadU32()
+	_ = processId // 使用_忽略未使用的变量
+	out.LastKillProcessTime = time
+	return true
+}
+
+func (tr *TraceReader) handleSessionInfo(out *TraceView, reader *BinaryReader) bool {
+	sessionIndex := reader.ReadU32()
+	infoStr, _ := reader.ReadString()
+	session := tr.GetSession(out, sessionIndex)
+	_ = session
+	_ = infoStr
 
 	return true
 }
