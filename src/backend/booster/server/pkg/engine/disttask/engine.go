@@ -48,6 +48,8 @@ const (
 	// for mesos, mesos will generate PORT_STATS_PORT env when launch docker
 	portsStats = "STATS_PORT"
 
+	portsUBA = "UBA_PORT"
+
 	// daemonStatsURL = "http://%s:%d/"
 )
 
@@ -978,6 +980,7 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 	for _, endpoints := range info.AvailableEndpoints {
 		servicePort := endpoints.Ports[portsService]
 		statsPort := endpoints.Ports[portsStats]
+		ubaPort := endpoints.Ports[portsUBA]
 
 		workerList = append(workerList, taskWorker{
 			CPU:       task.Operator.RequestCPUPerUnit,
@@ -985,6 +988,7 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 			IP:        endpoints.IP,
 			Port:      servicePort,
 			StatsPort: statsPort,
+			UBAPort:   ubaPort,
 			Name:      endpoints.Name,
 		})
 	}

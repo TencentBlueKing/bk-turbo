@@ -245,6 +245,22 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					continue
 				}
 
+				ip := strings.Split(hostField[0], ":")[0]
+
+				ubaport := 0
+				for _, v1 := range r.taskInfo.UBAHostList {
+					if strings.Contains(v1, ip) {
+						hostField1 := strings.Split(v1, "/")
+						if len(hostField1) >= 2 {
+							hostField2 := strings.Split(hostField1[0], ":")
+							if len(hostField2) >= 2 {
+								ubaport, _ = strconv.Atoi(hostField2[1])
+								break
+							}
+						}
+					}
+				}
+
 				host := &dcProtocol.Host{
 					Server:       hostField[0],
 					TokenString:  hostField[0],
@@ -252,6 +268,7 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					Jobs:         jobs,
 					Compresstype: dcProtocol.CompressLZ4,
 					Protocol:     "tcp",
+					UBAPort:      ubaport,
 				}
 				hosts = append(hosts, host)
 			}
