@@ -190,6 +190,8 @@ func (h *UBTTool) adjustActions4UBAAgent(all *common.UE4Action) {
 		for i := range all.Actions {
 			if all.Actions[i].Cmd == UbaTemplateToolKey {
 				all.Actions[i].Cmd = t.Toolchains[0].ToolKey
+
+				all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateToolKey, t.Toolchains[0].ToolKey, -1)
 			}
 
 			if all.Actions[i].Workdir == UbaTemplateToolKeyDir {

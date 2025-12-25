@@ -91,6 +91,11 @@ func (t *fastbuildTask) WorkerList() []string {
 	return t.WorkerIPList
 }
 
+// get the worker list.
+func (t *fastbuildTask) UBAWorkerList() []string {
+	return nil
+}
+
 // GetWorkerNameMap return worker name map
 func (t *fastbuildTask) GetWorkerNameMap() map[string]string {
 	return nil

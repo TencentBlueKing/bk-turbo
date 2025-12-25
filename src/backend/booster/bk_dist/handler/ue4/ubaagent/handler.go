@@ -10,6 +10,8 @@
 package ubaagent
 
 import (
+	"strings"
+
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
@@ -96,18 +98,24 @@ func (ua *UbaAgent) PreLockWeight(command []string) int32 {
 // PreExecute just return the origin cmd
 func (ua *UbaAgent) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
 	blog.Infof("ua(%s): PreExecute with command: %v", ua.jobID, command)
+
+	exepath := command[0]
+	params := command[1:]
+	if strings.Contains(command[1], "BCS_RANDHOSTPORT_FOR_CONTAINER_PORT") {
+		exepath = "/bin/bash"
+		params = append([]string{"-c"}, command[1:]...)
+	}
+
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
-				WorkDir: ua.sandbox.Dir,
-				// ExePath:         "C:\\Windows\\System32\\cmd.exe",
-				ExePath:         command[0],
+				WorkDir:         ua.sandbox.Dir,
+				ExePath:         exepath,
 				ExeName:         "",
 				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
-				// Params:          append([]string{"/C", "start"}, command...),
-				Params:      command[1:],
-				Inputfiles:  []dcSDK.FileDesc{},
-				ResultFiles: []string{},
+				Params:          params,
+				Inputfiles:      []dcSDK.FileDesc{},
+				ResultFiles:     []string{},
 			},
 		},
 	}, dcType.ErrorNone

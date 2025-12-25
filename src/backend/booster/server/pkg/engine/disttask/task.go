@@ -58,6 +58,21 @@ func (dt *distTask) WorkerList() []string {
 	return workers
 }
 
+// UBAWorkerList return worker list
+func (dt *distTask) UBAWorkerList() []string {
+	workers := make([]string, 0)
+	for _, v := range dt.Workers {
+		// set overload with cpu number*2 or limit*2
+		jobs := v.CPU
+		if dt.Operator.RequestProcessPerUnit > 0 {
+			jobs = float64(dt.Operator.RequestProcessPerUnit)
+		}
+		workers = append(workers, fmt.Sprintf("%s:%d/%d", v.IP, v.UBAPort, int(jobs*1.1)))
+	}
+
+	return workers
+}
+
 // GetWorkerNameMap return worker name map
 func (dt *distTask) GetWorkerNameMap() map[string]string {
 	workerNames := make(map[string]string, 0)
@@ -197,6 +212,7 @@ type taskWorker struct {
 	IP        string
 	Port      int
 	StatsPort int
+	UBAPort   int
 	Message   string
 	Name      string
 }

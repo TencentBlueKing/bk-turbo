@@ -23,6 +23,9 @@ type TaskExtension interface {
 	// get worker list from task
 	WorkerList() []string
 
+	// get worker list from task
+	UBAWorkerList() []string
+
 	GetWorkerNameMap() map[string]string
 
 	GetRequestInstance() int

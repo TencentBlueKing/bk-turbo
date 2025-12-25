@@ -720,7 +720,7 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	}
 
 	// to support uba listen port
-	if platform == "windows" {
+	if platform == "windows" || platform == "linux" {
 		pm[UbaPortName] = portsMap{
 			protocol: UbaProtocol,
 			port:     UbaPortNumber,
