@@ -94,7 +94,7 @@ func newExecutor(mgr *Mgr,
 	if e.ioTimeout4Uba <= 0 {
 		e.ioTimeout4Uba = defaultIOTimeout4Uba
 	}
-	blog.Infof("executor(%s): set ioTimeout4Uba to %d", e.req.Stats.ID, e.ioTimeout4Uba)
+	blog.Debugf("executor(%s): set ioTimeout4Uba to %d", e.req.Stats.ID, e.ioTimeout4Uba)
 	if strings.Contains(req.Commands[0], types.UbaAgent) {
 		e.isUbaCommand = true
 		e.ioTimeout = e.ioTimeout4Uba
