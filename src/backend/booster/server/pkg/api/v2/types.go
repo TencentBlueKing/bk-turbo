@@ -54,7 +54,8 @@ type RespTaskInfo struct {
 	Message     string                `json:"message"`
 	HostNameMap map[string]string     `json:"host_name_map"`
 
-	Extra string `json:"extra"`
+	Extra       string   `json:"extra"`
+	UBAHostList []string `json:"uba_host_list"`
 }
 
 // ParamHeartbeat contains the UpdateHeartbeat request data

@@ -273,10 +273,12 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 	hostlist := []string{}
 	hostNameMap := map[string]string{}
 	extra := ""
+	ubaHostlist := []string{}
 	if te != nil {
 		hostlist = te.WorkerList()
 		hostNameMap = te.GetWorkerNameMap()
 		extra = string(te.Dump())
+		ubaHostlist = te.UBAWorkerList()
 	}
 
 	return &RespTaskInfo{
@@ -287,6 +289,7 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 		QueueNumber: rank,
 		Message:     tb.Status.Message,
 		Extra:       extra,
+		UBAHostList: ubaHostlist,
 	}, nil
 }
 
