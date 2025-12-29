@@ -132,12 +132,12 @@ func (m *Mgr) SupportAbsPath() bool {
 		if v.taskInfo == nil {
 			continue
 		}
-		blog.Infof("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
+		blog.Debugf("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
 		if strings.Contains(v.taskInfo.Extra, commonTypes.LabelKeySupportAbsPath) {
-			blog.Infof("resource: ready decode extra to temp map")
+			blog.Debugf("resource: ready decode extra to temp map")
 			temp := map[string]interface{}{}
 			codec.DecJSON([]byte(v.taskInfo.Extra), &temp)
-			blog.Infof("resource: got temp map:%v", temp)
+			blog.Debugf("resource: got temp map:%v", temp)
 			if p, ok := temp[commonTypes.LabelKeySupportAbsPath]; ok {
 				b, ok := p.(bool)
 				if ok {

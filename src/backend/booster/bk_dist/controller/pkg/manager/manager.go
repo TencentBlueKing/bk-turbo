@@ -374,7 +374,8 @@ func (m *mgr) UnlockLocalSlots(workID string, usage dcSDK.JobUsage, weight int32
 // ExecuteLocalTask do task for work
 func (m *mgr) ExecuteLocalTask(
 	workID string, req *types.LocalTaskExecuteRequest) (*types.LocalTaskExecuteResult, error) {
-	blog.Infof("mgr(%s): try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
+	blog.Infof("mgr(%s): try to execute local task for work(%s) from pid(%d) with command:%v", req.Stats.ID, workID, req.Pid, req.Commands)
+	blog.Debugf("mgr(%s): try to execute local task for work(%s) from pid(%d) with environment: %v, %v",
 		req.Stats.ID, workID, req.Pid, req.Environments, req.Commands)
 
 	var work *types.Work
