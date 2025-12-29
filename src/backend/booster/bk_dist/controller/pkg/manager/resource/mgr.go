@@ -132,12 +132,12 @@ func (m *Mgr) SupportAbsPath() bool {
 		if v.taskInfo == nil {
 			continue
 		}
-		blog.Infof("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
+		blog.Debugf("resource: ready check abs path support with extra:%s", v.taskInfo.Extra)
 		if strings.Contains(v.taskInfo.Extra, commonTypes.LabelKeySupportAbsPath) {
-			blog.Infof("resource: ready decode extra to temp map")
+			blog.Debugf("resource: ready decode extra to temp map")
 			temp := map[string]interface{}{}
 			codec.DecJSON([]byte(v.taskInfo.Extra), &temp)
-			blog.Infof("resource: got temp map:%v", temp)
+			blog.Debugf("resource: got temp map:%v", temp)
 			if p, ok := temp[commonTypes.LabelKeySupportAbsPath]; ok {
 				b, ok := p.(bool)
 				if ok {
@@ -245,6 +245,22 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					continue
 				}
 
+				ip := strings.Split(hostField[0], ":")[0]
+
+				ubaport := 0
+				for _, v1 := range r.taskInfo.UBAHostList {
+					if strings.Contains(v1, ip) {
+						hostField1 := strings.Split(v1, "/")
+						if len(hostField1) >= 2 {
+							hostField2 := strings.Split(hostField1[0], ":")
+							if len(hostField2) >= 2 {
+								ubaport, _ = strconv.Atoi(hostField2[1])
+								break
+							}
+						}
+					}
+				}
+
 				host := &dcProtocol.Host{
 					Server:       hostField[0],
 					TokenString:  hostField[0],
@@ -252,6 +268,7 @@ func (m *Mgr) GetHosts() []*dcProtocol.Host {
 					Jobs:         jobs,
 					Compresstype: dcProtocol.CompressLZ4,
 					Protocol:     "tcp",
+					UBAPort:      ubaport,
 				}
 				hosts = append(hosts, host)
 			}

@@ -2981,7 +2981,15 @@ func (m *Mgr) GetAllWorkers() []string {
 
 	result := make([]string, 0, len(wks))
 	for _, v := range wks {
-		result = append(result, v.host.Server)
+		if v.host == nil {
+			continue
+		}
+		fields := strings.Split(v.host.Server, ":")
+		if len(fields) >= 2 {
+			ubahost := fmt.Sprintf("%s:%d", fields[0], v.host.UBAPort)
+			result = append(result, ubahost)
+			blog.Infof("remote: get all uba host %s", ubahost)
+		}
 	}
 	return result
 }
