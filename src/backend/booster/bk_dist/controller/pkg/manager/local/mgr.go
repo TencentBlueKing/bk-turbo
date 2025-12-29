@@ -275,7 +275,9 @@ func (m *Mgr) ExecuteTask(
 	globalWork *types.Work,
 	canUseLocalIdleResource bool,
 	f types.CallbackCheckResource) (*types.LocalTaskExecuteResult, error) {
-	blog.Infof("local(%s): try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
+	blog.Infof("local(%s): try to execute task(%s) for work(%s) from pid(%d) in dir(%s)",
+		req.Stats.ID, strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Dir)
+	blog.Debugf("local(%s): try to execute task(%s) for work(%s) from pid(%d) in env(%v) dir(%s)",
 		req.Stats.ID, strings.Join(req.Commands, " "), m.work.ID(), req.Pid, req.Environments, req.Dir)
 
 	e, err := newExecutor(m,
@@ -565,7 +567,8 @@ func (m *Mgr) ExecuteTask(
 
 	req.Stats.Success = true
 	m.work.Basic().UpdateJobStats(req.Stats)
-	blog.Infof("local(%s): success to execute task for work(%s) from pid(%d) in env(%v) dir(%s)",
+	blog.Infof("local(%s): success to execute task for work(%s)from pid(%d) in dir(%s)", req.Stats.ID, m.work.ID(), req.Pid, req.Dir)
+	blog.Debugf("local(%s): success to execute task for work(%s) from pid(%d) in env(%v) dir(%s)",
 		req.Stats.ID, m.work.ID(), req.Pid, req.Environments, req.Dir)
 	return &types.LocalTaskExecuteResult{
 		Result: &dcSDK.LocalTaskResult{
