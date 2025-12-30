@@ -1479,7 +1479,7 @@ func (cl *TaskCL) scanPchFile(args []string) []string {
 
 func (cl *TaskCL) needSaveResponseFile(args []string) (bool, string, error) {
 	exe := args[0]
-	if strings.HasSuffix(exe, "cl.exe") {
+	if strings.HasSuffix(exe, "cl.exe") || strings.HasSuffix(exe, "clang-cl.exe") {
 		if len(args) > 1 {
 			fullArgs := MakeCmdLine(args[1:])
 			if len(fullArgs) >= MaxWindowsCommandLength {
