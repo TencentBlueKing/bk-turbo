@@ -587,7 +587,7 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 					stop := float64(process.Stop) / float64(traceView.Frequency)
 
 					// mac 需要乘以 100，Frequency 为 1000000000
-					if runtime.GOOS == "darwin" {
+					if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
 						start = start * 100
 						stop = stop * 100
 					}
