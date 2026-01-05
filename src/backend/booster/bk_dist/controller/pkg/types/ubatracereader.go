@@ -348,6 +348,7 @@ type SessionStats struct {
 	CreateMmapFromFile Timer
 	WaitMmapFromFile   Timer
 	GetLongNameMsg     Timer
+	WaitBottleneck     Timer
 }
 
 // StorageStats represents storage statistics - complete implementation
@@ -384,20 +385,25 @@ type ExtendedTimer struct {
 // KernelStats represents kernel statistics - complete implementation
 type KernelStats struct {
 	// UBA_KERNEL_STATS fields (14 fields) - correct types based on C++ definition
-	CreateFile        ExtendedTimer // ExtendedTimer
-	CloseFile         ExtendedTimer // ExtendedTimer
-	WriteFile         TimeAndBytes  // TimeAndBytes
-	MemoryCopy        TimeAndBytes  // TimeAndBytes
-	ReadFile          TimeAndBytes  // TimeAndBytes
-	SetFileInfo       ExtendedTimer // ExtendedTimer
-	GetFileInfo       ExtendedTimer // ExtendedTimer
-	CreateFileMapping ExtendedTimer // ExtendedTimer
-	MapViewOfFile     ExtendedTimer // ExtendedTimer
-	UnmapViewOfFile   ExtendedTimer // ExtendedTimer
-	GetFileTime       ExtendedTimer // ExtendedTimer
-	CloseHandle       ExtendedTimer // ExtendedTimer
-	TraverseDir       ExtendedTimer // ExtendedTimer
-	VirtualAlloc      ExtendedTimer // ExtendedTimer
+	CreateFile         ExtendedTimer // ExtendedTimer
+	CloseFile          ExtendedTimer // ExtendedTimer
+	WriteFile          TimeAndBytes  // TimeAndBytes
+	MemoryCopy         TimeAndBytes  // TimeAndBytes
+	ReadFile           TimeAndBytes  // TimeAndBytes
+	SetFileInfo        ExtendedTimer // ExtendedTimer
+	GetFileInfo        ExtendedTimer // ExtendedTimer
+	CreateFileMapping  ExtendedTimer // ExtendedTimer
+	MapViewOfFile      ExtendedTimer // ExtendedTimer
+	UnmapViewOfFile    ExtendedTimer // ExtendedTimer
+	GetFileTime        ExtendedTimer // ExtendedTimer
+	CloseHandle        ExtendedTimer // ExtendedTimer
+	TraverseDir        ExtendedTimer // ExtendedTimer
+	VirtualAlloc       ExtendedTimer // ExtendedTimer
+	RenameFile         ExtendedTimer
+	RenameFileFallback ExtendedTimer
+	CopyFile           ExtendedTimer
+	MoveFile           ExtendedTimer
+	DeleteFile         ExtendedTimer
 }
 
 // CacheStats represents cache statistics - complete implementation
@@ -993,6 +999,9 @@ func (r *BinaryReader) ReadSessionStats(version uint32) SessionStats {
 		if (bits & (1 << 12)) != 0 {
 			stats.GetLongNameMsg = r.ReadTimer()
 		}
+		if (bits & (1 << 13)) != 0 {
+			stats.WaitBottleneck = r.ReadTimer()
+		}
 	}
 
 	return stats
@@ -1223,6 +1232,21 @@ func (r *BinaryReader) ReadKernelStats(version uint32) KernelStats {
 		}
 		if (bits & (1 << 13)) != 0 {
 			stats.VirtualAlloc = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 14)) != 0 {
+			stats.RenameFile = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 15)) != 0 {
+			stats.RenameFileFallback = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 16)) != 0 {
+			stats.CopyFile = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 17)) != 0 {
+			stats.MoveFile = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 18)) != 0 {
+			stats.DeleteFile = r.ReadExtendedTimer(version)
 		}
 	}
 
@@ -2613,7 +2637,7 @@ func (tr *TraceReader) handleFileFetchSize(out *TraceView, reader *BinaryReader)
 		return false
 	}
 
-	file.Size = fileSize	
+	file.Size = fileSize
 	return true
 }
 
