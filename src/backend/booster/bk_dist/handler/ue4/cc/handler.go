@@ -1057,7 +1057,27 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	// to check whether need to compile with response file
 	exeName := cc.serverSideArgs[0]
 	params := cc.serverSideArgs[1:]
-
+	flag, rspfile, err := cc.needSaveResponseFile(cc.serverSideArgs)
+	if flag && err == nil {
+		cc.addTmpFile(rspfile)
+		params = []string{fmt.Sprintf("@%s", rspfile)}
+		existed, fileSize, modifyTime, fileMode := dcFile.Stat(rspfile).Batch()
+		if !existed {
+			blog.Errorf("cc(%s): input response file %s not existed", cc.jobID, rspfile)
+			return nil, dcType.BKDistCommonError{
+				Code:  dcType.UnknowCode,
+				Error: fmt.Errorf("%s not existed", rspfile),
+			}
+		}
+		inputFiles = append(inputFiles, dcSDK.FileDesc{
+			FilePath:       rspfile,
+			Compresstype:   protocol.CompressLZ4,
+			FileSize:       fileSize,
+			Lastmodifytime: modifyTime,
+			Md5:            "",
+			Filemode:       fileMode,
+		})
+	}
 	return &dcSDK.BKDistCommand{
 		Commands: []dcSDK.BKCommand{
 			{
@@ -1523,7 +1543,7 @@ func (cc *TaskCC) scanPchFile(args []string) []string {
 
 func (cc *TaskCC) needSaveResponseFile(args []string) (bool, string, error) {
 	exe := args[0]
-	if strings.HasSuffix(exe, "clang.exe") || strings.HasSuffix(exe, "clang++.exe") {
+	if strings.HasSuffix(exe, "clang.exe") || strings.HasSuffix(exe, "clang++.exe") || strings.HasSuffix(exe, "clang-cl.exe") {
 		if len(args) > 1 {
 			fullArgs := MakeCmdLine(args[1:])
 			// if len(fullArgs) >= MaxWindowsCommandLength {

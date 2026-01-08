@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -585,6 +586,11 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 					start := float64(process.Start) / float64(traceView.Frequency)
 					stop := float64(process.Stop) / float64(traceView.Frequency)
 
+					// mac 需要乘以 100，Frequency 为 1000000000
+					if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+						start = start * 100
+						stop = stop * 100
+					}
 					startus := uint64(start*1000000) + traceView.SystemStartTimeUs
 					stopus := uint64(stop*1000000) + traceView.SystemStartTimeUs
 					fmt.Printf("flag:[%s]start[%s]stop[%s]\n",
