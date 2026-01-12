@@ -19,3 +19,7 @@ repositories {
 kotlinDslPluginOptions {
     experimentalWarning.set(false)
 }
+
+dependencies {
+    implementation("io.github.gradle-nexus.publish-plugin:io.github.gradle-nexus.publish-plugin.gradle.plugin:1.3.0")
+}
