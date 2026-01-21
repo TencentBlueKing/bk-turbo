@@ -476,34 +476,28 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	defer ticker.Stop()
 
 	// 设置3分钟超时，此处主要跟踪deploy是否已经成功创建，不关注任务是否跑完
-	timeout := time.After(3 * time.Minute)
+	const traceTimeout = 3 * time.Minute
+	timer := time.NewTimer(traceTimeout)
+	defer timer.Stop()
+
 	for {
 		select {
 		case <-rm.ctx.Done():
-			blog.Warnf("crm: resource(%s) user(%s) trace done", resourceID, user)
+			blog.Warnf("crm: resource(%s) user(%s) trace done due to context cancellation", resourceID, user)
 			return
 		case <-ticker.C:
 			if rm.isFinishDeploying(resourceID, user) {
 				blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
 				return
 			}
-		case <-timeout:
-			blog.Warnf("crm: resource(%s) user(%s) trace timeout, stop it now", resourceID, user)
-			r, err := rm.getResources(resourceID)
-			if err == nil {
-				if r.noReadyInstance > 0 {
-					blog.Warnf("crm: resource(%s) user(%s) trace timeout, release no-ready instance(%d)",
-						resourceID, user, r.noReadyInstance)
-					rm.updateNoReadyInfo(r, r.noReadyInstance, 0, resourceID)
-					if err := rm.saveResources(r); err != nil {
-						blog.Errorf("crm: resource(%s) user(%s) trace timeout, save resource failed: %v",
-							resourceID, user, err)
-					}
-				}
-			} else {
-				blog.Errorf("crm: resource(%s) user(%s) trace timeout, delete no-ready info failed: %v, exit",
+		case <-timer.C:
+			blog.Warnf("crm: resource(%s) user(%s) trace timeout, release it now", resourceID, user)
+			if err := rm.release(resourceID, user); err != nil {
+				blog.Errorf("crm: try to release resource(%s) user(%s) failed: %v",
 					resourceID, user, err)
+				return
 			}
+			blog.Infof("crm: resource(%s) user(%s) trace timeout, resource stopped successfully", resourceID, user)
 			return
 		}
 	}
