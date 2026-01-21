@@ -171,13 +171,14 @@ func ReleaseResource(req *restful.Request, resp *restful.Response) {
 	}
 
 	if err = defaultManager.ReleaseTask(param); err != nil {
-		blog.Errorf("release resource: release task(%s) failed, url(%s): %v",
-			param.TaskID, req.Request.URL.String(), err)
-
 		if err == engine.ErrorUnterminatedTaskNoFound || err == types.ErrorTaskAlreadyTerminated {
 			api.ReturnRest(&api.RestResponse{Resp: resp, Message: err.Error()})
+			blog.Warnf("release resource: release task(%s) failed, url(%s): %v",
+				param.TaskID, req.Request.URL.String(), err)
 			return
 		}
+		blog.Errorf("release resource: release task(%s) failed, url(%s): %v",
+			param.TaskID, req.Request.URL.String(), err)
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrReleaseResourceFailed, Message: err.Error()})
 		return
 	}
