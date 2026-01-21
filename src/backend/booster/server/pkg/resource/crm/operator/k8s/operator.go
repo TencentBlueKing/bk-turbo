@@ -688,7 +688,7 @@ func (o *operator) trackAndReleaseDeployment(clusterID, namespace, name string) 
 func (o *operator) deleteDeployment(clusterID, namespace, name string) error {
 	client, err := o.getClientSet(clusterID)
 	if err != nil {
-		blog.Errorf("k8s-operator: try to release server for clusterID(%s) namespace(%s) name(%s) "+
+		blog.Errorf("k8s-operator: try to delete deployment for clusterID(%s) namespace(%s) name(%s) "+
 			"and get client set failed: %v", clusterID, namespace, name, err)
 		return err
 	}
@@ -702,6 +702,8 @@ func (o *operator) deleteDeployment(clusterID, namespace, name string) error {
 			metaV1.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds, PropagationPolicy: &propagationPolicy},
 		)
 }
+
+// releaseServer releases a server by deleting its deployment
 func (o *operator) releaseServer(clusterID, namespace, name string) error {
 	blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s)",
 		clusterID, namespace, name)

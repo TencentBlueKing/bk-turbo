@@ -471,13 +471,12 @@ func (rm *resourceManager) sync() {
 }
 
 func (rm *resourceManager) trace(resourceID, user string) {
-	const traceTimeout = 3 * time.Minute
-
 	blog.Infof("crm: begin to trace resource(%s) user(%s) until it finish deploying", resourceID, user)
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
 	// 设置3分钟超时，此处主要跟踪deploy是否已经成功创建，不关注任务是否跑完
+	const traceTimeout = 3 * time.Minute
 	timer := time.NewTimer(traceTimeout)
 	defer timer.Stop()
 
