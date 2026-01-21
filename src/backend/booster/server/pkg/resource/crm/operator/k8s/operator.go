@@ -643,9 +643,49 @@ func (o *operator) scaleServer(clusterID, namespace, name string, instance int) 
 	return nil
 }
 
-func (o *operator) releaseServer(clusterID, namespace, name string) error {
-	blog.Infof("k8s-operator: release server: clusterID(%s) namespace(%s) name(%s)",
-		clusterID, namespace, name)
+// trackAndReleaseDeployment tracks a deployment that was not found and attempts to release it periodically
+func (o *operator) trackAndReleaseDeployment(clusterID, namespace, name string) {
+	const (
+		trackTimeout  = 15 * time.Minute
+		retryInterval = 10 * time.Second
+	)
+
+	blog.Infof("k8s-operator: start tracking deployment clusterID(%s) namespace(%s) name(%s)", clusterID, namespace, name)
+
+	timeout := time.NewTimer(trackTimeout)
+	ticker := time.NewTicker(retryInterval)
+	defer func() {
+		timeout.Stop()
+		ticker.Stop()
+		blog.Infof("k8s-operator: stop tracking deployment clusterID(%s) namespace(%s) name(%s)", clusterID, namespace, name)
+	}()
+
+	for {
+		select {
+		case <-timeout.C:
+			blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) not found timeout", clusterID, namespace, name)
+			return
+
+		case <-ticker.C:
+			err := o.deleteDeployment(clusterID, namespace, name)
+			if err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					blog.Debugf("k8s-operator: deployment clusterID(%s) namespace(%s) name(%s) still not found", clusterID, namespace, name)
+					continue
+				}
+				blog.Errorf("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) failed: %v",
+					clusterID, namespace, name, err)
+				continue
+			}
+
+			blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) succeed", clusterID, namespace, name)
+			return
+		}
+	}
+}
+
+// deleteDeployment deletes a deployment with the specified options
+func (o *operator) deleteDeployment(clusterID, namespace, name string) error {
 	client, err := o.getClientSet(clusterID)
 	if err != nil {
 		blog.Errorf("k8s-operator: try to release server for clusterID(%s) namespace(%s) name(%s) "+
@@ -655,15 +695,22 @@ func (o *operator) releaseServer(clusterID, namespace, name string) error {
 
 	var gracePeriodSeconds int64 = 0
 	propagationPolicy := metaV1.DeletePropagationBackground
-	if err = client.clientSet.AppsV1().Deployments(namespace).
+	return client.clientSet.AppsV1().Deployments(namespace).
 		Delete(
 			context.TODO(),
 			name,
 			metaV1.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds, PropagationPolicy: &propagationPolicy},
-		); err != nil {
+		)
+}
+func (o *operator) releaseServer(clusterID, namespace, name string) error {
+	blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s)",
+		clusterID, namespace, name)
+	err := o.deleteDeployment(clusterID, namespace, name)
+	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			blog.Warnf("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) not found, "+
-				"regarded as released: %v", clusterID, namespace, name, err)
+			blog.Warnf("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) not found, try to track it for a while %v", clusterID, namespace, name, err)
+			// trace resource if it not found for a while
+			go o.trackAndReleaseDeployment(clusterID, namespace, name)
 			return nil
 		}
 
