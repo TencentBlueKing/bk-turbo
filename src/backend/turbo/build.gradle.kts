@@ -1,15 +1,17 @@
 import com.tencent.devops.utils.findPropertyOrEmpty
+
 plugins {
 	id("com.tencent.devops.boot") version "0.0.6"
 	id("org.owasp.dependencycheck") version "7.1.0.1"
     kotlin("jvm") version "1.6.0"
+    nexusPublishing
 }
 
 allprojects {
     group = "com.tencent.bk.devops.turbo"
 
     version = (System.getProperty("turbo_version") ?: "0.0.2") +
-        if (System.getProperty("snapshot") == "true") "-SNAPSHOT" else "-RELEASE"
+        if (System.getProperty("snapshot") == "true") "-SNAPSHOT" else ""
 
     apply(plugin = "com.tencent.devops.boot")
 
