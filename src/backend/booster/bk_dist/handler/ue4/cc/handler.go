@@ -1054,10 +1054,11 @@ func (cc *TaskCC) preExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKD
 	blog.Infof("cc(%s): success done pre execute for: %v", cc.jobID, command)
 	blog.Infof("cc(%s): going to execute compile command: %v", cc.jobID, cc.serverSideArgs)
 
-	// to check whether need to compile with response file
 	exeName := cc.serverSideArgs[0]
 	params := cc.serverSideArgs[1:]
-	flag, rspfile, err := cc.needSaveResponseFile(cc.serverSideArgs)
+
+	// to check whether need to compile with response file (useResponseFile=false so cc.responseFile!="" do not takes effect, diffrent with doPreProcess)
+	flag, rspfile, err := cc.needSaveResponseFile(cc.serverSideArgs, false)
 	if flag && err == nil {
 		cc.addTmpFile(rspfile)
 		params = []string{fmt.Sprintf("@%s", rspfile)}
@@ -1462,7 +1463,7 @@ func (cc *TaskCC) doPreProcess(args []string, inputFile string) (string, error) 
 
 	var execName string
 	var execArgs []string
-	flag, rspfile, err := cc.needSaveResponseFile(newArgs)
+	flag, rspfile, err := cc.needSaveResponseFile(newArgs, true)
 	if flag && err == nil {
 		rspargs := []string{newArgs[0], fmt.Sprintf("@%s", rspfile)}
 		blog.Infof("cc(%s): going to execute pre-process command: %s", cc.jobID, strings.Join(rspargs, " "))
@@ -1541,13 +1542,13 @@ func (cc *TaskCC) scanPchFile(args []string) []string {
 	return append(args, pchPreProcessOption)
 }
 
-func (cc *TaskCC) needSaveResponseFile(args []string) (bool, string, error) {
+func (cc *TaskCC) needSaveResponseFile(args []string, useResponseFile bool) (bool, string, error) {
 	exe := args[0]
 	if strings.HasSuffix(exe, "clang.exe") || strings.HasSuffix(exe, "clang++.exe") || strings.HasSuffix(exe, "clang-cl.exe") {
 		if len(args) > 1 {
 			fullArgs := MakeCmdLine(args[1:])
 			// if len(fullArgs) >= MaxWindowsCommandLength {
-			if cc.responseFile != "" || len(fullArgs) >= MaxWindowsCommandLength {
+			if (useResponseFile && cc.responseFile != "") || len(fullArgs) >= MaxWindowsCommandLength {
 				rspFile, err := makeTmpFile(commonUtil.GetHandlerTmpDir(cc.sandbox), "cc", ".response")
 				if err != nil {
 					return false, "", fmt.Errorf("cc(%s): cmd too long and failed to create rsp file", cc.jobID)
