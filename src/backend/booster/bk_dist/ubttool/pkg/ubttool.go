@@ -190,6 +190,8 @@ func (h *UBTTool) adjustActions4UBAAgent(all *common.UE4Action) {
 		for i := range all.Actions {
 			if all.Actions[i].Cmd == UbaTemplateToolKey {
 				all.Actions[i].Cmd = t.Toolchains[0].ToolKey
+
+				all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateToolKey, t.Toolchains[0].ToolKey, -1)
 			}
 
 			if all.Actions[i].Workdir == UbaTemplateToolKeyDir {
@@ -242,12 +244,12 @@ func (h *UBTTool) runActions() error {
 	// for debug
 	blog.Debugf("UBTTool: all actions:%+v", h.allactions)
 
-	// readyactions includes actions which no depend
-	err = h.getReadyActions()
-	if err != nil {
-		blog.Warnf("UBTTool: failed to get ready actions with error:%v", err)
-		return err
-	}
+	// // readyactions includes actions which no depend
+	// err = h.getReadyActions()
+	// if err != nil {
+	// 	blog.Warnf("UBTTool: failed to get ready actions with error:%v", err)
+	// 	return err
+	// }
 
 	err = h.executeActions()
 	if err != nil {
@@ -437,6 +439,8 @@ func (h *UBTTool) analyzeActions(actions []common.Action) error {
 }
 
 func (h *UBTTool) selectActionsToExecute() error {
+	h.getReadyActions(int(h.maxjobs - h.runningnumber))
+
 	h.readyactionlock.Lock()
 	defer h.readyactionlock.Unlock()
 
@@ -557,7 +561,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 }
 
 // get ready actions from all actions
-func (h *UBTTool) getReadyActions() error {
+func (h *UBTTool) getReadyActions(maxnum int) error {
 	blog.Infof("UBTTool: try to get ready actions")
 
 	h.allactionlock.Lock()
@@ -566,11 +570,33 @@ func (h *UBTTool) getReadyActions() error {
 	h.readyactionlock.Lock()
 	defer h.readyactionlock.Unlock()
 
+	// // copy actions which no depend from all to ready
+	// for i, v := range h.allactions {
+	// 	if !v.Running && !v.Finished && len(v.Dep) == 0 {
+	// 		h.readyactions = append(h.readyactions, v)
+	// 		h.allactions[i].Running = true
+	// 	}
+	// }
+	h.copyReadyActions(maxnum)
+
+	return nil
+}
+
+// get ready actions from all actions
+func (h *UBTTool) copyReadyActions(maxnum int) error {
 	// copy actions which no depend from all to ready
+	count := 0
 	for i, v := range h.allactions {
 		if !v.Running && !v.Finished && len(v.Dep) == 0 {
 			h.readyactions = append(h.readyactions, v)
 			h.allactions[i].Running = true
+
+			blog.Infof("UBTTool: copy action %s to ready queue when %d finished %d running", v.Index, h.finishednumber, h.runningnumber)
+
+			count++
+			if count >= maxnum {
+				break
+			}
 		}
 	}
 
@@ -632,12 +658,14 @@ func (h *UBTTool) onActionFinished(index string, exitcode int) error {
 				}
 			}
 
-			// copy to ready if no depent
-			if !v.Running && !v.Finished && len(h.allactions[i].Dep) == 0 {
-				h.readyactions = append(h.readyactions, v)
-				h.allactions[i].Running = true
-			}
+			// // copy to ready if no depent
+			// if !v.Running && !v.Finished && len(h.allactions[i].Dep) == 0 {
+			// 	h.readyactions = append(h.readyactions, v)
+			// 	h.allactions[i].Running = true
+			// }
 		}
+
+		// h.copyReadyActions(1)
 	}
 
 	return nil

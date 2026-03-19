@@ -50,6 +50,11 @@ func (c *Echo) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	c.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (c *Echo) SetJobID(jobID string) {
+	return
+}
+
 // InitExtra receive the extra data after resources applied.
 func (c *Echo) InitExtra(extra []byte) {
 }

@@ -36,6 +36,16 @@ type AvailableResp struct {
 	FailedActions []FailedAction `json:"failed_actions"`
 }
 
+// HeartbeatResp describe the response of heartbeat api
+type HeartbeatResp struct {
+	PID int32 `json:"pid"`
+}
+
+// ReleaseResp describe the response of release api
+type ReleaseResp struct {
+	PID int32 `json:"pid"`
+}
+
 // Flags define flags needed by shader tool
 type Flags struct {
 	ToolDir         string
@@ -47,6 +57,7 @@ type Flags struct {
 	LogLevel        string
 	LogDir          string
 	ProcessInfoFile string
+	NoIdleQuit      bool
 }
 
 // Action define shader action

@@ -552,6 +552,7 @@ func (m *Mgr) SearchToolChain(cmd, path string) error {
 }
 
 func (m *Mgr) SetUbaInfo(ubaInfo types.UbaInfo) {
+	blog.Debugf("basic: set uba file [%s] for work(%s)", ubaInfo.TraceFile, m.info.WorkID())
 	if m.analysisStatus != nil {
 		m.analysisStatus.SetUbaInfo(ubaInfo)
 	}

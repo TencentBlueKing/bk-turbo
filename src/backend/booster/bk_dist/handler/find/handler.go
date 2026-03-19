@@ -85,6 +85,11 @@ func (c *Finder) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	c.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (c *Finder) SetJobID(jobID string) {
+	return
+}
+
 // ResultExtra return the extra data for recording in project info.
 func (c *Finder) ResultExtra() []byte {
 	return nil

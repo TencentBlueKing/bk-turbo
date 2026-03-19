@@ -193,7 +193,21 @@ func (cc *TaskCC) RenderArgs(config dcType.BoosterConfig, originArgs string) str
 		}
 
 		if len(additions) > 0 {
-			originArgs += " " + strings.Join(additions, " ")
+			specialIdx := -1
+			argsArr := strings.Split(originArgs, " ")
+			for i := 0; i < len(argsArr); i++ {
+				if argsArr[i] == "--" {
+					specialIdx = i
+					blog.Infof("booster: [%s | %s] find -- at index %d", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), i)
+					break
+				}
+			}
+			if specialIdx == -1 {
+				originArgs += " " + strings.Join(additions, " ")
+			} else {
+				// add additions before "--", avoid bazel not recognize args after "--"
+				originArgs = strings.Join(argsArr[:specialIdx], " ") + " " + strings.Join(additions, " ") + " " + strings.Join(argsArr[specialIdx:], " ")
+			}
 		}
 		blog.Info("booster:[%s | %s] render bazel args: %s", cc.getCacheLog(), config.Works.GetBazelTypeInfo(), originArgs)
 		return originArgs

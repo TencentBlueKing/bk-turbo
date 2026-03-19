@@ -11,6 +11,8 @@ package protocol
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -488,114 +490,28 @@ func saveFile(
 
 	blog.Debugf("succeed to create dir %s", dir)
 
-	// we can't overwrite if file is readonly or running
-	// save as temp file if existed, then change name after saved
-	existed := dcFile.Stat(inputfile).Exist()
-	targetname := inputfile
-	// only leave one bak file, to avoid disk increase
-	// targetbakname := fmt.Sprintf("%s_%d", targetname, time.Now().UnixNano())
-	targetbakname := fmt.Sprintf("%s.bak", targetname)
+	// 规避windows线上可能发空的exe的问题
+	if (rf.GetSize() == 0 || rf.GetCompressedsize() == 0) && strings.HasSuffix(inputfile, ".exe") {
+		blog.Infof("do not save empty exe file [%s]", inputfile)
+		return inputfile, nil
+	}
+
+	// 修改策略：如果已存在，且md5相同，则无需重复保存；
+	// 只需要刷新文件属性和修改时间即可
+	filesaved := false
+
+	oldinputfile := inputfile
+	targetbakname := fmt.Sprintf("%s.bak", oldinputfile)
 	tempname := fmt.Sprintf("%s_temp", targetbakname)
-	if existed {
-		inputfile = tempname
-		blog.Infof("ready save file %s", inputfile)
-	}
-	newfilesaved := false
 
-	f, err := os.Create(inputfile)
-	if err != nil {
-		blog.Errorf("create file %s error: [%s]", inputfile, err.Error())
-		return "", err
-	}
-	defer func() {
-		_ = f.Close()
-
-		if existed && newfilesaved {
-			if dcFile.Stat(targetbakname).Exist() {
-				blog.Infof("ready delete old bak file %s", targetbakname)
-				os.Remove(targetbakname)
-			}
-
-			blog.Infof("backup file %s to %s", targetname, targetbakname)
-			err = os.Rename(targetname, targetbakname)
-			if err != nil {
-				blog.Infof("failed to rename existed file %s to %s with error:%v",
-					targetname, targetbakname, err)
-			}
-
-			// !!! ensure rename tempname after f.Close(), to avoid other error
-			blog.Infof("rename new file %s to %s", tempname, targetname)
-			err = os.Rename(tempname, targetname)
-			if err != nil {
-				blog.Infof("failed to rename new file %s to %s with error:%v", tempname, targetname, err)
-			}
-
-			inputfile = targetname
-		}
-
-		// !! set file attribute after rename
-		// TODO : change filemode and modifytime if new file created here
-		if newfilesaved {
-			filemode := rf.GetFilemode()
-			if filemode > 0 {
-				blog.Infof("get file[%s] filemode[%d]", inputfile, filemode)
-				if err = os.Chmod(inputfile, os.FileMode(filemode)); err != nil {
-					blog.Warnf("chmod file %s to file-mode %s failed: %v", inputfile, os.FileMode(filemode), err)
-				}
-			}
-
-			modifytime := rf.GetModifytime()
-			if modifytime > 0 {
-				blog.Infof("get file[%s] modify time [%d]", inputfile, modifytime)
-				if err = os.Chtimes(inputfile, time.Now(), time.Unix(0, modifytime)); err != nil {
-					blog.Warnf("Chtimes file %s to time %s failed: %v", inputfile, time.Unix(0, modifytime), err)
-				}
-			}
-		}
-	}()
-
+	// 获取解压后的数据
+	decompresseddata := data
 	if rf.GetCompressedsize() > 0 {
 		switch rf.GetCompresstype() {
 		case protocol.PBCompressType_NONE:
-			_, err := f.Write(data)
-			if err != nil {
-				blog.Errorf("save file [%s] error: [%s]", inputfile, err.Error())
-				return "", err
-			}
+			decompresseddata = data
 
-			// filemode := rf.GetFilemode()
-			// if filemode > 0 {
-			// 	blog.Infof("get file[%s] filemode[%d]", inputfile, filemode)
-			// 	_ = os.Chmod(inputfile, os.FileMode(filemode))
-			// }
-			break
-		// case protocol.PBCompressType_LZO:
-		// 	// decompress with lzox1 firstly
-		// 	outdata, err := golzo.Decompress1X(bytes.NewReader(data), int(rf.GetCompressedsize()), 0)
-		// 	if err != nil {
-		// 		blog.Errorf("decompress error: [%s]", err.Error())
-		// 		return "", err
-		// 	}
-		// 	outlen := len(string(outdata))
-		// 	blog.Debugf("decompressed with lzo1x, from [%d] to [%d]", rf.GetCompressedsize(), outlen)
-		// 	if outlen != int(rf.GetSize()) {
-		// 		err := fmt.Errorf("decompressed size %d, expected size %d", outlen, rf.GetSize())
-		// 		blog.Errorf("decompress error: [%v]", err)
-		// 		return "", err
-		// 	}
-
-		// 	_, err = f.Write(outdata)
-		// 	if err != nil {
-		// 		blog.Errorf("save file [%s] error: [%v]", inputfile, err)
-		// 		return "", err
-		// 	}
-
-		// 	filemode := rf.GetFilemode()
-		// 	if filemode > 0 {
-		// 		blog.Infof("get file[%s] filemode[%d]", inputfile, filemode)
-		// 		_ = os.Chmod(inputfile, os.FileMode(filemode))
-		// 	}
-		// 	break
+			// break
 		case protocol.PBCompressType_LZ4:
 			// decompress with lz4 firstly
 			dst := make([]byte, rf.GetSize())
@@ -620,28 +536,100 @@ func saveFile(
 				blog.Errorf("decompress error: [%v]", err)
 				return "", err
 			}
+			decompresseddata = outdata
 
-			_, err = f.Write(outdata)
-			if err != nil {
-				blog.Errorf("save file [%s] error: [%v]", inputfile, err)
-				return "", err
-			}
-
-			// filemode := rf.GetFilemode()
-			// if filemode > 0 {
-			// 	blog.Infof("get file[%s] filemode[%d]", inputfile, filemode)
-			// 	if err = os.Chmod(inputfile, os.FileMode(filemode)); err != nil {
-			// 		blog.Warnf("chmod file %s to file-mode %s failed: %v", inputfile, os.FileMode(filemode), err)
-			// 	}
-			// }
-			break
+			// break
 		default:
 			return "", fmt.Errorf("unknown compress type [%s]", rf.GetCompresstype())
 		}
 	}
 
-	blog.Debugf("succeed to save file %s", inputfile)
-	newfilesaved = true
+	// 比较md5，如果md5相同，则无需重复保存；
+	statinfo := dcFile.Stat(inputfile)
+	needoverwrite := false
+	if statinfo.Exist() {
+		existedmd5, _ := statinfo.Md5()
+		sum := md5.Sum(decompresseddata)
+		newmd5 := hex.EncodeToString(sum[:])
+		if existedmd5 != newmd5 {
+			needoverwrite = true
+			inputfile = tempname
+			blog.Infof("ready overwrite file [%s] with old size [%d] new size [%d] new targetsize [%d]"+
+				" old md5 [%s] new md5 [%s]",
+				inputfile, statinfo.Size(), len(decompresseddata), rf.GetSize(), existedmd5, newmd5)
+		} else {
+			filesaved = true
+			blog.Infof("file %s existed and md5 same, no need to overwrite", inputfile)
+		}
+	}
+
+	// 保存文件，只有文件已存在且md5相同才无需保存
+	if !filesaved {
+		f, err := os.Create(inputfile)
+		if err != nil {
+			blog.Errorf("create file %s error: [%s]", inputfile, err.Error())
+			return "", err
+		}
+
+		_, err = f.Write(decompresseddata)
+		if err != nil {
+			blog.Errorf("save file [%s] error: [%s]", inputfile, err.Error())
+			f.Close()
+			return "", err
+		}
+
+		blog.Debugf("succeed to save file %s", inputfile)
+		filesaved = true
+		f.Close()
+	}
+
+	// 如果是覆盖，需要替换文件名
+	if needoverwrite && filesaved {
+		if dcFile.Stat(targetbakname).Exist() {
+			blog.Infof("ready delete old bak file %s", targetbakname)
+			err = os.Remove(targetbakname)
+			if err != nil {
+				blog.Infof("failed to delete existed file %s with error:%v",
+					targetbakname, err)
+			}
+		}
+
+		blog.Infof("backup file %s to %s", oldinputfile, targetbakname)
+		err = os.Rename(oldinputfile, targetbakname)
+		if err != nil {
+			blog.Infof("failed to rename existed file %s to %s with error:%v",
+				oldinputfile, targetbakname, err)
+		}
+
+		// !!! ensure rename tempname after f.Close(), to avoid other error
+		blog.Infof("rename new file %s to %s", tempname, oldinputfile)
+		err = os.Rename(tempname, oldinputfile)
+		if err != nil {
+			blog.Infof("failed to rename new file %s to %s with error:%v", tempname, oldinputfile, err)
+		}
+
+		inputfile = oldinputfile
+	}
+
+	// 刷新文件的属性和修改时间
+	if filesaved {
+		filemode := rf.GetFilemode()
+		if filemode > 0 {
+			blog.Infof("get file[%s] filemode[%d]", inputfile, filemode)
+			if err = os.Chmod(inputfile, os.FileMode(filemode)); err != nil {
+				blog.Warnf("chmod file %s to file-mode %s failed: %v", inputfile, os.FileMode(filemode), err)
+			}
+		}
+
+		modifytime := rf.GetModifytime()
+		if modifytime > 0 {
+			blog.Infof("get file[%s] modify time [%d]", inputfile, modifytime)
+			if err = os.Chtimes(inputfile, time.Now(), time.Unix(0, modifytime)); err != nil {
+				blog.Warnf("Chtimes file %s to time %s failed: %v", inputfile, time.Unix(0, modifytime), err)
+			}
+		}
+	}
+
 	c <- inputfile
 
 	return inputfile, nil

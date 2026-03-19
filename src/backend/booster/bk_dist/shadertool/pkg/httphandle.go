@@ -33,9 +33,14 @@ const (
 
 	PathV1 = prefix + VersionV1
 
-	processIDKey = "process_id"
+	processIDKey   = "process_id"
+	messagetypeKey = "message_type"
 
 	updatetoolchainKey = "updatetoolchain"
+)
+
+const (
+	messageTypeUba = "uba"
 )
 
 // HTTPHandle : http handle
@@ -80,6 +85,10 @@ func (a *HTTPHandle) initActions() error {
 		"POST", "/available", nil, funcwrapper(a.available)))
 	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
 		"POST", "/shaders", nil, funcwrapper(a.shaders)))
+	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
+		"POST", "/heartbeat", nil, funcwrapper(a.heartbeat)))
+	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
+		"POST", "/release", nil, funcwrapper(a.release)))
 
 	return nil
 }
@@ -157,6 +166,38 @@ func (a *HTTPHandle) shaders(req *restful.Request, resp *restful.Response) {
 	// return response
 	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0})
 	return
+}
+
+func (a *HTTPHandle) heartbeat(req *restful.Request, resp *restful.Response) {
+	blog.Debugf("ShaderTool: heartbeat...")
+
+	processID := req.QueryParameter(processIDKey)
+	messagetype := req.QueryParameter(messagetypeKey)
+	if processID != "" && messagetype != "" {
+		blog.Infof("ShaderTool: heartbeat with process_id: %s, messagetype: %s", processID, messagetype)
+		a.mgr.heartbeat(processID, messagetype)
+	}
+
+	// return response
+	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0, Data: &common.HeartbeatResp{
+		PID: int32(os.Getpid()),
+	}})
+}
+
+func (a *HTTPHandle) release(req *restful.Request, resp *restful.Response) {
+	blog.Debugf("ShaderTool: release...")
+
+	processID := req.QueryParameter(processIDKey)
+	messagetype := req.QueryParameter(messagetypeKey)
+	if processID != "" && messagetype != "" {
+		blog.Infof("ShaderTool: release with process_id: %s, messagetype: %s", processID, messagetype)
+		a.mgr.release(processID, messagetype)
+	}
+
+	// return response
+	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0, Data: &common.ReleaseResp{
+		PID: int32(os.Getpid()),
+	}})
 }
 
 func getShaderActions(req *restful.Request) (*common.UE4Action, error) {

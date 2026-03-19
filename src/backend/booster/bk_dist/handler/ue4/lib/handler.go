@@ -51,6 +51,11 @@ func (l *TaskLib) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	l.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (l *TaskLib) SetJobID(jobID string) {
+	return
+}
+
 // InitExtra no need
 func (l *TaskLib) InitExtra(extra []byte) {
 }

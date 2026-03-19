@@ -23,7 +23,11 @@ type Handler interface {
 	// ResultExtra return the extra message to record in project info
 	ResultExtra() (extra []byte)
 
+	// InitSandbox init the sandbox
 	InitSandbox(sandbox *dcSyscall.Sandbox)
+
+	// SetJobID set the job id
+	SetJobID(jobID string)
 
 	// PreWork define the work before all executors run.
 	PreWork(config *dcType.BoosterConfig) error

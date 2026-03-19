@@ -29,6 +29,7 @@ const (
 	FlagCommitSuicide   = "commit_suicide"
 	FlagPort            = "port"
 	FlagProcessInfoFile = "process_info_file"
+	FlagNoIdleQuit      = "no_idle_quit"
 )
 
 // Run main entrance
@@ -87,6 +88,10 @@ func GetApp(ct ClientType) *commandCli.App {
 		commandCli.StringFlag{
 			Name:  "process_info_file",
 			Usage: "full path of this process info",
+		},
+		commandCli.BoolFlag{
+			Name:  "no_idle_quit",
+			Usage: "disable idle quit behavior",
 		},
 	}
 

@@ -40,8 +40,8 @@ func NewUE4Shader() *UE4Shader {
 
 // UE4Shader 定义了shader编译的描述处理对象, 一般用来处理ue4下的shader编译
 type UE4Shader struct {
-	sandbox *dcSyscall.Sandbox
-
+	sandbox        *dcSyscall.Sandbox
+	jobID          string
 	outputTempFile string
 	outputRealFile string
 }
@@ -49,6 +49,11 @@ type UE4Shader struct {
 // InitSandbox set sandbox to ue4-shader
 func (u *UE4Shader) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	u.sandbox = sandbox
+}
+
+// SetJobID set jobID to task
+func (u *UE4Shader) SetJobID(jobID string) {
+	u.jobID = jobID
 }
 
 // InitExtra no need
@@ -87,7 +92,7 @@ func (u *UE4Shader) GetFilterRules() ([]dcSDK.FilterRuleItem, error) {
 
 func (u *UE4Shader) CanExecuteWithLocalIdleResource(command []string) bool {
 	// only for debug
-	blog.Infof("shader: BK_DIST_UE_SHADER_NOT_USE_LOCAL=[%v]", u.sandbox.Env.GetEnv(env.KeyExecutorUEShaderNotUseLocal))
+	blog.Infof("shader(%s): BK_DIST_UE_SHADER_NOT_USE_LOCAL=[%v]", u.jobID, u.sandbox.Env.GetEnv(env.KeyExecutorUEShaderNotUseLocal))
 
 	if u.sandbox.Env.GetEnv(env.KeyExecutorUEShaderNotUseLocal) == "true" {
 		return false
@@ -117,7 +122,7 @@ func (u *UE4Shader) isNewShader() bool {
 
 // PreExecute 预处理
 func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Infof("shader: ready pre execute with command[%v]", command)
+	blog.Infof("shader(%s): ready pre execute with command[%v]", u.jobID, command)
 
 	// to support ue 5.3 macos
 	if u.isNewShader() {
@@ -125,7 +130,7 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.B
 	}
 
 	if len(command) < 6 {
-		blog.Warnf("shader: invalid command")
+		blog.Warnf("shader(%s): invalid command", u.jobID)
 		return nil, dcType.ErrorUnknown
 	}
 
@@ -134,7 +139,7 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.B
 
 	params := []string{"\"\""}
 	for _, v := range command[2:] {
-		blog.Debugf("shader: handle with argv [%s]", v)
+		blog.Debugf("shader(%s): handle with argv [%s]", u.jobID, v)
 		if strings.HasSuffix(v, ".in") {
 			if !filepath.IsAbs(v) {
 				inputFile = filepath.Join(filedir, v)
@@ -154,7 +159,7 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.B
 	info := dcFile.Stat(inputFile)
 	existed, fileSize, modifyTime, fileMode := info.Batch()
 	if !existed {
-		blog.Warnf("shader: input file %s not exist with error:%v", inputFile, info.Error())
+		blog.Warnf("shader(%s): input file %s not exist with error:%v", u.jobID, inputFile, info.Error())
 		return nil, dcType.ErrorUnknown
 	}
 
@@ -174,7 +179,7 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.B
 		toolmap, err := dcSDK.ResolveToolchainEnvValue(value)
 		if err == nil && len(toolmap) > 0 {
 			if v, ok := toolmap[exeName]; ok {
-				blog.Debugf("shader: found exe[%s] relative path[%s]", exeName, v)
+				blog.Debugf("shader(%s): found exe[%s] relative path[%s]", u.jobID, exeName, v)
 				inputfiles = append(inputfiles, dcSDK.FileDesc{
 					FilePath:           exeName,
 					Compresstype:       protocol.CompressLZ4,
@@ -204,10 +209,10 @@ func (u *UE4Shader) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.B
 }
 
 func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
-	blog.Debugf("shader: ready pre execute new with command[%v]", command)
+	blog.Debugf("shader(%s): ready pre execute new with command[%v]", u.jobID, command)
 
 	if len(command) < 6 {
-		blog.Warnf("shader: invalid command")
+		blog.Warnf("shader(%s): invalid command", u.jobID)
 		return nil, dcType.ErrorUnknown
 	}
 
@@ -222,7 +227,7 @@ func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, dcTyp
 
 	params := []string{filedir}
 	for _, v := range command[2:] {
-		blog.Debugf("shader: handle with argv [%s]", v)
+		blog.Debugf("shader(%s): handle with argv [%s]", u.jobID, v)
 		if strings.HasSuffix(v, ".in") {
 			if !filepath.IsAbs(v) {
 				inputFile = filepath.Join(filedir, v)
@@ -238,12 +243,12 @@ func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, dcTyp
 
 		params = append(params, v)
 	}
-	blog.Infof("shader: ready pre execute new with params[%v]", params)
+	blog.Infof("shader(%s): ready pre execute new with params[%v]", u.jobID, params)
 
 	info := dcFile.Stat(inputFile)
 	existed, fileSize, modifyTime, fileMode := info.Batch()
 	if !existed {
-		blog.Warnf("shader: input file %s not exist with error:%v", inputFile, info.Error())
+		blog.Warnf("shader(%s): input file %s not exist with error:%v", u.jobID, inputFile, info.Error())
 		return nil, dcType.ErrorUnknown
 	}
 
@@ -264,7 +269,7 @@ func (u *UE4Shader) PreExecuteNew(command []string) (*dcSDK.BKDistCommand, dcTyp
 		toolmap, err := dcSDK.ResolveToolchainEnvValue(value)
 		if err == nil && len(toolmap) > 0 {
 			if v, ok := toolmap[exeName]; ok {
-				blog.Debugf("shader: found exe[%s] relative path[%s]", exeName, v)
+				blog.Debugf("shader(%s): found exe[%s] relative path[%s]", u.jobID, exeName, v)
 				inputfiles = append(inputfiles, dcSDK.FileDesc{
 					FilePath:           exeName,
 					Compresstype:       protocol.CompressLZ4,
@@ -321,7 +326,7 @@ func (u *UE4Shader) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 // PostExecute 后置处理
 func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
 	if r == nil || len(r.Results) == 0 {
-		blog.Warnf("shader: result data is invalid")
+		blog.Warnf("shader(%s): result data is invalid", u.jobID)
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
 			Error: fmt.Errorf("parameter is invalid"),
@@ -336,7 +341,8 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 			sep := []byte("||") // 分隔符
 			errMsg = bytes.Join(msgs, sep)
 		}
-		blog.Warnf("shader: failed to remote execute, retcode %d, error message:[%s], output message:[%s]",
+		blog.Warnf("shader(%s): failed to remote execute, retcode %d, error message:[%s], output message:[%s]",
+			u.jobID,
 			result.RetCode,
 			errMsg,
 			result.OutputMessage)
@@ -348,7 +354,8 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 	}
 
 	if len(result.ResultFiles) == 0 {
-		blog.Warnf("shader: not found result file, retcode %d, error message:[%s], output message:[%s]",
+		blog.Warnf("shader(%s): not found result file, retcode %d, error message:[%s], output message:[%s]",
+			u.jobID,
 			result.RetCode,
 			result.ErrorMessage,
 			result.OutputMessage)
@@ -361,8 +368,8 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 
 	err := checkAndsaveResultFile(&result.ResultFiles[0])
 	if err != nil {
-		blog.Infof("shader: failed to check and save shader result file[%s],error:[%v]",
-			result.ResultFiles[0].FilePath, err)
+		blog.Infof("shader(%s): failed to check and save shader result file[%s],error:[%v]",
+			u.jobID, result.ResultFiles[0].FilePath, err)
 
 		return dcType.BKDistCommonError{
 			Code:  dcType.UnknowCode,
@@ -371,7 +378,7 @@ func (u *UE4Shader) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError 
 	}
 
 	// move result temp to real
-	blog.Infof("shader: ready rename file from [%s] to [%s]", u.outputTempFile, u.outputRealFile)
+	blog.Infof("shader(%s): ready rename file from [%s] to [%s]", u.jobID, u.outputTempFile, u.outputRealFile)
 	_ = os.Rename(u.outputTempFile, u.outputRealFile)
 
 	return dcType.ErrorNone

@@ -104,6 +104,11 @@ func (c *Custom) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	c.innerHandler.InitSandbox(sandbox)
 }
 
+// SetJobID set jobID to task-cc
+func (c *Custom) SetJobID(jobID string) {
+	return
+}
+
 // PreWork 处理整个任务的前置工作, 如工作空间初始化
 func (c *Custom) PreWork(config *dcType.BoosterConfig) error {
 	return c.innerHandler.PreWork(config)

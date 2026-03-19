@@ -99,6 +99,10 @@ func ResolveToolchainEnvValue(value string) (map[string]string, error) {
 }
 
 func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
+	mode := i.Mode32()
+	if i.IsNetworkLink && uint32(i.NetworkLinkMode) > 0 {
+		mode = uint32(i.NetworkLinkMode)
+	}
 	f := FileDesc{
 		FilePath:           i.Path(),
 		Compresstype:       protocol.CompressLZ4,
@@ -106,7 +110,7 @@ func checkAndAdd(i *dcFile.Info, remotepath string, files *[]FileDesc) error {
 		Lastmodifytime:     i.ModifyTime64(),
 		Md5:                "",
 		Targetrelativepath: remotepath,
-		Filemode:           i.Mode32(),
+		Filemode:           mode,
 		LinkTarget:         i.LinkTarget,
 		Priority:           GetPriority(i),
 	}
@@ -170,7 +174,7 @@ func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
 	if i.Basic().Mode()&os.ModeSymlink != 0 {
 		originFile, err := os.Readlink(f)
 		if err == nil {
-			isNetwork, err := isNetworkLink(originFile)
+			isNetwork, _ := isNetworkLink(originFile)
 			if !isNetwork {
 				if !filepath.IsAbs(originFile) {
 					originFile, err = filepath.Abs(filepath.Join(filepath.Dir(f), originFile))
@@ -195,7 +199,17 @@ func getRecursiveFiles(f string, remotepath string, files *[]FileDesc) error {
 				// 递归查找
 				return getRecursiveFiles(originFile, filepath.Dir(originFile), files)
 			} else {
-				blog.Infof("toolchain: symlink %s is network link, skip", originFile)
+				// 既然忽略了链接目标，则需要修改自身的属性，改为普通文件或者目录
+				i.IsNetworkLink = true
+				// 获取符号链接指向路径的文件信息
+				targetInfo, err := os.Stat(originFile)
+				if err != nil {
+					blog.Infof("toolchain: Error getting target file info: %v", err)
+				} else {
+					i.NetworkLinkMode = targetInfo.Mode()
+					blog.Infof("toolchain: file %s symlink %s is network link, file mode [%d] link mode [%d]",
+						f, originFile, i.Mode32(), i.NetworkLinkMode)
+				}
 			}
 		} else {
 			blog.Infof("toolchain: symlink %s Readlink error:%s", f, err)
