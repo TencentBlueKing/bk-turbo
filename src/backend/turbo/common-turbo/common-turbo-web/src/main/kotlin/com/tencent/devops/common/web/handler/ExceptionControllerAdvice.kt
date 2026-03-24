@@ -6,6 +6,7 @@ import com.tencent.devops.common.api.exception.ClientException
 import com.tencent.devops.common.api.exception.OperationException
 import com.tencent.devops.common.api.exception.RemoteServiceException
 import com.tencent.devops.common.api.exception.TurboException
+import com.tencent.devops.common.api.exception.UnauthorizedErrorException
 import com.tencent.devops.common.api.exception.code.TURBO_GENERAL_SYSTEM_FAIL
 import com.tencent.devops.common.api.exception.code.TURBO_PARAM_INVALID
 import com.tencent.devops.common.api.exception.code.TURBO_THIRDPARTY_SYSTEM_FAIL
@@ -76,5 +77,12 @@ class ExceptionControllerAdvice {
             TURBO_PARAM_INVALID.toInt(),
             I18NUtil.getMessage(TURBO_PARAM_INVALID)
         )
+    }
+
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    @ResponseBody
+    @ExceptionHandler(UnauthorizedErrorException::class)
+    fun unauthorizedExceptionHandler(exception: UnauthorizedErrorException): Response<Void> {
+        return Response.fail(exception.errorCode.toInt(), exception.message ?: I18NUtil.getMessage(exception.errorCode))
     }
 }
