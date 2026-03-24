@@ -32,8 +32,6 @@ import feign.Request
 import feign.RequestTemplate
 import feign.Target
 import org.springframework.cloud.client.ServiceInstance
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 abstract class FeignTarget<T>(
@@ -43,7 +41,8 @@ abstract class FeignTarget<T>(
     // key: serviceName, value: List<ServiceInstance>
     protected val usedInstance: Cache<String, List<ServiceInstance>> = CacheBuilder.newBuilder()
         .maximumSize(1000)
-        .expireAfterWrite(3, TimeUnit.SECONDS)
+        .expireAfterWrite(30, TimeUnit.SECONDS)
+        .expireAfterAccess(2, TimeUnit.MINUTES)
         .build<String, List<ServiceInstance>>()
 ) : Target<T> {
 
