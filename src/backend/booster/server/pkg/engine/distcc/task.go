@@ -74,7 +74,17 @@ func (dt *distccTask) WorkerList() []string {
 	return nil
 }
 
-//GetRequestInstance define
+// UBAWorkerList no need
+func (dt *distccTask) UBAWorkerList() []string {
+	return nil
+}
+
+// GetWorkerNameMap return worker name map
+func (dt *distccTask) GetWorkerNameMap() map[string]string {
+	return nil
+}
+
+// GetRequestInstance define
 func (dt *distccTask) GetRequestInstance() int {
 	return dt.Operator.RequestInstance
 }

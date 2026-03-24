@@ -10,10 +10,17 @@
 package common
 
 import (
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
 )
 
 // define const vars
@@ -25,6 +32,17 @@ const (
 
 // AvailableResp describe the response of available api
 type AvailableResp struct {
+	PID           int32          `json:"pid"`
+	FailedActions []FailedAction `json:"failed_actions"`
+}
+
+// HeartbeatResp describe the response of heartbeat api
+type HeartbeatResp struct {
+	PID int32 `json:"pid"`
+}
+
+// ReleaseResp describe the response of release api
+type ReleaseResp struct {
 	PID int32 `json:"pid"`
 }
 
@@ -39,15 +57,29 @@ type Flags struct {
 	LogLevel        string
 	LogDir          string
 	ProcessInfoFile string
+	NoIdleQuit      bool
 }
 
 // Action define shader action
 type Action struct {
-	Index    uint64 `json:"index"`
-	Cmd      string `json:"cmd"`
-	Arg      string `json:"arg"`
-	Running  bool   `json:"running"`
-	Finished bool   `json:"finished"`
+	Index      uint64   `json:"index"`
+	Cmd        string   `json:"cmd"`
+	Arg        string   `json:"arg"`
+	Workdir    string   `json:"workdir"`
+	Attributes []string `json:"attributes"`
+	Adjust     bool     `json:"adjust"`
+	Running    bool     `json:"running"`
+	Finished   bool     `json:"finished"`
+}
+
+// FailedAction define failed shader action
+type FailedAction struct {
+	Index         uint64 `json:"index"`
+	Errormsg      string `json:"errormsg"`
+	Exitcode      int    `json:"exitcode"`
+	ProcessID     int    `json:"process_id"` // got from arg
+	InputFile     string `json:"input_file"`
+	InputFileSize int64  `json:"input_file_size"`
 }
 
 // UE4Action define ue4 action
@@ -62,6 +94,7 @@ type ApplyParameters struct {
 	ProjectID                     string            `json:"project_id"`
 	Scene                         string            `json:"scene"`
 	ServerHost                    string            `json:"server_host"`
+	ResultCacheList               []string          `json:"result_cache_list"`
 	BatchMode                     bool              `json:"batch_mode"`
 	WorkerList                    []string          `json:"specific_host_list"`
 	NeedApply                     bool              `json:"need_apply"`
@@ -78,12 +111,18 @@ type ApplyParameters struct {
 	ControllerEnableLink          bool              `json:"controller_enable_link" value:"false" usage:"if true, controller will enable dist link"`
 	ControllerEnableLib           bool              `json:"controller_enable_lib" value:"false" usage:"if true, controller will enable dist lib"`
 	ControllerLongTCP             bool              `json:"controller_long_tcp" value:"false" usage:"if true, controller will connect to remote worker with long tcp connection"`
+	ControllerWorkerOfferSlot     bool              `json:"controller_worker_offer_slot" value:"false" usage:"if true, controller will get slot by worker offer"`
 	LimitPerWorker                int               `json:"limit_per_worker"`
 	MaxLocalTotalJobs             int               `json:"max_Local_total_jobs"`
 	MaxLocalPreJobs               int               `json:"max_Local_pre_jobs"`
 	MaxLocalExeJobs               int               `json:"max_Local_exe_jobs"`
 	MaxLocalPostJobs              int               `json:"max_Local_post_jobs"`
 	Env                           map[string]string `json:"env"`
+	ContinueOnError               bool              `json:"continue_on_error" usage:"if false, the program will stop on error immediately"`
+	ControllerUseLocalCPUPercent  int               `json:"controller_use_local_cpu_percent"`
+	ControllerResultCacheIndexNum int               `json:"controller_result_cache_index_num" value:"0" usage:"specify index number for local result cache"`
+	ControllerResultCacheFileNum  int               `json:"controller_result_cache_file_num" value:"0" usage:"specify file number for local result cache"`
+	ControllerPreferLocal         bool              `json:"controller_prefer_local" value:"false" usage:"if true, controller will try to use local first"`
 }
 
 // Actionresult define action result
@@ -173,3 +212,50 @@ func SetLogLevel(level string) {
 		blog.SetStderrLevel(blog.StderrLevelInfo)
 	}
 }
+
+// ++ 增加公共函数，用于从配置文件获取环境变量变设置到当前
+func getProjectSettingFile() (string, error) {
+	exepath := dcUtil.GetExcPath()
+	if exepath != "" {
+		jsonfile := filepath.Join(exepath, "bk_project_setting.json")
+		if dcFile.Stat(jsonfile).Exist() {
+			return jsonfile, nil
+		}
+	}
+
+	return "", fmt.Errorf("not found project setting file")
+}
+
+func resolveApplyJSON(filename string) (*ApplyParameters, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	var t ApplyParameters
+	if err = codec.DecJSON(data, &t); err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
+func FreshEnvFromProjectSetting() error {
+	projectSettingFile, err := getProjectSettingFile()
+	if err != nil {
+		return err
+	}
+
+	settings, err := resolveApplyJSON(projectSettingFile)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range settings.Env {
+		os.Setenv(k, v)
+	}
+
+	return nil
+}
+
+// --

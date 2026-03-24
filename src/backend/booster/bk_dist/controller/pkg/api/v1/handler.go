@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSyscall "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
@@ -25,8 +26,44 @@ import (
 	"github.com/emicklei/go-restful"
 )
 
+var (
+	gHttpConnCache *types.HttpConnCache
+)
+
+func init() {
+	gHttpConnCache = types.NewHttpConnCache()
+	go gHttpConnCache.Check()
+}
+
 func available(_ *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &AvailableResp{Pid: os.Getpid()}})
+}
+
+func listresource(req *restful.Request, resp *restful.Response) {
+	// blog.Infof("api: got listresource request body [%s]", req.Request.Body)
+	tracefile := req.QueryParameter(listresourceTraceFile)
+	sessionmapstr := req.QueryParameter(listresourceSessionmap)
+	blog.Debugf("api: got listresource request with tracefile[%s] sessionmap[%s]",
+		tracefile,
+		sessionmapstr)
+
+	sessionmap := make(map[string]string)
+	if sessionmapstr != "" {
+		fields := strings.Split(sessionmapstr, "|")
+		for _, v := range fields {
+			kv := strings.Split(v, ":")
+			if len(kv) == 2 {
+				sessionmap[kv[0]] = kv[1]
+			}
+		}
+	}
+
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: &ListResourceResp{
+		Resources: defaultManager.GetAllWorkers(types.UbaInfo{
+			TraceFile:  tracefile,
+			SessionMap: sessionmap,
+		}),
+	}})
 }
 
 func recordMessage(req *restful.Request, resp *restful.Response) {
@@ -477,6 +514,9 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	// TODO : 需要关注http的连接状态
+	config.InitHttpConnStatus(req, gHttpConnCache, nil, 0)
+
 	result, err := defaultManager.ExecuteLocalTask(workID, config)
 	if err != nil {
 		// blog.Errorf("api: executeLocalTask execute local task failed, work: %s, err: %v", workID, err)
@@ -504,7 +544,10 @@ func executeLocalTask(req *restful.Request, resp *restful.Response) {
 	r.Write2Resp(&api.RestResponse{Resp: resp})
 }
 
-func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data []byte, s *websocket.Session) error {
+func callbackOfLocalExecute(req *restful.Request,
+	id websocket.MessageID,
+	data []byte,
+	s *websocket.Session) error {
 	workID := req.PathParameter(pathParamWorkID)
 	r := &LocalTaskExecuteResp{}
 
@@ -525,6 +568,9 @@ func callbackOfLocalExecute(req *restful.Request, id websocket.MessageID, data [
 		// ret won't be nil
 		return ret.Err
 	}
+
+	// TODO : 需要关注http的连接状态
+	config.InitHttpConnStatus(req, gHttpConnCache, s, 20)
 
 	result, err := defaultManager.ExecuteLocalTask(workID, config)
 	if err != nil {
@@ -580,6 +626,7 @@ func getWorkRegisterConfig(req *restful.Request) (*types.WorkRegisterConfig, err
 	config := &types.WorkRegisterConfig{
 		BatchMode:        param.BatchMode,
 		ServerHost:       param.ServerHost,
+		ResultCacheList:  param.ResultCacheList,
 		SpecificHostList: param.SpecificHostList,
 		NeedApply:        param.NeedApply,
 		Apply:            param.Apply,
@@ -888,6 +935,8 @@ func getLocalTaskExecuteRequest(req *restful.Request) (*types.LocalTaskExecuteRe
 		Commands:     param.Commands,
 		Environments: param.Environments,
 		Stats:        param.Stats,
+		CommandType:  param.CommandType,
+		Attributes:   param.Attributes,
 	}
 
 	if config.Stats == nil {
@@ -913,6 +962,7 @@ func getLocalTaskExecuteRequestFromWebSocket(data []byte) (*types.LocalTaskExecu
 		Commands:     param.Commands,
 		Environments: param.Environments,
 		Stats:        param.Stats,
+		Attributes:   param.Attributes,
 	}
 
 	if config.Stats == nil {

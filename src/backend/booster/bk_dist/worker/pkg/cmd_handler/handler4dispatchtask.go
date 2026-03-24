@@ -289,18 +289,24 @@ func (h *Handle4DispatchReq) dealOneCommand(onecmd *dcProtocol.PBCommand,
 	// check and save result files
 	compresstype := dcProtocol.PBCompressType_LZ4
 	for _, v := range onecmd.GetResultfiles() {
-		var realpath string
-		if filepath.IsAbs(v) {
-			realpath = v
-		} else {
-			_, realpath, _ = FilepathMapping(v, basedir, "")
+		clientPath := v
+		workerPath := v
+		fields := strings.Split(v, types.FileConnectFlag)
+		if len(fields) == 2 {
+			clientPath = fields[0]
+			workerPath = fields[1]
 		}
 
-		f := dcFile.Stat(realpath)
+		// var realpath string
+		if !filepath.IsAbs(workerPath) {
+			_, workerPath, _ = FilepathMapping(workerPath, basedir, "")
+		}
+
+		f := dcFile.Stat(workerPath)
 		existed, filesize := f.Exist(), f.Size()
 		if !existed {
 			err := fmt.Errorf("result file %s not existed,output:%s,errmsg:%s,retcode:%d",
-				realpath, outputMsg, errorMsg, retcode32)
+				workerPath, outputMsg, errorMsg, retcode32)
 			blog.Errorf("%v", err)
 			// in this condition, we should return detail error message
 			// return nil, err
@@ -309,13 +315,13 @@ func (h *Handle4DispatchReq) dealOneCommand(onecmd *dcProtocol.PBCommand,
 
 		md5 := ""
 		if existed && needCheckMd5(onecmd) {
-			md5, err = dcFile.Stat(realpath).Md5()
+			md5, err = dcFile.Stat(workerPath).Md5()
 			if err != nil {
-				blog.Errorf("failed to md5 for file:%s, err:%v", realpath, err)
+				blog.Errorf("failed to md5 for file:%s, err:%v", workerPath, err)
 			}
 		}
 
-		composedfilepath := v + types.FileConnectFlag + realpath
+		composedfilepath := clientPath + types.FileConnectFlag + workerPath
 		r.Resultfiles = append(r.Resultfiles, &dcProtocol.PBFileDesc{
 			Fullpath:       &composedfilepath,
 			Size:           &filesize,
@@ -446,19 +452,34 @@ func adjustParams(
 	for _, v := range onecmd.GetResultfiles() {
 		blog.Debugf("adjust path for %s", v)
 
+		clientPath := v
+		workerPath := v
+		fields := strings.Split(v, types.FileConnectFlag)
+		if len(fields) == 2 {
+			clientPath = fields[0]
+			workerPath = fields[1]
+		}
+		blog.Debugf("adjust path got client path:%s worker path:%s", clientPath, workerPath)
+
 		var realpath string
-		if filepath.IsAbs(v) {
-			realpath = v
+		if filepath.IsAbs(workerPath) {
+			realpath = workerPath
+			err := protocol.CheckAbsPathLimit(workerPath)
+			if err != nil {
+				blog.Warnf("result file path %s not allowed", workerPath)
+				return []string{}, err
+			}
 		} else {
-			_, realpath, _ = FilepathMapping(v, basedir, "")
-			if v != realpath {
+			_, realpath, _ = FilepathMapping(workerPath, basedir, "")
+			if workerPath != realpath {
 				for i := range params {
 					// check param with excluded functions, if so then skip replacing
 					if excludedFunc.check(checkParamOneTrue, params[i]) {
 						continue
 					}
 
-					params[i] = strings.Replace(params[i], v, realpath, -1)
+					// 将参数中涉及到结果文件的相对路径替换为本地的绝对路径
+					params[i] = strings.Replace(params[i], workerPath, realpath, -1)
 				}
 			}
 		}

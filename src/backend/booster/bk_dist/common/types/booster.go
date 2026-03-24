@@ -118,6 +118,7 @@ type BoosterWorks struct {
 	PumpSearchLinkFile   string
 	PumpSearchLinkDir    []string
 	PumpLstatByDir       bool
+	PumpCorrectCap       bool
 
 	ForceLocalList []string
 
@@ -131,6 +132,15 @@ type BoosterWorks struct {
 
 	EnableLink bool
 	EnableLib  bool
+
+	SearchToolchain  bool
+	IgnoreHttpStatus bool
+
+	ResultCacheList        []string
+	ResultCacheType        int
+	ResultCacheTriggleSecs int
+	ResultCacheIndexNum    int
+	ResultCacheFileNum     int
 }
 
 // BoosterTransport describe the transport data to controller
@@ -143,4 +153,24 @@ type BoosterTransport struct {
 	TaskPreparingTimeout   time.Duration
 	PrintTaskInfoEveryTime int
 	CommitSuicideCheckTick time.Duration
+}
+
+func (w *BoosterWorks) GetBazelTypeInfo() string {
+	switch {
+	case w.Bazel4Plus:
+		return "bazel4Plus launcher enabled"
+	case w.BazelPlus:
+		return "bazelPlus launcher enabled"
+	case w.BazelNoLauncher:
+		return "bazel launcher disabled"
+	case w.Bazel:
+		if w.Launcher {
+			return "old bazel launcher enabled"
+		}
+		return "old bazel launcher disabled"
+	case w.Launcher:
+		return "launcher enabled"
+	default:
+		return "launcher disabled"
+	}
 }

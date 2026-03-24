@@ -31,6 +31,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class AllProperties {
-    @Value("\${devopsGateway.host:#{null}}")
+    /**
+     * 完整的域名，包括协议http://
+     */
+    @Value("\${devops.rootpath:#{null}}")
     val devopsDevUrl: String? = null
 }

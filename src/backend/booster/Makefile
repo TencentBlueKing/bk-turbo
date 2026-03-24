@@ -14,6 +14,11 @@ endif
 LDFLAG=-s -w -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.EncryptionKey=${encryption_key} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ServerCertPwd=${server_cert_pwd} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ClientCertPwd=${client_cert_pwd} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassA=${inner_ip_classa} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassA1=${inner_ip_classa1} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassAa=${inner_ip_classaa} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassB=${inner_ip_classb} \
+ -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassC=${inner_ip_classc} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Version=${VERSION} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.BuildTime=${BUILDTIME} \
  -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.GitHash=${GITHASH} \

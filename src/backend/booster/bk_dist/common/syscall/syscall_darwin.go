@@ -120,6 +120,14 @@ func (s *Sandbox) ExecScripts(src string) (int, error) {
 	return s.ExecCommand(caller, options, src)
 }
 
+func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
+	return 1, fmt.Errorf("not support")
+}
+
+func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
+	return 1, fmt.Errorf("not support")
+}
+
 // ExecScriptsWithMessage run the scripts and return the output
 func (s *Sandbox) ExecScriptsWithMessage(src string) (int, []byte, []byte, error) {
 	caller, options := GetCallerAndOptions()
@@ -144,6 +152,46 @@ func (s *Sandbox) ExecCommandWithMessage(name string, arg ...string) (int, []byt
 	}
 
 	return code, outBuf.Bytes(), errBuf.Bytes(), err
+}
+
+func isWithRootEnv() bool {
+	envstr := env.GetEnv(env.KeyWorkerWithRootEnv)
+	blog.Errorf("got env [%s] with key [%s]", envstr, env.KeyWorkerWithRootEnv)
+	return envstr != ""
+}
+
+var (
+	cmdsWithRootEnv = []string{
+		"UbaAgent",
+	}
+)
+
+func shouldUseRootEnv(name string) bool {
+	for _, cmd := range cmdsWithRootEnv {
+		if strings.Contains(name, cmd) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func getRootEnv() []string {
+	// 使用 `su -` 命令来模拟 root 用户的登录环境
+	cmd := exec.Command("su", "-", "root", "-c", "env")
+
+	// 获取命令输出
+	output, err := cmd.Output()
+	if err != nil {
+		blog.Errorf("Failed to execute command [%+v] withe error %v", *cmd, err)
+		return nil
+	}
+
+	// 将输出转换为字符串并分割成行
+	envVars := strings.Split(string(output), "\n")
+	blog.Infof("got root env [%+v]", envVars)
+
+	return envVars
 }
 
 // ExecCommand run the origin commands
@@ -185,7 +233,16 @@ func (s *Sandbox) ExecCommand(name string, arg ...string) (int, error) {
 
 	cmd.Stdout = s.Stdout
 	cmd.Stderr = s.Stderr
-	cmd.Env = s.Env.Source()
+	if isWithRootEnv() || shouldUseRootEnv(name) {
+		rootEnv := getRootEnv()
+		if rootEnv != nil {
+			cmd.Env = rootEnv
+		} else {
+			cmd.Env = s.Env.Source()
+		}
+	} else {
+		cmd.Env = s.Env.Source()
+	}
 	cmd.Dir = s.Dir
 	cmd.SysProcAttr = s.spa
 
@@ -306,7 +363,7 @@ func GetConsoleCP() int {
 	return 0
 }
 
-//AddPath2Env add path to env
+// AddPath2Env add path to env
 func AddPath2Env(p string) {
 	path := os.Getenv("PATH")
 	newpath := fmt.Sprintf("%s:%s", p, path)
@@ -326,4 +383,8 @@ func RedirectStderror(f string) error {
 	}
 
 	return nil
+}
+
+func NeedSearchToolchain(input *env.Sandbox) bool {
+	return false
 }

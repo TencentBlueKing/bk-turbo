@@ -50,6 +50,11 @@ func (c *Example) InitSandbox(sandbox *dcSyscall.Sandbox) {
 	c.sandbox = sandbox
 }
 
+// SetJobID set jobID to task
+func (c *Example) SetJobID(jobID string) {
+	return
+}
+
 // PreWork 无需处理
 func (c *Example) PreWork(*dcType.BoosterConfig) error {
 	return nil

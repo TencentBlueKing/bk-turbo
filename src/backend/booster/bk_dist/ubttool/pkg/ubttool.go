@@ -24,7 +24,6 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/pkg"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	dcType "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/types"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
@@ -35,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	shaderToolComm "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
 
@@ -49,6 +49,11 @@ const (
 	ActionDescMaxSize = 50
 
 	DevOPSProcessTreeKillKey = "DEVOPS_DONT_KILL_PROCESS_TREE"
+
+	UbaAgentTemplate      = "bk_uba_action_template_ubt.json"
+	UbaTemplateToolKey    = "${tool_key}"
+	UbaTemplateToolKeyDir = "${tool_key_dir}"
+	UbaTemplateHostIP     = "${host_ip}"
 )
 
 // NewUBTTool get a new UBTTool
@@ -150,6 +155,68 @@ func (h *UBTTool) run(pCtx context.Context) (int, error) {
 	return 0, nil
 }
 
+// 过滤ip，客户端判断不保险，最好是能够从server拿到ip
+func isIPValid(ip string) bool {
+	if strings.HasPrefix(ip, "192.") ||
+		strings.HasPrefix(ip, "172.") ||
+		strings.HasPrefix(ip, "127.") {
+		return false
+	}
+
+	return true
+}
+
+func (h *UBTTool) adjustActions4UBAAgent(all *common.UE4Action) {
+	if strings.HasSuffix(h.flags.ActionChainFile, UbaAgentTemplate) {
+		blog.Debugf("UBTTool: ready adjust for %s", UbaAgentTemplate)
+
+		data, err := os.ReadFile(h.flags.ToolChainFile)
+		if err != nil {
+			blog.Errorf("failed to read tool chain json file %s with error %v", h.flags.ToolChainFile, err)
+			return
+		}
+
+		var t dcSDK.Toolchain
+		if err = codec.DecJSON(data, &t); err != nil {
+			blog.Errorf("failed to decode json content[%s] failed: %v", string(data), err)
+			return
+		}
+
+		if len(t.Toolchains) == 0 {
+			blog.Errorf("tool chain is empty")
+			return
+		}
+
+		for i := range all.Actions {
+			if all.Actions[i].Cmd == UbaTemplateToolKey {
+				all.Actions[i].Cmd = t.Toolchains[0].ToolKey
+
+				all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateToolKey, t.Toolchains[0].ToolKey, -1)
+			}
+
+			if all.Actions[i].Workdir == UbaTemplateToolKeyDir {
+				all.Actions[i].Workdir = filepath.Dir(t.Toolchains[0].ToolKey)
+			}
+
+			ips := util.GetIPAddress()
+			if len(ips) > 0 {
+				ip := ips[0]
+				for _, ipstr := range ips {
+					if isIPValid(ipstr) {
+						ip = ipstr
+						break
+					}
+				}
+				if strings.ContainsAny(all.Actions[i].Arg, UbaTemplateHostIP) {
+					all.Actions[i].Arg = strings.Replace(all.Actions[i].Arg, UbaTemplateHostIP, ip, -1)
+				}
+			}
+		}
+
+		blog.Infof("after adjust,actions: %v", *all)
+	}
+}
+
 func (h *UBTTool) runActions() error {
 	blog.Infof("UBTTool: try to run actions")
 
@@ -166,6 +233,9 @@ func (h *UBTTool) runActions() error {
 	// for debug
 	blog.Debugf("UBTTool: all actions:%+v", all)
 
+	// support uba agent template
+	h.adjustActions4UBAAgent(all)
+
 	// execute actions here
 	h.allactions = all.Actions
 
@@ -174,12 +244,12 @@ func (h *UBTTool) runActions() error {
 	// for debug
 	blog.Debugf("UBTTool: all actions:%+v", h.allactions)
 
-	// readyactions includes actions which no depend
-	err = h.getReadyActions()
-	if err != nil {
-		blog.Warnf("UBTTool: failed to get ready actions with error:%v", err)
-		return err
-	}
+	// // readyactions includes actions which no depend
+	// err = h.getReadyActions()
+	// if err != nil {
+	// 	blog.Warnf("UBTTool: failed to get ready actions with error:%v", err)
+	// 	return err
+	// }
 
 	err = h.executeActions()
 	if err != nil {
@@ -225,7 +295,7 @@ func (h *UBTTool) executeActions() error {
 		select {
 		case r := <-h.actionchan:
 			blog.Infof("UBTTool: got action result:%+v", r)
-			if r.Exitcode != 0 || r.Err != nil {
+			if (r.Exitcode != 0 || r.Err != nil) && !h.settings.ContinueOnError {
 				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
 				blog.Errorf("UBTTool: %v", err)
 				return err
@@ -296,7 +366,9 @@ func (h *UBTTool) analyzeActions(actions []common.Action) error {
 		targetsuffix := []string{}
 		needAnalyzeArg := true
 		switch exe {
-		case "cl.exe", "cl-filter.exe", "clang.exe", "clang++.exe", "clang", "clang++":
+		case "cl.exe", "cl-filter.exe", "clang.exe",
+			"clang++.exe", "clang", "clang++",
+			"prospero-clang.exe", "clang-cl.exe":
 			targetsuffix = []string{".cpp", ".c", ".response\"", ".response"}
 			actions[i].IsCompile = true
 			break
@@ -367,6 +439,8 @@ func (h *UBTTool) analyzeActions(actions []common.Action) error {
 }
 
 func (h *UBTTool) selectActionsToExecute() error {
+	h.getReadyActions(int(h.maxjobs - h.runningnumber))
+
 	h.readyactionlock.Lock()
 	defer h.readyactionlock.Unlock()
 
@@ -423,9 +497,21 @@ func (h *UBTTool) selectReadyAction() int {
 func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.Actionresult) error {
 	blog.Infof("UBTTool: ready execute actions:%+v", action)
 
+	blog.Infof("UBTTool: raw cmd:[%s %s]", action.Cmd, action.Arg)
+
+	commandType := dcType.CommandDefault
 	fullargs := []string{action.Cmd}
-	args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
-	fullargs = append(fullargs, args...)
+	if strings.HasSuffix(action.Cmd, "cmd.exe") || strings.HasSuffix(action.Cmd, "Cmd.exe") {
+		fullargs = append(fullargs, action.Arg)
+	} else if (strings.HasSuffix(action.Cmd, "ispc.exe") || strings.HasSuffix(action.Cmd, "Ispc.exe")) && len(action.Arg) > dcType.MaxWindowsCommandLength {
+		fullargs = append(fullargs, action.Arg)
+		commandType = dcType.CommandInFile
+	} else {
+		args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
+		fullargs = append(fullargs, args...)
+	}
+
+	blog.Infof("UBTTool: sent cmd:[%s]", strings.Join(fullargs, " "))
 
 	//exitcode, err := h.executor.Run(fullargs, action.Workdir)
 	// try again if failed after sleep some time
@@ -434,7 +520,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 	waitsecs := 5
 	var err error
 	for try := 0; try < 3; try++ {
-		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir)
+		retcode, retmsg, err = h.executor.Run(fullargs, action.Workdir, commandType, action.Attributes)
 		if retcode != int(api.ServerErrOK) {
 			blog.Warnf("UBTTool: failed to execute action with ret code:%d error [%+v] for %d times, actions:%+v", retcode, err, try+1, action)
 
@@ -475,7 +561,7 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 }
 
 // get ready actions from all actions
-func (h *UBTTool) getReadyActions() error {
+func (h *UBTTool) getReadyActions(maxnum int) error {
 	blog.Infof("UBTTool: try to get ready actions")
 
 	h.allactionlock.Lock()
@@ -484,11 +570,33 @@ func (h *UBTTool) getReadyActions() error {
 	h.readyactionlock.Lock()
 	defer h.readyactionlock.Unlock()
 
+	// // copy actions which no depend from all to ready
+	// for i, v := range h.allactions {
+	// 	if !v.Running && !v.Finished && len(v.Dep) == 0 {
+	// 		h.readyactions = append(h.readyactions, v)
+	// 		h.allactions[i].Running = true
+	// 	}
+	// }
+	h.copyReadyActions(maxnum)
+
+	return nil
+}
+
+// get ready actions from all actions
+func (h *UBTTool) copyReadyActions(maxnum int) error {
 	// copy actions which no depend from all to ready
+	count := 0
 	for i, v := range h.allactions {
 		if !v.Running && !v.Finished && len(v.Dep) == 0 {
 			h.readyactions = append(h.readyactions, v)
 			h.allactions[i].Running = true
+
+			blog.Infof("UBTTool: copy action %s to ready queue when %d finished %d running", v.Index, h.finishednumber, h.runningnumber)
+
+			count++
+			if count >= maxnum {
+				break
+			}
 		}
 	}
 
@@ -550,12 +658,14 @@ func (h *UBTTool) onActionFinished(index string, exitcode int) error {
 				}
 			}
 
-			// copy to ready if no depent
-			if !v.Running && !v.Finished && len(h.allactions[i].Dep) == 0 {
-				h.readyactions = append(h.readyactions, v)
-				h.allactions[i].Running = true
-			}
+			// // copy to ready if no depent
+			// if !v.Running && !v.Finished && len(h.allactions[i].Dep) == 0 {
+			// 	h.readyactions = append(h.readyactions, v)
+			// 	h.allactions[i].Running = true
+			// }
 		}
+
+		// h.copyReadyActions(1)
 	}
 
 	return nil
@@ -571,7 +681,7 @@ func (h *UBTTool) dump() {
 	blog.Infof("UBTTool: -------------------dump end-----------------------")
 }
 
-//---------------------------------to support set tool chain----------------------------------------------------------
+// ---------------------------------to support set tool chain----------------------------------------------------------
 func (h *UBTTool) getControllerConfig() dcSDK.ControllerConfig {
 	return dcSDK.ControllerConfig{
 		NoLocal: false,
@@ -597,6 +707,7 @@ func (h *UBTTool) getControllerConfig() dcSDK.ControllerConfig {
 		EnableLib:           h.settings.ControllerEnableLib,
 		LongTCP:             h.settings.ControllerLongTCP,
 		DynamicPort:         h.settings.ControllerDynamicPort,
+		PreferLocal:         h.settings.ControllerPreferLocal,
 	}
 }
 
@@ -702,6 +813,7 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 			MaxLocalPreJobs:   h.settings.MaxLocalPreJobs,
 			MaxLocalExeJobs:   h.settings.MaxLocalExeJobs,
 			MaxLocalPostJobs:  h.settings.MaxLocalPostJobs,
+			ResultCacheList:   h.settings.ResultCacheList,
 		},
 
 		Transport: dcType.BoosterTransport{
@@ -715,7 +827,7 @@ func (h *UBTTool) newBooster() (*pkg.Booster, error) {
 		},
 
 		// got controller listen port from local file
-		Controller: sdk.ControllerConfig{
+		Controller: dcSDK.ControllerConfig{
 			NoLocal: false,
 			Scheme:  shaderToolComm.ControllerScheme,
 			IP:      shaderToolComm.ControllerIP,

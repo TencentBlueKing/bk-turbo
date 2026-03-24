@@ -529,6 +529,10 @@ func (o *operator) releaseServer(clusterID, namespace, name string) error {
 	header := getHeader(o.token)
 	var wg sync.WaitGroup
 	for _, item := range resp.DetailData {
+		if item == nil {
+			blog.Warnf("dc_mac operator: release server get nil item")
+			continue
+		}
 		if item.Status != DetailStatusSucceeded && item.Status != DetailStatusFailed {
 			blog.Errorf("dc_mac operator: release clusterID(%s) namespace(%s) name(%s) with status %s !!",
 				clusterID, namespace, name, string(item.Status))

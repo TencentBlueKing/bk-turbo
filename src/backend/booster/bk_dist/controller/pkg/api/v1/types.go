@@ -25,6 +25,10 @@ type AvailableResp struct {
 	Pid int `json:"pid"`
 }
 
+type ListResourceResp struct {
+	Resources []string `json:"resources"`
+}
+
 // WorkStatusResp describe the response of getting work status
 type WorkStatusResp struct {
 	Status *dcSDK.WorkStatusDetail `json:"status"`
@@ -34,6 +38,7 @@ type WorkStatusResp struct {
 type WorkRegisterParam struct {
 	BatchMode        bool           `json:"batch_mode"`
 	ServerHost       string         `json:"server_host"`
+	ResultCacheList  []string       `json:"result_cache_list"`
 	SpecificHostList []string       `json:"specific_host_list"`
 	NeedApply        bool           `json:"need_apply"`
 	Apply            *v2.ParamApply `json:"apply"`
@@ -187,6 +192,8 @@ type LocalTaskExecuteParam struct {
 	Environments []string                  `json:"environment"`
 	Stats        *dcSDK.ControllerJobStats `json:"stats"`
 	User         user.User                 `json:"user"`
+	CommandType  int                       `json:"command_type"`
+	Attributes   []string                  `json:"attributes"`
 }
 
 // LocalTaskExecuteResp describe the response of doing local task execute to controller

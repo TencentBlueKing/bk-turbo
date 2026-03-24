@@ -113,7 +113,7 @@ func (client *HTTPClient) NewTransPort() *http.Transport {
 	}
 }
 
-// SetTimeout set the client timeout.
+// SetTimeOut set the client timeout.
 func (client *HTTPClient) SetTimeOut(timeOut time.Duration) {
 	client.httpCli.Timeout = timeOut
 }

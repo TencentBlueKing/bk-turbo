@@ -11,11 +11,11 @@ package common
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
@@ -25,47 +25,6 @@ const (
 	LocalIPKKey = "BK_DISTCC_LOCAL_IP"
 )
 
-var (
-	_, classA, _  = net.ParseCIDR("10.0.0.0/8")
-	_, classA1, _ = net.ParseCIDR("9.0.0.0/8")
-	_, classAa, _ = net.ParseCIDR("100.64.0.0/10")
-	_, classB, _  = net.ParseCIDR("172.16.0.0/12")
-	_, classC, _  = net.ParseCIDR("192.168.0.0/16")
-)
-
-// GetIPAddress get local usable inner ip address
-func GetIPAddress() (addrList []string) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return addrList
-	}
-	for _, addr := range addrs {
-		if ip, ok := addr.(*net.IPNet); ok && !ip.IP.IsLoopback() && ip.IP.To4() != nil {
-			if classA.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classA1.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classAa.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classB.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classC.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-		}
-	}
-	return addrList
-}
-
 // get local ip from env first, if not exists or empty, then get from net
 func GetLocalIP() (string, error) {
 	ip := os.Getenv(LocalIPKKey)
@@ -73,7 +32,7 @@ func GetLocalIP() (string, error) {
 		return ip, nil
 	}
 
-	ips := GetIPAddress()
+	ips := util.GetIPAddress()
 	if len(ips) == 0 {
 		return "", fmt.Errorf("get local IP failed, the client will exit")
 	}

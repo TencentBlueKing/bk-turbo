@@ -36,7 +36,7 @@ class TBSUpdateDataJob @Autowired constructor(
                 return
             }
             val engineCode = jobParam["engineCode"] as String
-            logger.info("[update turbo job|$engineCode] update job start")
+            logger.info("[update turbo job $engineCode] update job start")
             /**
              * 这里查询分为几个场景
              * 1.结合流水线创建的编译加速记录，一开始没有保存tbsRecordId，查询出来需要用buildId进行关联
@@ -55,7 +55,7 @@ class TBSUpdateDataJob @Autowired constructor(
                             buildId = turboRecordEntity.buildId,
                             turboPlanId = turboRecordEntity.turboPlanId
                         )
-                        logger.info("[update turbo job|$engineCode|${turboRecordEntity.turboPlanId}] ready to send message")
+                        logger.info("[update turbo job $engineCode ${turboRecordEntity.turboPlanId}] ready to send message")
                         rabbitTemplate.convertAndSend(EXCHANGE_TURBO_REPORT, ROUTE_TURBO_REPORT_UPDATE, turboRecordUpdateDto)
                     }
                 }

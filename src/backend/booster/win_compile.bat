@@ -25,8 +25,25 @@ if [%CURRENTDATE%] == [] (
 set VERSION=%GITTAG%-%CURRENTDATE%
 echo %VERSION%
 
-set "LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.EncryptionKey=%encryption_key% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ServerCertPwd=%server_cert_pwd% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ClientCertPwd=%client_cert_pwd% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Version=%VERSION% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.BuildTime=%BUILDTIME% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.GitHash=%GITHASH% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Tag=%GITTAG%"
-set "BuildBooster_LDFLAG=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerDomain=%distcc_server_prod_domain% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerPort=%distcc_server_prod_port% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerDomain=%distcc_server_test_domain% -X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerPort=%distcc_server_test_port%"
+set "LDFLAG1=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.EncryptionKey=%encryption_key%"
+set "LDFLAG2=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ServerCertPwd=%server_cert_pwd%"
+set "LDFLAG3=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.ClientCertPwd=%client_cert_pwd%"
+set "LDFLAG4=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassA=%inner_ip_classa%"
+set "LDFLAG5=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassA1=%inner_ip_classa1%"
+set "LDFLAG6=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassAa=%inner_ip_classaa%"
+set "LDFLAG7=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassB=%inner_ip_classb%"
+set "LDFLAG8=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/static.InnerIPClassC=%inner_ip_classc%"
+set "LDFLAG9=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Version=%VERSION%"
+set "LDFLAG10=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.BuildTime=%BUILDTIME%"
+set "LDFLAG11=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.GitHash=%GITHASH%"
+set "LDFLAG12=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version.Tag=%GITTAG%"
+set "LDFLAG=%LDFLAG1% %LDFLAG2% %LDFLAG3% %LDFLAG4% %LDFLAG5% %LDFLAG6% %LDFLAG7% %LDFLAG8% %LDFLAG9% %LDFLAG10% %LDFLAG11% %LDFLAG12%"
+
+set "BuildBooster_LDFLAG1=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerDomain=%distcc_server_prod_domain%"
+set "BuildBooster_LDFLAG2=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.ProdBuildBoosterServerPort=%distcc_server_prod_port%"
+set "BuildBooster_LDFLAG3=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerDomain=%distcc_server_test_domain%"
+set "BuildBooster_LDFLAG4=-X github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/booster/command.TestBuildBoosterServerPort=%distcc_server_test_port%"
+set "BuildBooster_LDFLAG=%BuildBooster_LDFLAG1% %BuildBooster_LDFLAG2% %BuildBooster_LDFLAG3% %BuildBooster_LDFLAG4%"
 
 cd %curpath%
 set bindir=%curpath%\bin

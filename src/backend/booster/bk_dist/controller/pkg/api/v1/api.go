@@ -19,6 +19,9 @@ var (
 	queryParamJobIndex          = "job_index"
 	queryParamJobLeastLeaveTime = "job_least_leave_time"
 
+	listresourceTraceFile  = "tracefile"
+	listresourceSessionmap = "sessionmap"
+
 	defaultManager types.Mgr
 )
 
@@ -27,6 +30,9 @@ func InitStorage() (err error) {
 	defaultManager = api.GetAPIResource().Manager
 	api.RegisterV1Action(api.Action{
 		Verb: "GET", Path: "/dist/available", Params: nil, Handler: api.FuncWrapper(available),
+	})
+	api.RegisterV1Action(api.Action{
+		Verb: "GET", Path: "/dist/listresource", Params: nil, Handler: api.FuncWrapper(listresource),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb: "GET", Path: "/dist/work/list", Params: nil, Handler: api.FuncWrapper(getWorkList),

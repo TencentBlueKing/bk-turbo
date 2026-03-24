@@ -778,4 +778,195 @@ DEFINE_WRAPPER(int, execvpe, (const char *file, char *const argv[], char *const 
         return SILENT_CALL_REAL(execvpe, file, argv, envp);
     }
 }
+
+#include <spawn.h>
+
+// 原始函数指针定义
+typedef int (*posix_spawn_fn_t)(pid_t *, const char *,
+                      const posix_spawn_file_actions_t *,
+                      const posix_spawnattr_t *,
+                      char *const[], char *const[]);
+
+// 原始函数指针声明
+static int (*original_posix_spawn)(pid_t *pid, const char *file,
+                      const posix_spawn_file_actions_t *file_actions,
+                      const posix_spawnattr_t *attrp,
+                      char *const argv[], char *const envp[]) = NULL;
+
+// 自定义的posix_spawn函数
+int posix_spawn(pid_t *pid, const char *file,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char *const argv[], char *const envp[]) {
+    
+    init(file);
+    bk_log(ERROR, "enter hook posix_spawn with file[%s]...\n", file);
+    // 首次调用时加载原始函数
+    if (!original_posix_spawn) {
+        original_posix_spawn = reinterpret_cast<posix_spawn_fn_t>(dlsym(RTLD_NEXT, "posix_spawn"));
+        if (!original_posix_spawn) {
+            bk_log(ERROR, "Error: %s\n", dlerror());
+            return -1;
+        }
+    }
+
+    printEnvArg(argv);
+    std::string target = "";
+    const char *src = file;
+    if (getEnvpLen(argv) > 1)
+    {
+        src = argv[0];
+    }
+   
+    if (getReplaceCmd(src, target))
+    {
+        // printEnvArg(envp);
+        size_t keyLen = strlen(full_hooked_flag_env);
+        char *newHookFlagEnv = new char[keyLen + 1];
+        strncpy(newHookFlagEnv, full_hooked_flag_env, keyLen);
+        newHookFlagEnv[keyLen] = '\0';
+        char **newenvp = getNewEnvp(envp, newHookFlagEnv);
+
+        //printEnvArg(newenvp);
+        int rc = 0;
+        std::vector<std::string> result_array;
+        int size = split(target, " ", result_array);
+        if (size > 1)
+        {
+            std::vector<char *> arg_array;
+            for (size_t i = 0; i < result_array.size(); ++i)
+            {
+                size_t strlen = result_array[i].size();
+                char *arg = new char[strlen + 1];
+                strncpy(arg, result_array[i].c_str(), strlen);
+                arg[strlen] = '\0';
+                arg_array.push_back(arg);
+            }
+            char **newArgv = getNewArgv(argv, arg_array);
+
+            bk_log(ERROR, "enter hook posix_spawn with new cmd[%s]...\n", result_array[0].c_str());
+            printEnvArg(newArgv);
+
+            // run cmd
+            rc = original_posix_spawn(pid, result_array[0].c_str(), file_actions, attrp, newArgv, newenvp);
+
+            // free arg_array
+            for (size_t i = 0; i < arg_array.size(); ++i)
+            {
+                delete[] arg_array[i];
+                arg_array[i] = NULL;
+            }
+
+            // free newArgv
+            free(newArgv);
+        }
+        else
+        {
+            bk_log(ERROR, "enter hook posix_spawn with new cmd[%s]...\n", result_array[0].c_str());
+            rc = original_posix_spawn(pid, target.c_str(), file_actions, attrp, argv, newenvp);
+        }
+
+        free(newenvp);
+        delete[] newHookFlagEnv;
+        newHookFlagEnv = NULL;
+
+        return rc;
+    }
+    else
+    {
+        return original_posix_spawn(pid, file, file_actions, attrp, argv, envp);
+    }
+}
+
+// 原始函数指针声明
+static int (*original_posix_spawnp)(pid_t *pid, const char *file,
+                      const posix_spawn_file_actions_t *file_actions,
+                      const posix_spawnattr_t *attrp,
+                      char *const argv[], char *const envp[]) = NULL;
+
+// 自定义的posix_spawn函数
+int posix_spawnp(pid_t *pid, const char *file,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char *const argv[], char *const envp[]) {
+    
+    init(file);
+    bk_log(ERROR, "enter hook posix_spawnp with file[%s]...\n", file);
+    // 首次调用时加载原始函数
+    if (!original_posix_spawnp) {
+        original_posix_spawnp = reinterpret_cast<posix_spawn_fn_t>(dlsym(RTLD_NEXT, "posix_spawnp"));
+        if (!original_posix_spawnp) {
+            bk_log(ERROR, "Error: %s\n", dlerror());
+            return -1;
+        }
+    }
+
+    printEnvArg(argv);
+    std::string target = "";
+    const char *src = file;
+    if (getEnvpLen(argv) > 1)
+    {
+        src = argv[0];
+    }
+   
+    if (getReplaceCmd(src, target))
+    {
+        // printEnvArg(envp);
+        size_t keyLen = strlen(full_hooked_flag_env);
+        char *newHookFlagEnv = new char[keyLen + 1];
+        strncpy(newHookFlagEnv, full_hooked_flag_env, keyLen);
+        newHookFlagEnv[keyLen] = '\0';
+        char **newenvp = getNewEnvp(envp, newHookFlagEnv);
+
+        //printEnvArg(newenvp);
+        int rc = 0;
+        std::vector<std::string> result_array;
+        int size = split(target, " ", result_array);
+        if (size > 1)
+        {
+            std::vector<char *> arg_array;
+            for (size_t i = 0; i < result_array.size(); ++i)
+            {
+                size_t strlen = result_array[i].size();
+                char *arg = new char[strlen + 1];
+                strncpy(arg, result_array[i].c_str(), strlen);
+                arg[strlen] = '\0';
+                arg_array.push_back(arg);
+            }
+            char **newArgv = getNewArgv(argv, arg_array);
+
+            bk_log(ERROR, "enter hook posix_spawnp with new cmd[%s]...\n", result_array[0].c_str());
+            printEnvArg(newArgv);
+
+            // run cmd
+            rc = original_posix_spawnp(pid, result_array[0].c_str(), file_actions, attrp, newArgv, newenvp);
+
+            // free arg_array
+            for (size_t i = 0; i < arg_array.size(); ++i)
+            {
+                delete[] arg_array[i];
+                arg_array[i] = NULL;
+            }
+
+            // free newArgv
+            free(newArgv);
+        }
+        else
+        {
+            bk_log(ERROR, "enter hook posix_spawnp with new cmd[%s]...\n", result_array[0].c_str());
+            rc = original_posix_spawnp(pid, target.c_str(), file_actions, attrp, argv, newenvp);
+        }
+
+        free(newenvp);
+        delete[] newHookFlagEnv;
+        newHookFlagEnv = NULL;
+
+        return rc;
+    }
+    else
+    {
+        return original_posix_spawnp(pid, file, file_actions, attrp, argv, envp);
+    }
+}
+
 #endif

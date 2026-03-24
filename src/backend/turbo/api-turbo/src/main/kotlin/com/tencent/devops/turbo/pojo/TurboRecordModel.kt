@@ -10,7 +10,7 @@ import javax.validation.constraints.NotBlank
 data class TurboRecordModel(
     @ApiModelProperty("项目id")
     @get:NotBlank(
-        message = "项目id不能为空",
+        message = "{bizError.projectIdNotBlank}",
         groups = [
             TurboRecordGroup.OpenApi::class
         ]

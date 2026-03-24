@@ -47,7 +47,11 @@ allprojects {
 			dependency("com.github.ulisesbocchio:jasypt-spring-boot-starter:${Versions.jasyptVersion}")
 			dependency("com.google.guava:guava:${Versions.guavaVersion}")
 			dependency("io.jsonwebtoken:jjwt:${Versions.jjwtVersion}")
+            dependency("io.jsonwebtoken:jjwt-api:${Versions.jjwtVersion}")
+            dependency("io.jsonwebtoken:jjwt-impl:${Versions.jjwtVersion}")
+            dependency("io.jsonwebtoken:jjwt-jackson:${Versions.jjwtVersion}")
 			dependency("commons-io:commons-io:${Versions.commonIo}")
+            dependency("com.tencent.bk.devops.ci.metrics:api-metrics:${Versions.ciVersion}")
 			dependencySet("io.swagger:${Versions.swaggerVersion}") {
                 entry("swagger-annotations")
                 entry("swagger-jersey2-jaxrs")
@@ -61,6 +65,7 @@ allprojects {
                 entry("bcprov-jdk15on")
                 entry("bcprov-ext-jdk15on")
             }
+            dependency("org.jetbrains.kotlinx:kotlinx-coroutines-core:${Versions.coroutinesCore}")
             dependencySet("org.jetbrains.kotlin:${Versions.Kotlin}") {
                 entry("kotlin-stdlib-jdk8")
                 entry("kotlin-reflect")

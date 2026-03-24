@@ -51,23 +51,27 @@ class TurboDataSyncService @Autowired constructor(
         val clientIp = turboRecordCreateDto.dataMap["client_ip"] as String?
         val tbsRecordId = turboRecordCreateDto.dataMap["task_id"] as String?
         val buildId = turboRecordCreateDto.dataMap["build_id"] as String?
-        logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] create param-> client ip: $clientIp | tbs record id: $tbsRecordId")
+        logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] create param-> client ip: " +
+            "$clientIp tbs record id: $tbsRecordId")
         if (turboPlanId.isNullOrBlank() || clientIp.isNullOrBlank() || tbsRecordId.isNullOrBlank()) {
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] turbo plan id or client ip is null, client ip: $clientIp, tbs record id: $tbsRecordId")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] turbo plan id or client " +
+                "ip is null, client ip: $clientIp, tbs record id: $tbsRecordId")
             return
         }
         if (turboRecordService.existsByTBSRecordId(tbsRecordId)) {
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] turbo record with tbs record id $tbsRecordId already exists!")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] turbo record with tbs " +
+                "record id $tbsRecordId already exists!")
             return
         }
         if (!buildId.isNullOrBlank() && turboRecordService.existsByBuildId(buildId)) {
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] turbo record with build id $buildId already exists!")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] turbo record with build " +
+                "id $buildId already exists!")
             return
         }
 
         val turboPlanEntity = turboPlanService.findTurboPlanById(turboPlanId)
         if (turboPlanEntity?.openStatus == null || !turboPlanEntity.openStatus!!) {
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] turbo plan not found")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] turbo plan not found")
             return
         }
 
@@ -92,7 +96,8 @@ class TurboDataSyncService @Autowired constructor(
         }
         val turboPlanInstanceEntity = turboPlanInstanceInfo.first
         if (null == turboPlanInstanceEntity || turboPlanInstanceEntity.id.isNullOrBlank()) {
-            logger.info("[create turbo job|${turboRecordCreateDto.engineCode}|$turboPlanId] no turbo plan instance found")
+            logger.info("[create turbo job ${turboRecordCreateDto.engineCode} $turboPlanId] no turbo plan instance " +
+                "found")
             return
         }
         if (turboPlanInstanceInfo.second) {
@@ -156,9 +161,11 @@ class TurboDataSyncService @Autowired constructor(
         val buildId = turboDataMap["build_id"] as String?
         val status = turboDataMap["status"] as String?
         val startTime = (turboDataMap["start_time"] as? Int?)?.toLong() ?: (System.currentTimeMillis() / 1000)
-        logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] update param-> tbs record id: $tbsRecordId | build id: $buildId | status: $status | start time: $startTime")
+        logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] update" +
+            " param-> tbs record id: $tbsRecordId, build id: $buildId, status: $status, start time: $startTime")
         if ((tbsRecordId.isNullOrBlank() && buildId.isNullOrBlank()) || status.isNullOrBlank()) {
-            logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] tbs record id or status is null, tbs record id: $tbsRecordId, status: $status, build id: $buildId")
+            logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] " +
+                "tbs record id or status is null, tbs record id: $tbsRecordId, status: $status, build id: $buildId")
             return
         }
 
@@ -175,7 +182,8 @@ class TurboDataSyncService @Autowired constructor(
         )
 
         if (null == turboRecordEntity) {
-            logger.info("[update turbo job|${turboRecordUpdateDto.engineCode}|${turboRecordUpdateDto.turboPlanId}] no turbo record has been updated")
+            logger.info("[update turbo job ${turboRecordUpdateDto.engineCode} ${turboRecordUpdateDto.turboPlanId}] no" +
+                " turbo record has been updated")
             return
         }
 

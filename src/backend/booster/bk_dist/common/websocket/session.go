@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,10 +68,11 @@ type Session struct {
 
 	req *restful.Request
 
-	ip    string // 远端的ip
-	port  int32  // 远端的port
-	conn  net.Conn
-	valid bool // 连接是否可用
+	ip      string // 远端的ip
+	port    int32  // 远端的port
+	conn    net.Conn
+	connKey string
+	valid   bool // 连接是否可用
 
 	// 收到数据后的回调函数
 	callback WebSocketFunc
@@ -98,7 +98,7 @@ type Session struct {
 type WebSocketFunc func(r *restful.Request, id MessageID, data []byte, s *Session) error
 
 // server端创建session，需要指定http处理函数
-func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSocketFunc) *Session {
+func NewServerSession(w *restful.Response, r *restful.Request, callback WebSocketFunc) *Session {
 	conn, _, _, err := ws.UpgradeHTTP(r.Request, w)
 	if err != nil || conn == nil {
 		blog.Errorf("[session] UpgradeHTTP failed with error:%v", err)
@@ -127,6 +127,7 @@ func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSoc
 		ip:             ip,
 		port:           int32(port),
 		conn:           conn,
+		connKey:        fmt.Sprintf("%s_%d", remoteaddr, time.Now().Nanosecond()),
 		sendNotifyChan: sendNotifyChan,
 		sendQueue:      sendQueue,
 		waitMap:        make(map[MessageID]*Message),
@@ -139,6 +140,10 @@ func NewServerSession(w http.ResponseWriter, r *restful.Request, callback WebSoc
 	s.serverStart()
 
 	return s
+}
+
+func (s *Session) GetConnKey() string {
+	return s.connKey
 }
 
 // client端创建session，需要指定目标server的ip和端口
@@ -172,7 +177,7 @@ func NewClientSession(ip string, port int32, url string, callback WebSocketFunc)
 
 	s.clientStart()
 
-	blog.Infof("[session] Dial to :%s:%d/%s succeed", ip, port, url)
+	blog.Debugf("[session] Dial to :%s:%d/%s succeed", ip, port, url)
 
 	return s
 }
@@ -454,7 +459,6 @@ func (s *Session) serverReceive(wg *sync.WaitGroup) {
 	}
 }
 
-//
 func (s *Session) notifyAndWait(msg *Message) *MessageResult {
 	blog.Debugf("[session] notify send and wait for response now...")
 
@@ -520,21 +524,21 @@ func (s *Session) clientStart() {
 	wg1.Add(1)
 	go s.clientReceive(&wg1)
 	wg1.Wait()
-	blog.Infof("[session] go routine of client receive started!")
+	blog.Debugf("[session] go routine of client receive started!")
 
 	// 再启动发送协程
 	var wg2 = sync.WaitGroup{}
 	wg2.Add(1)
 	go s.clientSend(&wg2)
 	wg2.Wait()
-	blog.Infof("[session] go routine of client send started!")
+	blog.Debugf("[session] go routine of client send started!")
 
 	// 最后启动状态检查协程
 	var wg3 = sync.WaitGroup{}
 	wg3.Add(1)
 	go s.check(&wg3)
 	wg3.Wait()
-	blog.Infof("[session] go routine of client check started!")
+	blog.Debugf("[session] go routine of client check started!")
 }
 
 // 启动收发协程，方便协程退出
@@ -546,31 +550,32 @@ func (s *Session) serverStart() {
 	wg1.Add(1)
 	go s.serverSend(&wg1)
 	wg1.Wait()
-	blog.Infof("[session] go routine of server send started!")
+	blog.Debugf("[session] go routine of server send started!")
 
 	// 再启动接收协程
 	var wg2 = sync.WaitGroup{}
 	wg2.Add(1)
 	go s.serverReceive(&wg2)
 	wg2.Wait()
-	blog.Infof("[session] go routine of server receive started!")
+	blog.Debugf("[session] go routine of server receive started!")
 
 	// 最后启动状态检查协程
 	var wg3 = sync.WaitGroup{}
 	wg3.Add(1)
 	go s.check(&wg3)
 	wg3.Wait()
-	blog.Infof("[session] go routine of server check started!")
+	blog.Debugf("[session] go routine of server check started!")
 }
 
 func (s *Session) check(wg *sync.WaitGroup) {
 	wg.Done()
 	for {
 		select {
-		case <-s.ctx.Done():
-			blog.Infof("[session] session check canceled by context")
-			s.clean(ErrorContextCanceled)
-			return
+		// 在用户环境上发现s.ctx.Done()异常触发的，不清楚原因，先屏蔽
+		// case <-s.ctx.Done():
+		// 	blog.Infof("[session] session check canceled by context")
+		// 	s.clean(ErrorContextCanceled)
+		// 	return
 		case err := <-s.errorChan:
 			blog.Warnf("[session] session check found error:%v", err)
 			s.clean(err)
@@ -582,7 +587,7 @@ func (s *Session) check(wg *sync.WaitGroup) {
 // 清理资源，包括关闭连接，停止协程等
 // 在Run中被调用，不对外
 func (s *Session) clean(err error) {
-	blog.Infof("[session] session clean now")
+	blog.Debugf("[session] session clean now")
 	s.cancel()
 	s.conn.Close()
 
@@ -669,7 +674,7 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32, callbac
 		checkNotifyChan: make(chan bool, size*2),
 	}
 
-	blog.Infof("[session] client pool ready new client sessions")
+	blog.Debugf("[session] client pool ready new client sessions")
 	for i := 0; i < int(size); i++ {
 		client := NewClientSession(ip, port, url, callback)
 		if client != nil {
@@ -681,7 +686,7 @@ func GetGlobalSessionPool(ip string, port int32, url string, size int32, callbac
 	}
 
 	// 启动检查 session的协程，用于检查和恢复
-	blog.Infof("[session] client pool ready start check go routine")
+	blog.Debugf("[session] client pool ready start check go routine")
 	var wg = sync.WaitGroup{}
 	wg.Add(1)
 	go tempSessionPool.check(&wg)
@@ -738,7 +743,7 @@ func (sp *ClientSessionPool) GetSession() (*Session, error) {
 }
 
 func (sp *ClientSessionPool) Destroy(err error) error {
-	blog.Infof("[session] session pool destroy now")
+	blog.Debugf("[session] session pool destroy now")
 	sp.cancel()
 
 	sp.mutex.Lock()
@@ -758,7 +763,7 @@ func (sp *ClientSessionPool) check(wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-sp.ctx.Done():
-			blog.Infof("[session] session pool check routine canceled by context")
+			blog.Debugf("[session] session pool check routine canceled by context")
 			return
 		case <-sp.checkNotifyChan:
 			blog.Debugf("[session] session check triggled")

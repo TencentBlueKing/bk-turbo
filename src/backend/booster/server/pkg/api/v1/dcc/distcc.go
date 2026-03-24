@@ -23,6 +23,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/distcc/client/pkg"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/manager"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 
 	"github.com/emicklei/go-restful"
 )
@@ -73,7 +74,11 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 		Extra:         string(extraData),
 	})
 	if err != nil {
-		blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		if err == engine.ErrorProjectNoFound || strings.Contains(err.Error(), types.ErrorConcurrencyLimit.Error()) {
+			blog.Warnf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		} else {
+			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
+		}
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrApplyResourceFailed, Message: err.Error()})
 		return
 	}
@@ -306,12 +311,16 @@ func getTaskInfo(taskID string) (*commonTypes.DistccServerInfo, error) {
 		}
 	}
 
-	data, ok := te.CustomData(nil).(distcc.CustomData)
-	if !ok {
-		err = fmt.Errorf("custom data type error")
-		blog.Errorf("get apply param: get task(%s) custom data from engine(%s) failed: %v",
-			taskID, tb.Client.EngineName.String(), err)
-		return nil, err
+	data := distcc.CustomData{}
+	var ok bool
+	if te != nil {
+		data, ok = te.CustomData(nil).(distcc.CustomData)
+		if !ok {
+			err = fmt.Errorf("custom data type error")
+			blog.Errorf("get apply param: get task(%s) custom data from engine(%s) failed: %v",
+				taskID, tb.Client.EngineName.String(), err)
+			return nil, err
+		}
 	}
 
 	message := tb.Status.Message

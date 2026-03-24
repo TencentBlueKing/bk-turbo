@@ -121,6 +121,14 @@ func (s *Sandbox) ExecScripts(src string) (int, error) {
 	return s.ExecCommand(caller, options, src)
 }
 
+func (s *Sandbox) ExecScriptsRaw(src string) (int, error) {
+	return 1, fmt.Errorf("not support")
+}
+
+func (s *Sandbox) ExecRawByFile(bt, name string, arg ...string) (int, error) {
+	return 1, fmt.Errorf("not support")
+}
+
 // ExecScriptsWithMessage run the scripts and return the output
 func (s *Sandbox) ExecScriptsWithMessage(src string) (int, []byte, []byte, error) {
 	caller, options := GetCallerAndOptions()
@@ -307,7 +315,7 @@ func GetConsoleCP() int {
 	return 0
 }
 
-//AddPath2Env add path to env
+// AddPath2Env add path to env
 func AddPath2Env(p string) {
 	path := os.Getenv("PATH")
 	newpath := fmt.Sprintf("%s:%s", p, path)
@@ -327,4 +335,12 @@ func RedirectStderror(f string) error {
 	}
 
 	return nil
+}
+
+func NeedSearchToolchain(input *env.Sandbox) bool {
+	if input != nil {
+		return input.GetEnv(env.KeyExecutorSearchToolchain) != ""
+	}
+
+	return env.GetEnv(env.KeyExecutorSearchToolchain) != ""
 }

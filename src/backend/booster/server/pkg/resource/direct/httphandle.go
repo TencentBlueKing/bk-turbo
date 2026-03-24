@@ -12,6 +12,7 @@ package direct
 import (
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
@@ -19,6 +20,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 
 	"github.com/emicklei/go-restful"
 )
@@ -62,7 +64,7 @@ func internalError(req *restful.Request, resp *restful.Response) {
 func (a *ResHTTPHandle) initActions() error {
 	a.actionsV1 = make([]*httpserver.Action, 0, 100)
 	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
-		"POST", "/build/reportresource", nil, a.reportresource))
+		"POST", "/build/reportresource", nil, api.MasterRequired(a.reportresource)))
 
 	return nil
 }
@@ -84,7 +86,15 @@ func (a *ResHTTPHandle) reportresource(req *restful.Request, resp *restful.Respo
 	}
 
 	// notify launch application
-	err = a.mgr.onResourceReport(task)
+	remoteaddr := req.Request.Header.Get(api.HeaderRemote)
+	remoteip := ""
+	if remoteaddr != "" {
+		arr := strings.Split(remoteaddr, ":")
+		if len(arr) > 1 {
+			remoteip = arr[0]
+		}
+	}
+	err = a.mgr.onResourceReport(task, remoteip)
 	if err != nil {
 		blog.Errorf("reportresource failed, url(%s): %v", req.Request.URL.String(), err)
 		ReturnRest(&RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrReportResourceError, Message: err.Error()})

@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/shadertool/common"
@@ -31,6 +32,15 @@ const (
 	VersionV1 = "v1"
 
 	PathV1 = prefix + VersionV1
+
+	processIDKey   = "process_id"
+	messagetypeKey = "message_type"
+
+	updatetoolchainKey = "updatetoolchain"
+)
+
+const (
+	messageTypeUba = "uba"
 )
 
 // HTTPHandle : http handle
@@ -75,6 +85,10 @@ func (a *HTTPHandle) initActions() error {
 		"POST", "/available", nil, funcwrapper(a.available)))
 	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
 		"POST", "/shaders", nil, funcwrapper(a.shaders)))
+	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
+		"POST", "/heartbeat", nil, funcwrapper(a.heartbeat)))
+	a.actionsV1 = append(a.actionsV1, httpserver.NewAction(
+		"POST", "/release", nil, funcwrapper(a.release)))
 
 	return nil
 }
@@ -93,22 +107,47 @@ func (a *HTTPHandle) GetActions() []*httpserver.Action {
 	return a.actionsV1
 }
 
-// TODO (tomtian)
 func (a *HTTPHandle) available(req *restful.Request, resp *restful.Response) {
 	blog.Debugf("ShaderTool: available...")
 
+	// TODO : return error info to ue editor
 	// do no care the json content now, just return ok
+	processID := req.QueryParameter(processIDKey)
+	if processID != "" {
+		blog.Infof("ShaderTool: available with process_id: %s", processID)
+		processid, err := strconv.Atoi(processID)
+		if err == nil {
+			blog.Infof("ShaderTool: available with process_id: %d", processid)
+			failedactions, err := a.mgr.getAndRemoveFailedActions(processid)
+			if err == nil && failedactions != nil {
+				// blog.Infof("ShaderTool: available with failed actions: %v", string(failedactions))
+				ReturnRest(&RestResponse{
+					Resp:     resp,
+					HTTPCode: 0,
+					ErrCode:  0,
+					Data: &common.AvailableResp{
+						PID:           int32(os.Getpid()),
+						FailedActions: failedactions,
+					},
+				})
+				return
+			}
+		}
+	}
 
 	// return response
 	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0, Data: &common.AvailableResp{
 		PID: int32(os.Getpid()),
 	}})
+
 	return
 }
 
 // TODO (tomtian)
 func (a *HTTPHandle) shaders(req *restful.Request, resp *restful.Response) {
 	blog.Debugf("ShaderTool: shaders...")
+
+	updatetoolchain := req.QueryParameter(updatetoolchainKey)
 
 	actions, err := getShaderActions(req)
 	if err != nil {
@@ -117,7 +156,7 @@ func (a *HTTPHandle) shaders(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	err = a.mgr.shaders(actions)
+	err = a.mgr.shaders(actions, updatetoolchain)
 	if err != nil {
 		ReturnRest(&RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrCode(
 			GetErrorCode(ErrorInvalidJSON)), Message: err.Error()})
@@ -127,6 +166,38 @@ func (a *HTTPHandle) shaders(req *restful.Request, resp *restful.Response) {
 	// return response
 	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0})
 	return
+}
+
+func (a *HTTPHandle) heartbeat(req *restful.Request, resp *restful.Response) {
+	blog.Debugf("ShaderTool: heartbeat...")
+
+	processID := req.QueryParameter(processIDKey)
+	messagetype := req.QueryParameter(messagetypeKey)
+	if processID != "" && messagetype != "" {
+		blog.Infof("ShaderTool: heartbeat with process_id: %s, messagetype: %s", processID, messagetype)
+		a.mgr.heartbeat(processID, messagetype)
+	}
+
+	// return response
+	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0, Data: &common.HeartbeatResp{
+		PID: int32(os.Getpid()),
+	}})
+}
+
+func (a *HTTPHandle) release(req *restful.Request, resp *restful.Response) {
+	blog.Debugf("ShaderTool: release...")
+
+	processID := req.QueryParameter(processIDKey)
+	messagetype := req.QueryParameter(messagetypeKey)
+	if processID != "" && messagetype != "" {
+		blog.Infof("ShaderTool: release with process_id: %s, messagetype: %s", processID, messagetype)
+		a.mgr.release(processID, messagetype)
+	}
+
+	// return response
+	ReturnRest(&RestResponse{Resp: resp, HTTPCode: 0, ErrCode: 0, Data: &common.ReleaseResp{
+		PID: int32(os.Getpid()),
+	}})
 }
 
 func getShaderActions(req *restful.Request) (*common.UE4Action, error) {
@@ -183,6 +254,7 @@ func ReturnRest(resp *RestResponse) {
 	if resp.WrapFunc != nil {
 		result = resp.WrapFunc(result)
 	}
+
 	resp.Resp.WriteHeader(resp.HTTPCode)
 	_, _ = resp.Resp.Write(result)
 }

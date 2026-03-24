@@ -408,6 +408,26 @@ func (o *operator) getFederationTotalNum(url string, ist config.InstanceType) (*
 	return result, nil
 }
 
+func (o *operator) getPodList(clusterID string) (*coreV1.PodList, error) {
+	blog.Debugf("k8s-operator: begin to get federation podlist %s, %s", clusterID, o.conf.BcsNamespace)
+
+	if o.conf.BcsNamespace == "" {
+		return nil, fmt.Errorf("k8s-operator: get podlist failed clusterID(%s): namespace is nil", clusterID)
+	}
+	client, err := o.getClientSet(clusterID)
+	if err != nil {
+		blog.Errorf("k8s-operator: try to get podlist clusterID(%s) namespace(%s)"+
+			"and get client set failed: %v", clusterID, o.conf.BcsNamespace, err)
+		return nil, err
+	}
+	podList, err := client.clientSet.CoreV1().Pods(o.conf.BcsNamespace).List(context.TODO(), metaV1.ListOptions{})
+	if err != nil {
+		blog.Errorf("k8s-operator: get pod list from k8s failed clusterID(%s): %v", clusterID, err)
+		return nil, err
+	}
+	return podList, nil
+}
+
 func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, error) {
 	blog.Debugf("k8s-operator: begin to get federation resource %s, %s", clusterID, o.conf.BcsNamespace)
 	nodeInfoList := make([]*op.NodeInfo, 0, 1000)
@@ -415,6 +435,11 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 		return nil, fmt.Errorf("crm: get federation resource request failed clusterID(%s): namespace is nil", clusterID)
 	}
 	url := fmt.Sprintf(bcsAPIFederatedURI, o.conf.BcsAPIPool.GetAddress(), clusterID, o.conf.BcsNamespace)
+	podList, err := o.getPodList(clusterID)
+	if err != nil {
+		return nodeInfoList, fmt.Errorf("crm: get federation resource request failed clusterID(%s): %s", clusterID, err)
+	}
+
 	for _, ist := range o.conf.InstanceType {
 		result, err := o.getFederationTotalNum(url, ist)
 		if err != nil { //接口请求失败，直接返回错误
@@ -433,12 +458,37 @@ func (o *operator) getFederationResource(clusterID string) ([]*op.NodeInfo, erro
 			return nodeInfoList, err
 		}
 		totalIst := float64(result.Data.Total)
+		resourceUsed := make(coreV1.ResourceList)
+		for _, pod := range podList.Items {
+			if pod.Status.Phase == coreV1.PodSucceeded || pod.Status.Phase == coreV1.PodFailed {
+				continue
+			}
+			if pod.Spec.NodeSelector != nil {
+				if pod.Spec.NodeSelector[o.platformLabelKey] != ist.Platform ||
+					pod.Spec.NodeSelector[o.cityLabelKey] != ist.Group {
+					continue
+				}
+			}
+			for podName, podLimitValue := range podLimits(&pod) {
+				if value, ok := resourceUsed[podName]; !ok {
+					resourceUsed[podName] = podLimitValue.DeepCopy()
+				} else {
+					value.Add(podLimitValue)
+					resourceUsed[podName] = value
+				}
+			}
+		}
 		nodeInfoList = append(nodeInfoList, &op.NodeInfo{
 			IP:       clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			Hostname: clusterID + "-" + o.conf.BcsNamespace + "-" + ist.Platform + "-" + ist.Group,
 			DiskLeft: totalIst,
-			CPULeft:  totalIst * ist.CPUPerInstance,
-			MemLeft:  totalIst * ist.MemPerInstance,
+			//CPULeft:  totalIst * ist.CPUPerInstance,
+			//MemLeft:  totalIst * ist.MemPerInstance,
+			MemUsed:  float64(resourceUsed.Memory().Value()) / 1024 / 1024,
+			CPUUsed:  float64(resourceUsed.Cpu().Value()),
+			DiskUsed: float64(resourceUsed.StorageEphemeral().Value()),
+			CPUTotal: float64(resourceUsed.Cpu().Value()) + totalIst*ist.CPUPerInstance,
+			MemTotal: float64(resourceUsed.Memory().Value())/1024/1024 + totalIst*ist.MemPerInstance,
 			Attributes: map[string]string{
 				op.AttributeKeyPlatform: ist.Platform,
 				op.AttributeKeyCity:     ist.Group,
@@ -505,23 +555,32 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 	podList, err := client.clientSet.CoreV1().Pods(namespace).List(context.TODO(), metaV1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", appLabel, name),
 	})
-
+	if err != nil {
+		blog.Errorf("k8s-operator: try to get podList clusterID(%s) namespace(%s) name(%s) failed: %v", clusterID, namespace, name, err)
+	}
 	availableEndpoint := make([]*op.Endpoint, 0, 100)
 	for _, pod := range podList.Items {
 		if pod.Status.Phase != coreV1.PodRunning {
+			if info.Status != op.ServiceStatusStaging && pod.Status.Phase != coreV1.PodPending {
+				blog.Warnf("k8s-operator: pod(%s) of %s in wrong status(%s)", pod.Name, name, pod.Status.Phase)
+			}
 			if (info.Status != op.ServiceStatusStaging) && (pod.Status.Phase == coreV1.PodPending) {
-				blog.Warnf("k8s-operator: there is still a pod(%s) in status(%s), "+
-					"server status will be set to staging by force", pod.Name, pod.Status.Phase)
+				blog.Warnf("k8s-operator: there is still a pod(%s) of %s in status(%s), "+
+					"server status will be set to staging by force", pod.Name, name, pod.Status.Phase)
 				info.Status = op.ServiceStatusStaging
 			}
 			continue
 		}
 
 		if len(pod.Status.ContainerStatuses) <= 0 || len(pod.Spec.Containers) <= 0 {
+			blog.Warnf("k8s-operator: found exception pod of %s:[%+v]", name, pod)
 			continue
 		}
 
 		ports := make(map[string]int)
+		if len(pod.Spec.Containers[0].Ports) == 0 {
+			blog.Warnf("k8s-operator: found empty port info in pod %s of %s:[%+v]", pod.Name, name, pod)
+		}
 		for _, port := range pod.Spec.Containers[0].Ports {
 			ports[k8sPort2EnginePort(port.Name)] = int(port.HostPort)
 		}
@@ -529,11 +588,12 @@ func (o *operator) getPods(clusterID, namespace, name string, info *op.ServiceIn
 		availableEndpoint = append(availableEndpoint, &op.Endpoint{
 			IP:    pod.Status.HostIP,
 			Ports: ports,
+			Name:  pod.Name,
 		})
 	}
-
 	// if taskgroup are not all built, just means that the application is staging yet.
-	if (info.RequestInstances < len(podList.Items)) && info.Status != op.ServiceStatusStaging {
+	if (info.RequestInstances > len(podList.Items)) && info.Status != op.ServiceStatusStaging {
+		blog.Warnf("k8s-operator: found RequestInstances(%d) greater than pods num(%d) of %s in status %s", info.RequestInstances, len(podList.Items), name, info.Status)
 		info.Status = op.ServiceStatusStaging
 	}
 
@@ -583,27 +643,76 @@ func (o *operator) scaleServer(clusterID, namespace, name string, instance int) 
 	return nil
 }
 
-func (o *operator) releaseServer(clusterID, namespace, name string) error {
-	blog.Infof("k8s-operator: release server: clusterID(%s) namespace(%s) name(%s)",
-		clusterID, namespace, name)
+// trackAndReleaseDeployment tracks a deployment that was not found and attempts to release it periodically
+func (o *operator) trackAndReleaseDeployment(clusterID, namespace, name string) {
+	const (
+		trackTimeout  = 15 * time.Minute
+		retryInterval = 10 * time.Second
+	)
+
+	blog.Infof("k8s-operator: start tracking deployment clusterID(%s) namespace(%s) name(%s)", clusterID, namespace, name)
+
+	timeout := time.NewTimer(trackTimeout)
+	ticker := time.NewTicker(retryInterval)
+	defer func() {
+		timeout.Stop()
+		ticker.Stop()
+		blog.Infof("k8s-operator: stop tracking deployment clusterID(%s) namespace(%s) name(%s)", clusterID, namespace, name)
+	}()
+
+	for {
+		select {
+		case <-timeout.C:
+			blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) not found timeout", clusterID, namespace, name)
+			return
+
+		case <-ticker.C:
+			err := o.deleteDeployment(clusterID, namespace, name)
+			if err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					blog.Debugf("k8s-operator: deployment clusterID(%s) namespace(%s) name(%s) still not found", clusterID, namespace, name)
+					continue
+				}
+				blog.Errorf("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) failed: %v",
+					clusterID, namespace, name, err)
+				continue
+			}
+
+			blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) succeed", clusterID, namespace, name)
+			return
+		}
+	}
+}
+
+// deleteDeployment deletes a deployment with the specified options
+func (o *operator) deleteDeployment(clusterID, namespace, name string) error {
 	client, err := o.getClientSet(clusterID)
 	if err != nil {
-		blog.Errorf("k8s-operator: try to release server for clusterID(%s) namespace(%s) name(%s) "+
+		blog.Errorf("k8s-operator: try to delete deployment for clusterID(%s) namespace(%s) name(%s) "+
 			"and get client set failed: %v", clusterID, namespace, name, err)
 		return err
 	}
 
 	var gracePeriodSeconds int64 = 0
 	propagationPolicy := metaV1.DeletePropagationBackground
-	if err = client.clientSet.AppsV1().Deployments(namespace).
+	return client.clientSet.AppsV1().Deployments(namespace).
 		Delete(
 			context.TODO(),
 			name,
 			metaV1.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds, PropagationPolicy: &propagationPolicy},
-		); err != nil {
+		)
+}
+
+// releaseServer releases a server by deleting its deployment
+func (o *operator) releaseServer(clusterID, namespace, name string) error {
+	blog.Infof("k8s-operator: release server clusterID(%s) namespace(%s) name(%s)",
+		clusterID, namespace, name)
+	err := o.deleteDeployment(clusterID, namespace, name)
+	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			blog.Warnf("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) not found, "+
-				"regarded as released: %v", clusterID, namespace, name, err)
+			blog.Warnf("k8s-operator: release server clusterID(%s) namespace(%s) name(%s) not found, try to track it for a while %v", clusterID, namespace, name, err)
+			// trace resource if it not found for a while
+			go o.trackAndReleaseDeployment(clusterID, namespace, name)
 			return nil
 		}
 
@@ -621,7 +730,26 @@ type portsMap struct {
 	port     int
 }
 
+const (
+	UbaPortName   = "uba-port"
+	UbaPortNumber = 1345
+	UbaProtocol   = "tcp"
+)
+
 func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) {
+	// set platform
+	platform := "linux"
+	networkValue := ""
+	if v, ok := param.AttributeCondition[op.AttributeKeyPlatform]; ok {
+		switch v {
+		case "windows", "WINDOWS", "win", "WIN":
+			platform = "windows"
+			if !o.disableWinHostNW {
+				networkValue = "hostNetwork: true"
+			}
+		}
+	}
+
 	// add host port to env
 	index := 0
 	pm := make(map[string]portsMap)
@@ -640,6 +768,16 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 		randPortsNames = append(randPortsNames, enginePort2K8SPort(port))
 	}
 
+	// to support uba listen port
+	if platform == "windows" || platform == "linux" {
+		pm[UbaPortName] = portsMap{
+			protocol: UbaProtocol,
+			port:     UbaPortNumber,
+		}
+
+		randPortsNames = append(randPortsNames, UbaPortName)
+	}
+
 	data := o.templates
 	data = strings.ReplaceAll(data, templateVarImage, param.Image)
 	data = strings.ReplaceAll(data, templateVarName, param.Name)
@@ -649,19 +787,6 @@ func (o *operator) getYAMLFromTemplate(param op.BcsLaunchParam) (string, error) 
 	data = insertYamlPorts(data, pm)
 	data = insertYamlEnv(data, param.Env)
 	data = insertYamlVolumes(data, param.Volumes)
-
-	// set platform
-	platform := "linux"
-	networkValue := ""
-	if v, ok := param.AttributeCondition[op.AttributeKeyPlatform]; ok {
-		switch v {
-		case "windows", "WINDOWS", "win", "WIN":
-			platform = "windows"
-			if !o.disableWinHostNW {
-				networkValue = "hostNetwork: true"
-			}
-		}
-	}
 
 	// handle host network settings for k8s-windows need it, but linux not.
 	data = strings.ReplaceAll(data, templateVarHostNetwork, networkValue)
@@ -973,6 +1098,19 @@ func podRequests(pod *coreV1.Pod) coreV1.ResourceList {
 	}
 
 	return requests
+}
+
+func podLimits(pod *coreV1.Pod) coreV1.ResourceList {
+	limits := coreV1.ResourceList{}
+	for _, container := range pod.Spec.Containers {
+		addResourceList(limits, container.Resources.Limits)
+	}
+	// init containers define the minimum of any resource
+	for _, container := range pod.Spec.InitContainers {
+		maxResourceList(limits, container.Resources.Limits)
+	}
+
+	return limits
 }
 
 // addResourceList adds the resources in newList to list

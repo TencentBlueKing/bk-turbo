@@ -370,6 +370,11 @@ func (s *sdk) launchServer() error {
 		sendcork = "--send_cork"
 	}
 
+	sendmemorycache := ""
+	if s.config.SendMemoryCache {
+		sendmemorycache = "--send_memory_cache"
+	}
+
 	netErrorLimit := 5
 	if s.config.NetErrorLimit > 0 {
 		netErrorLimit = s.config.NetErrorLimit
@@ -406,17 +411,32 @@ func (s *sdk) launchServer() error {
 		s.config.Port = 0
 	}
 
+	workerOfferSlot := ""
+	if s.config.WorkerOfferSlot {
+		workerOfferSlot = "--worker_offer_slot"
+	}
+
+	preferLocal := ""
+	if s.config.PreferLocal {
+		preferLocal = "--prefer_local"
+	}
+
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
 		"%s --res_idle_secs_for_free=%d"+
+		" %s"+
 		" %s"+
 		" --send_file_memory_limit=%d"+
 		" --net_error_limit=%d"+
 		" --remote_retry_times=%d"+
 		" %s %s"+
 		" %s %s"+
-		" %s",
+		" %s"+
+		" %s"+
+		" %s"+
+		" --result_cache_index_num=%d"+
+		" --result_cache_file_num=%d",
 		sudo,
 		ctrlPath,
 		s.config.IP,
@@ -434,6 +454,7 @@ func (s *sdk) launchServer() error {
 		autoResourceMgr,
 		s.config.ResIdleSecsForFree,
 		sendcork,
+		sendmemorycache,
 		s.config.SendFileMemoryLimit,
 		netErrorLimit,
 		remoteRetryTimes,
@@ -442,6 +463,10 @@ func (s *sdk) launchServer() error {
 		longTCP,
 		useDefaultWorker,
 		dynamicPort,
+		workerOfferSlot,
+		preferLocal,
+		s.config.ResultCacheIndexNum,
+		s.config.ResultCacheFileNum,
 	))
 }
 
@@ -450,11 +475,13 @@ func (s *sdk) register(config dcSDK.ControllerRegisterConfig) (dcSDK.ControllerW
 	_ = codec.EncJSON(&WorkRegisterParam{
 		BatchMode:        config.BatchMode,
 		ServerHost:       config.ServerHost,
+		ResultCacheList:  config.ResultCacheList,
 		SpecificHostList: config.SpecificHostList,
 		NeedApply:        config.NeedApply,
 		Apply:            config.Apply,
 	}, &data)
 
+	blog.Infof("sdk: ready register with data:[%s]", string(data))
 	tmp, _, err := s.request("POST", registerURI, data, config.BatchMode)
 	if err != nil {
 		retry := 0
@@ -521,11 +548,14 @@ func (s *sdk) setConfig(config *dcSDK.CommonControllerConfig) error {
 		Data: config.Data,
 	}, &data)
 
-	_, _, err := s.request("POST", commonConfigURI, data, false)
+	// ++ by tomtian 20250904
+	// 在某些特殊场景下，比如shader工具链是网络映射路径，则默认的超时时间不够；
+	// 会导致这儿不停地重试，conroller侧处理工具链越来越慢，去掉超时更好
+	_, _, err := s.request("POST", commonConfigURI, data, true)
 	if err != nil {
 		retry := 0
 		for ; ; time.Sleep(100 * time.Millisecond) {
-			_, _, err = s.request("POST", commonConfigURI, data, false)
+			_, _, err = s.request("POST", commonConfigURI, data, true)
 			if err == nil {
 				break
 			}
@@ -535,6 +565,7 @@ func (s *sdk) setConfig(config *dcSDK.CommonControllerConfig) error {
 			}
 		}
 	}
+	// -- by tomtian 20250904
 
 	return nil
 }
@@ -915,7 +946,11 @@ func (wj *workJob) ExecuteRemoteTask(req *dcSDK.BKDistCommand) (*dcSDK.BKDistRes
 }
 
 // ExecuteLocalTask do the task in local controller
-func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
+func (wj *workJob) ExecuteLocalTask(
+	commands []string,
+	workdir string,
+	commandType int,
+	attributes []string) (int, string, *dcSDK.LocalTaskResult, error) {
 	var data []byte
 
 	dir := ""
@@ -944,6 +979,8 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 		Environments: os.Environ(),
 		Stats:        wj.stats,
 		User:         *u,
+		CommandType:  commandType,
+		Attributes:   attributes,
 	}, &data)
 
 	servercode := int(api.ServerErrOK)
@@ -968,7 +1005,11 @@ func (wj *workJob) ExecuteLocalTask(commands []string, workdir string) (int, str
 }
 
 // ExecuteLocalTaskWithWebSocket do the task in local controller with websocket
-func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir string) (int, string, *dcSDK.LocalTaskResult, error) {
+func (wj *workJob) ExecuteLocalTaskWithWebSocket(
+	commands []string,
+	workdir string,
+	commandType int,
+	attributes []string) (int, string, *dcSDK.LocalTaskResult, error) {
 	// 获取session
 	url := fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id)
 	sp := websocket.GetGlobalSessionPool(wj.sdk.sdk.config.IP, int32(wj.sdk.sdk.config.Port), url, 10, nil)
@@ -1009,6 +1050,8 @@ func (wj *workJob) ExecuteLocalTaskWithWebSocket(commands []string, workdir stri
 		Environments: os.Environ(),
 		Stats:        wj.stats,
 		User:         *u,
+		CommandType:  commandType,
+		Attributes:   attributes,
 	}, &data)
 
 	// 发送和接收结果

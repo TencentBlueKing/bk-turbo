@@ -104,6 +104,7 @@ type NodeInfo struct {
 	Disabled bool
 }
 
+// FigureAvailableInstanceFromFree 根据节点剩余资源计算可分配实例数
 func (ni *NodeInfo) FigureAvailableInstanceFromFree(cpuPerInstance, memPerInstance, diskPerInstance float64) int {
 	if cpuPerInstance == 0 || memPerInstance == 0 || diskPerInstance == 0 {
 		return 0
@@ -130,6 +131,102 @@ func (ni *NodeInfo) FigureAvailableInstanceFromFree(cpuPerInstance, memPerInstan
 
 func (ni *NodeInfo) valid() bool {
 	return ni.CPUTotal >= 0 && ni.MemTotal >= 0 && ni.DiskTotal >= 0
+}
+
+type noReadyInfoDetail struct {
+	caller string
+	start  time.Time
+	num    int32
+}
+
+type noReadyInfoBlock struct {
+	blockkey string
+	total    int32
+	details  map[string]*noReadyInfoDetail
+}
+
+var (
+	noReadyInfoLock sync.RWMutex
+	noReadyInfo     map[string]*noReadyInfoBlock = make(map[string]*noReadyInfoBlock, 10)
+)
+
+func addNoReadyInfo(blockkey, caller string, num int32) {
+	noReadyInfoLock.Lock()
+	defer noReadyInfoLock.Unlock()
+
+	block, ok := noReadyInfo[blockkey]
+	var detail *noReadyInfoDetail
+	var ok1 bool
+	if ok {
+		// 如果block已存在，更新或删除detail信息
+		detail, ok1 = block.details[caller]
+		if ok1 {
+			detail.num += num
+			block.total += num
+
+			if detail.num == 0 {
+				delete(block.details, caller)
+			}
+		} else {
+			// 如果num为负数且caller不存在，记录错误并返回
+			if num <= 0 {
+				blog.Errorf("bcs: block(%s) caller(%s) noready num(%d) less than 0, do nothing", blockkey, caller, num)
+				return
+			}
+			// 创建新的detail并添加到block中
+			detail = &noReadyInfoDetail{
+				caller: caller,
+				start:  time.Now(),
+				num:    num,
+			}
+			block.details[caller] = detail
+			block.total += num
+		}
+	} else {
+		// 如果block不存在且num为负数，记录错误并返回
+		if num <= 0 {
+			blog.Errorf("bcs: block(%s) caller(%s) noready num(%d) less than 0, do nothing", blockkey, caller, num)
+			return
+		}
+
+		// 如果block不存在且num>0，创建新的block和detail
+		detail = &noReadyInfoDetail{
+			caller: caller,
+			start:  time.Now(),
+			num:    num,
+		}
+		block = &noReadyInfoBlock{
+			blockkey: blockkey,
+			total:    0,
+			details:  make(map[string]*noReadyInfoDetail, 10),
+		}
+		block.details[caller] = detail
+		block.total += num
+		noReadyInfo[blockkey] = block
+	}
+
+	blog.Infof("bcs: block(%s) total noready:%d after add %d by caller(%s)",
+		blockkey, block.total, num, caller)
+}
+
+// PrintNoReadyInfo print all no ready info
+func PrintNoReadyInfo() {
+	noReadyInfoLock.RLock()
+	defer noReadyInfoLock.RUnlock()
+
+	allinfo := ""
+	for _, v := range noReadyInfo {
+		allinfo += fmt.Sprintf("%s %d:[", v.blockkey, v.total)
+		for _, d := range v.details {
+			if d.num == 0 {
+				continue
+			}
+			allinfo += fmt.Sprintf("%s:%d %v | ", d.caller, d.num, d.start)
+		}
+		allinfo += "];"
+	}
+
+	blog.Infof("bcs: all noready info: %s", allinfo)
 }
 
 // NewNodeInfoPool get a new node info pool
@@ -187,12 +284,14 @@ type NodeInfoPool struct {
 
 // RecoverNoReadyBlock 对给定区域key的资源, 加上noReady个未就绪标记
 // 一般用于在系统恢复时, 从数据库同步之前未就绪的数据信息
-func (nip *NodeInfoPool) RecoverNoReadyBlock(key string, noReady int) {
+func (nip *NodeInfoPool) RecoverNoReadyBlock(key string, noReady int, caller string) {
 	if _, ok := nip.nodeBlockMap[key]; !ok {
 		nip.nodeBlockMap[key] = &NodeInfoBlock{}
 	}
 
 	nip.nodeBlockMap[key].noReadyInstance += noReady
+
+	addNoReadyInfo(key, caller, int32(noReady))
 }
 
 // GetStats get status message
@@ -230,6 +329,7 @@ func (nip *NodeInfoPool) GetStats() string {
 			memLeftStr,
 		)
 	}
+
 	return message
 }
 
@@ -303,7 +403,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 		}
 
 		if !NodeInfo.valid() {
-			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f", NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
+			blog.Warnf("crm: get node(%s) resources less than 0, cpu left: %.2f, memory left:%.2f, disk left:%.2f",
+				NodeInfo.Hostname, NodeInfo.CPUUsed, NodeInfo.MemUsed, NodeInfo.DiskUsed)
 			continue
 		}
 
@@ -371,7 +472,8 @@ func (nip *NodeInfoPool) UpdateResources(nodeInfoList []*NodeInfo) {
 // GetFreeInstances 在资源池中尝试获取可用的instance, 给定需求条件condition和资源数量函数function
 func (nip *NodeInfoPool) GetFreeInstances(
 	condition map[string]string,
-	function InstanceFilterFunction) (int, string, error) {
+	function InstanceFilterFunction,
+	caller string) (int, string, error) {
 
 	nip.Lock()
 	defer nip.Unlock()
@@ -392,6 +494,7 @@ func (nip *NodeInfoPool) GetFreeInstances(
 	}
 
 	nodeBlock.noReadyInstance += need
+	addNoReadyInfo(key, caller, int32(need))
 	blog.V(5).Infof(
 		"crm: get free instances consume %d instances from %s, current stats: report %d, no-ready: %d",
 		need, key, nodeBlock.AvailableInstance, nodeBlock.noReadyInstance,
@@ -400,7 +503,7 @@ func (nip *NodeInfoPool) GetFreeInstances(
 }
 
 // ReleaseNoReadyInstance 消除给定区域的noReady计数, 表示这部分已经ready或已经释放
-func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
+func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int, caller string) {
 	nip.Lock()
 	defer nip.Unlock()
 
@@ -410,6 +513,7 @@ func (nip *NodeInfoPool) ReleaseNoReadyInstance(key string, instance int) {
 	}
 
 	nodeBlock.noReadyInstance -= instance
+	addNoReadyInfo(key, caller, int32(instance*-1))
 	blog.V(5).Infof("crm: release %d no-ready instance from %s, current stats no-ready: %d",
 		instance, key, nodeBlock.noReadyInstance)
 }
@@ -472,6 +576,7 @@ var serviceStatusMap = map[ServiceStatus]string{
 type Endpoint struct {
 	IP    string
 	Ports map[string]int
+	Name  string
 }
 
 func getInstanceKey(attributes map[string]string) (string, string) {

@@ -132,7 +132,7 @@ class TurboRecordDao @Autowired constructor(
         // 项目Id
         val projectId = turboRecordModel.projectId
         if (!projectId.isNullOrEmpty()) {
-            criteriaList.add(Criteria.where("project_id").`in`(projectId))
+            criteriaList.add(Criteria.where("project_id").`is`(projectId))
         }
         // 加速方案Id
         val turboPlanId = turboRecordModel.turboPlanId

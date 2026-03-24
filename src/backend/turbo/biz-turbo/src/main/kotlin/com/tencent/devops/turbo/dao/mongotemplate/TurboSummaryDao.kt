@@ -5,6 +5,7 @@ import com.tencent.devops.turbo.model.TTurboDaySummaryEntity
 import com.tencent.devops.turbo.pojo.TurboDaySummaryOverviewModel
 import org.bson.Document
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.FindAndModifyOptions
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.aggregation.Aggregation
@@ -144,8 +145,9 @@ class TurboSummaryDao @Autowired constructor(
 
         val skip = Aggregation.skip((pageNum * pageSize).toLong())
         val limit = Aggregation.limit(pageSize.toLong())
+        val sort = Aggregation.sort(Sort.Direction.ASC, "_id")
 
-        val aggregation = Aggregation.newAggregation(match, group, skip, limit)
+        val aggregation = Aggregation.newAggregation(match, group, sort, skip, limit)
         val queryResults: AggregationResults<TurboDaySummaryOverviewModel> =
             mongoTemplate.aggregate(aggregation, "t_turbo_day_summary_entity", TurboDaySummaryOverviewModel::class.java)
         return queryResults.mappedResults

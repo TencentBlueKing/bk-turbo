@@ -272,3 +272,16 @@ type APIResponse struct {
 	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
 }
+
+// for new feature
+const (
+	LabelKeyMode      = "mode"
+	LabelValueModeP2P = "p2p"
+
+	LabelKeyP2PUserNumber       = "p2p_user_number"
+	LabelKeyP2PProcessStartTime = "p2p_process_start_time"
+	LabelKeyP2PSpecifiedIP      = "p2p_specified_ip"
+	LabelKeySupportAbsPath      = "support_abs_path"
+	LabelKeyVersion             = "version"
+	LabelKeyUser                = "user"
+)

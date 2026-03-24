@@ -30,6 +30,7 @@ type MySQL interface {
 	GetTask(taskID string) (*TableTask, error)
 	PutTask(task *TableTask) error
 	UpdateTask(taskID string, task map[string]interface{}) error
+	UpdateTaskPart(taskID string, task *TableTask) error
 	DeleteTask(taskID string) error
 
 	ListProject(opts commonMySQL.ListOptions) ([]*CombinedProject, int64, error)
@@ -61,7 +62,8 @@ type MySQL interface {
 	DeleteWorker(version, scene string) error
 
 	ListWorkStats(opts commonMySQL.ListOptions) ([]*TableWorkStats, int64, error)
-	GetWorkStats(id int) (*TableWorkStats, error)
+	// GetWorkStats(id int) (*TableWorkStats, error)
+	GetWorkStats(taskID, workID string) (*TableWorkStats, error)
 	PutWorkStats(stats *TableWorkStats) error
 	UpdateWorkStats(id int, stats map[string]interface{}) error
 	DeleteWorkStats(id int) error
@@ -78,7 +80,8 @@ func NewMySQL(conf engine.MySQLConf) (MySQL, error) {
 
 	blog.Info("get a new engine(%s) mysql: %s, db: %s, user: %s",
 		EngineName, conf.MySQLStorage, conf.MySQLDatabase, conf.MySQLUser)
-	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local",
+	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local"+
+		"&timeout=30s&readTimeout=30s&writeTimeout=30s",
 		conf.MySQLUser, conf.MySQLPwd, conf.MySQLStorage, conf.MySQLDatabase, conf.Charset)
 	db, err := gorm.Open("mysql", source)
 	if err != nil {
@@ -163,15 +166,31 @@ func (m *mysql) GetTask(taskID string) (*TableTask, error) {
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
 	opts.Equal("task_id", taskID)
-	tl, _, err := m.ListTask(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) mysql get task(%s) failed: %v", EngineName, taskID, err)
+
+	// tl, _, err := m.ListTask(opts)
+	// if err != nil {
+	// 	blog.Errorf("engine(%s) mysql get task(%s) failed: %v", EngineName, taskID, err)
+	// 	return nil, err
+	// }
+
+	// if len(tl) < 1 {
+	// 	err = engine.ErrorTaskNoFound
+	// 	return nil, err
+	// }
+
+	var tl []*TableTask
+	db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
+	db = opts.AddOffsetLimit(db)
+	db = opts.AddSelector(db)
+	db = opts.AddOrder(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql get task failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
 	}
 
 	if len(tl) < 1 {
-		err = engine.ErrorTaskNoFound
-		return nil, err
+		return nil, engine.ErrorTaskNoFound
 	}
 
 	return tl[0], nil
@@ -198,6 +217,19 @@ func (m *mysql) UpdateTask(taskID string, task map[string]interface{}) error {
 
 	if err := m.db.Model(&TableTask{}).Where("task_id = ?", taskID).Updates(task).Error; err != nil {
 		blog.Errorf("engine(%s) mysql update task(%s)(%+v) failed: %v", EngineName, taskID, task, err)
+		return err
+	}
+
+	return nil
+}
+
+// UpdateTaskPart update task part with given fields by struct , not update null fields
+func (m *mysql) UpdateTaskPart(taskID string, task *TableTask) error {
+	defer timeMetricRecord("update_task_part")()
+	defer logSlowFunc(time.Now().Unix(), "UpdateTaskPart", 2)
+
+	if err := m.db.Model(&TableTask{}).Where("task_id = ?", taskID).Updates(task).Error; err != nil {
+		blog.Errorf("engine(%s) mysql update task(%s)(%+v) part failed: %v", EngineName, taskID, task, err)
 		return err
 	}
 
@@ -313,16 +345,32 @@ func (m *mysql) GetProjectInfo(projectID string) (*TableProjectInfo, error) {
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
 	opts.Equal("project_id", projectID)
-	pl, _, err := m.ListProjectInfo(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) mysql get project info(%s) failed: %v", EngineName, projectID, err)
+
+	// pl, _, err := m.ListProjectInfo(opts)
+	// if err != nil {
+	// 	blog.Errorf("engine(%s) mysql get project info(%s) failed: %v", EngineName, projectID, err)
+	// 	return nil, err
+	// }
+
+	// if len(pl) < 1 {
+	// 	err = engine.ErrorProjectNoFound
+	// 	blog.Errorf("engine(%s) mysql get project info(%s) failed: %v", EngineName, projectID, err)
+	// 	return nil, err
+	// }
+
+	var pl []*TableProjectInfo
+	db := opts.AddWhere(m.db.Model(&TableProjectInfo{})).Where("disabled = ?", false)
+	db = opts.AddOffsetLimit(db)
+	db = opts.AddSelector(db)
+	db = opts.AddOrder(db)
+
+	if err := db.Find(&pl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql get project info failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
 	}
 
 	if len(pl) < 1 {
-		err = engine.ErrorProjectNoFound
-		blog.Errorf("engine(%s) mysql get project info(%s) failed: %v", EngineName, projectID, err)
-		return nil, err
+		return nil, engine.ErrorProjectNoFound
 	}
 
 	return pl[0], nil
@@ -443,16 +491,32 @@ func (m *mysql) GetProjectSetting(projectID string) (*TableProjectSetting, error
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
 	opts.Equal("project_id", projectID)
-	pl, _, err := m.ListProjectSetting(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) mysql get project setting(%s) failed: %v", EngineName, projectID, err)
+
+	// pl, _, err := m.ListProjectSetting(opts)
+	// if err != nil {
+	// 	blog.Errorf("engine(%s) mysql get project setting(%s) failed: %v", EngineName, projectID, err)
+	// 	return nil, err
+	// }
+
+	// if len(pl) < 1 {
+	// 	err = engine.ErrorProjectNoFound
+	// 	blog.Errorf("engine(%s) mysql get project setting(%s) failed: %v", EngineName, projectID, err)
+	// 	return nil, err
+	// }
+
+	var pl []*TableProjectSetting
+	db := opts.AddWhere(m.db.Model(&TableProjectSetting{})).Where("disabled = ?", false)
+	db = opts.AddOffsetLimit(db)
+	db = opts.AddSelector(db)
+	db = opts.AddOrder(db)
+
+	if err := db.Find(&pl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql list project setting failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
 	}
 
 	if len(pl) < 1 {
-		err = engine.ErrorProjectNoFound
-		blog.Errorf("engine(%s) mysql get project setting(%s) failed: %v", EngineName, projectID, err)
-		return nil, err
+		return nil, engine.ErrorProjectNoFound
 	}
 
 	return pl[0], nil
@@ -561,16 +625,32 @@ func (m *mysql) GetWhitelist(key engine.WhiteListKey) (*TableWhitelist, error) {
 	opts.Limit(-1)
 	opts.Equal("project_id", key.ProjectID)
 	opts.Equal("ip", key.IP)
-	wll, _, err := m.ListWhitelist(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) mysql get whitelist(%+v) failed: %v", EngineName, key, err)
+
+	// wll, _, err := m.ListWhitelist(opts)
+	// if err != nil {
+	// 	blog.Errorf("engine(%s) mysql get whitelist(%+v) failed: %v", EngineName, key, err)
+	// 	return nil, err
+	// }
+
+	// if len(wll) < 1 {
+	// 	err = engine.ErrorWhitelistNoFound
+	// 	blog.Errorf("engine(%s) mysql get whitelist(%+v) failed: %v", EngineName, key, err)
+	// 	return nil, err
+	// }
+
+	var wll []*TableWhitelist
+	db := opts.AddWhere(m.db.Model(&TableWhitelist{})).Where("disabled = ?", false)
+	db = opts.AddOffsetLimit(db)
+	db = opts.AddSelector(db)
+	db = opts.AddOrder(db)
+
+	if err := db.Find(&wll).Error; err != nil {
+		blog.Errorf("engine(%s) list whitelist failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
 	}
 
 	if len(wll) < 1 {
-		err = engine.ErrorWhitelistNoFound
-		blog.Errorf("engine(%s) mysql get whitelist(%+v) failed: %v", EngineName, key, err)
-		return nil, err
+		return nil, engine.ErrorWhitelistNoFound
 	}
 
 	return wll[0], nil
@@ -667,16 +747,32 @@ func (m *mysql) GetWorker(version, scene string) (*TableWorker, error) {
 	opts.Limit(1)
 	opts.Equal("worker_version", version)
 	opts.Equal("scene", scene)
-	gl, _, err := m.ListWorker(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) mysql get worker(%s) failed: %v", EngineName, version, err)
+
+	// gl, _, err := m.ListWorker(opts)
+	// if err != nil {
+	// 	blog.Errorf("engine(%s) mysql get worker(%s) failed: %v", EngineName, version, err)
+	// 	return nil, err
+	// }
+
+	// if len(gl) < 1 {
+	// 	err = fmt.Errorf("worker no found")
+	// 	blog.Errorf("engine(%s) mysql get worker(%s) failed: %v", EngineName, version, err)
+	// 	return nil, err
+	// }
+
+	var gl []*TableWorker
+	db := opts.AddWhere(m.db.Model(&TableWorker{})).Where("disabled = ?", false)
+	db = opts.AddOffsetLimit(db)
+	db = opts.AddSelector(db)
+	db = opts.AddOrder(db)
+
+	if err := db.Find(&gl).Error; err != nil {
+		blog.Errorf("engine(%s) list worker failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
 	}
 
 	if len(gl) < 1 {
-		err = fmt.Errorf("worker no found")
-		blog.Errorf("engine(%s) mysql get worker(%s) failed: %v", EngineName, version, err)
-		return nil, err
+		return nil, fmt.Errorf("worker no found")
 	}
 
 	return gl[0], nil
@@ -757,23 +853,42 @@ func (m *mysql) ListWorkStats(opts commonMySQL.ListOptions) ([]*TableWorkStats, 
 }
 
 // GetWorkStats get work stats.
-func (m *mysql) GetWorkStats(id int) (*TableWorkStats, error) {
+func (m *mysql) GetWorkStats(taskID, workID string) (*TableWorkStats, error) {
 	defer timeMetricRecord("get_work_stats")()
 	defer logSlowFunc(time.Now().Unix(), "GetWorkStats", 2)
 
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
-	opts.Equal("id", id)
-	tl, _, err := m.ListWorkStats(opts)
-	if err != nil {
-		blog.Errorf("engine(%s) mysql get work stats(%d) failed: %v", EngineName, id, err)
+	// opts.Equal("id", id)
+	opts.Equal("task_id", taskID)
+	opts.Equal("work_id", workID)
+
+	// tl, _, err := m.ListWorkStats(opts)
+	// if err != nil {
+	// 	blog.Errorf("engine(%s) mysql get work stats(%d) failed: %v", EngineName, id, err)
+	// 	return nil, err
+	// }
+
+	// if len(tl) < 1 {
+	// 	err = fmt.Errorf("work stats no found")
+	// 	blog.Errorf("engine(%s) mysql get work stats(%d) failed: %v", EngineName, id, err)
+	// 	return nil, err
+	// }
+
+	var tl []*TableWorkStats
+	db := opts.AddWhere(m.db.Model(&TableWorkStats{})).Where("disabled = ?", false)
+	db = opts.AddOffsetLimit(db)
+	db = opts.AddSelector(db)
+	db = opts.AddOrder(db)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql list work stats failed opts(%v): %v", EngineName, opts, err)
 		return nil, err
 	}
 
 	if len(tl) < 1 {
-		err = fmt.Errorf("work stats no found")
-		blog.Errorf("engine(%s) mysql get work stats(%d) failed: %v", EngineName, id, err)
-		return nil, err
+		// do not return error, same as ListWorkStats
+		return nil, nil
 	}
 
 	return tl[0], nil
@@ -784,9 +899,20 @@ func (m *mysql) PutWorkStats(stats *TableWorkStats) error {
 	defer timeMetricRecord("put_work_stats")()
 	defer logSlowFunc(time.Now().Unix(), "PutWorkStats", 2)
 
-	if err := m.db.Model(&TableWorkStats{}).Save(stats).Error; err != nil {
-		blog.Errorf("engine(%s) mysql put work stats(%d) failed: %v", EngineName, stats.ID, err)
-		return err
+	if stats.ID > 0 {
+		// 增加更新条件，只有新的JobStats 长度不小于老的JobStats长度才更新
+		newstatlen := len(stats.JobStats)
+		if err := m.db.Model(&TableWorkStats{}).Where("id = ?", stats.ID).
+			Where("? >= CHAR_LENGTH(job_stats)", newstatlen).
+			Updates(stats).Error; err != nil {
+			blog.Errorf("engine(%s) mysql put work stats(%d)(%+v) failed: %v", EngineName, stats.ID, stats, err)
+			return err
+		}
+	} else {
+		if err := m.db.Model(&TableWorkStats{}).Save(stats).Error; err != nil {
+			blog.Errorf("engine(%s) mysql put work stats(%s) failed: %v", EngineName, stats.TaskID, err)
+			return err
+		}
 	}
 	return nil
 }

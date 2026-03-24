@@ -11,4 +11,9 @@ interface BaseDataRepository : MongoRepository<BaseDataEntity, String> {
      * 根据参数标识代码查询
      */
     fun findFirstByParamCode(paramCode: String): BaseDataEntity?
+
+    /**
+     * 根据参数标识代码list查询
+     */
+    fun findByParamCodeIn(paramCodeList: List<String>): List<BaseDataEntity>
 }

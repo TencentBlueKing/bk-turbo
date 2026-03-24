@@ -24,8 +24,8 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/gateway/pkg/types"
 
-	etcdClient "github.com/coreos/etcd/clientv3"
-	etcdConcurrency "github.com/coreos/etcd/clientv3/concurrency"
+	etcdClient "go.etcd.io/etcd/client/v3"
+	etcdConcurrency "go.etcd.io/etcd/client/v3/concurrency"
 )
 
 // RegisterDiscover takes responsibility to register and elect a

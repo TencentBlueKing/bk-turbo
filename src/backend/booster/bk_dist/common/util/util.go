@@ -12,34 +12,32 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/cespare/xxhash/v2"
+	"github.com/denisbrodbeck/machineid"
 
 	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 
-	"github.com/pierrec/lz4"
+	"github.com/pierrec/lz4/v4"
 	"github.com/shirou/gopsutil/process"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
-)
 
-// define vars
-var (
-	_, classA, _  = net.ParseCIDR("10.0.0.0/8")
-	_, classA1, _ = net.ParseCIDR("9.0.0.0/8")
-	_, classAa, _ = net.ParseCIDR("100.64.0.0/10")
-	_, classB, _  = net.ParseCIDR("172.16.0.0/12")
-	_, classC, _  = net.ParseCIDR("192.168.0.0/16")
+	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 )
 
 // GetCaller return the current caller functions
@@ -56,39 +54,6 @@ func GetCaller() string {
 	}
 
 	return fmt.Sprintf("%s:%d", file, line)
-}
-
-// GetIPAddress get local usable inner ip address
-func GetIPAddress() (addrList []string) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return addrList
-	}
-	for _, addr := range addrs {
-		if ip, ok := addr.(*net.IPNet); ok && !ip.IP.IsLoopback() && ip.IP.To4() != nil {
-			if classA.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classA1.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classAa.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classB.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-			if classC.Contains(ip.IP) {
-				addrList = append(addrList, ip.IP.String())
-				continue
-			}
-		}
-	}
-	return addrList
 }
 
 // GetHomeDir get home dir by system env
@@ -420,4 +385,317 @@ func QuoteSpacePath(s string) string {
 	}
 
 	return "\"" + s + "\""
+}
+
+func UniqID() string {
+	id, err := machineid.ID()
+	if err == nil {
+		return id
+	}
+
+	ips := util.GetIPAddress()
+	if len(ips) > 0 {
+		return ips[0]
+	}
+
+	return fmt.Sprintf("uniq_%s_%d",
+		commonUtil.RandomString(5),
+		time.Now().Local().UnixNano())
+}
+
+//-----------------------------------------------------------------------
+
+var (
+	commonTargetPathSep = string(filepath.Separator)
+	commonInitPathSep1  = ""
+	commonInitPathSep2  = ""
+)
+
+var (
+	pathmapLock sync.RWMutex
+	pathmap     map[string]string = make(map[string]string, 10000)
+)
+
+func init() {
+	if runtime.GOOS == "windows" {
+		commonInitPathSep1 = "/"
+		commonInitPathSep2 = "\\\\"
+	} else {
+		commonInitPathSep1 = "\\"
+		commonInitPathSep2 = "//"
+	}
+}
+
+// 在指定目录下找到正确的文件名（大小写）
+func getWindowsRealName(inputdir, inputname string) (string, error) {
+	files, err := os.ReadDir(inputdir)
+	if err != nil {
+		fmt.Printf("check dir:%s with error:%v\r\n", inputdir, err)
+		return "", err
+	}
+	for _, file := range files {
+		if strings.EqualFold(file.Name(), inputname) {
+			return FormatFilePath(filepath.Join(inputdir, file.Name())), nil
+		}
+	}
+
+	return "", fmt.Errorf("%s not exist", inputname)
+}
+
+func getPath(inputPath string) (string, bool) {
+	pathmapLock.RLock()
+	newpath, ok := pathmap[inputPath]
+	pathmapLock.RUnlock()
+
+	return newpath, ok
+}
+
+func putPath(oldPath, newPath string) {
+	pathmapLock.Lock()
+	pathmap[oldPath] = newPath
+	pathmapLock.Unlock()
+
+	return
+}
+
+// 根据指定的完整路径得到正确的大小写的完整路径
+func getWindowsFullRealPath(inputPath string) (string, error) {
+	newpath, ok := getPath(inputPath)
+	if ok {
+		return newpath, nil
+	}
+
+	// 先检查目录是否在缓存，如果在，只需要检查文件名
+	realPath := inputPath
+	inputdir, inputfile := filepath.Split(inputPath)
+	inputdir = strings.TrimRight(inputdir, commonTargetPathSep)
+
+	newpath, ok = getPath(inputdir)
+	if ok {
+		newPath, err := getWindowsRealName(newpath, inputfile)
+		if err == nil {
+			realPath = newPath
+			// 将结果记录下来
+			putPath(inputPath, realPath)
+			return realPath, nil
+		} else {
+			// 将结果记录下来
+			putPath(inputPath, inputPath)
+			return inputPath, err
+		}
+	}
+
+	// 完整目录逐级检查，并将逐级目录放入缓存
+	parts := strings.Split(inputPath, commonTargetPathSep)
+	oldpath := []string{}
+	if len(parts) > 0 {
+		oldpath = append(oldpath, parts[0])
+
+		realPath = parts[0]
+		if strings.HasSuffix(realPath, ":") {
+			realPath = strings.ToUpper(realPath + commonTargetPathSep)
+		}
+
+		for i, part := range parts {
+			if i == 0 {
+				continue
+			}
+			if part == "" {
+				continue
+			}
+
+			oldpath = append(oldpath, part)
+
+			files, err := os.ReadDir(realPath)
+			if err != nil {
+				fmt.Printf("check dir:%s with error:%v\r\n", realPath, err)
+				// 将结果记录下来
+				putPath(inputPath, inputPath)
+				return inputPath, err
+			}
+
+			for _, file := range files {
+				if strings.EqualFold(file.Name(), part) {
+					realPath = filepath.Join(realPath, file.Name())
+
+					// 将过程中的路径记录下来
+					putPath(strings.Join(oldpath, commonTargetPathSep), FormatFilePath(realPath))
+
+					break
+				}
+			}
+		}
+	}
+
+	// 将结果记录下来
+	realPath = FormatFilePath(realPath)
+	putPath(inputPath, realPath)
+
+	return realPath, nil
+}
+
+func CorrectPathCap(inputPaths []string) ([]string, error) {
+	newpaths := make([]string, 0, len(inputPaths))
+	for _, oldpath := range inputPaths {
+		newpath, err := getWindowsFullRealPath(oldpath)
+		if err == nil {
+			newpaths = append(newpaths, newpath)
+		} else {
+			newpaths = append(newpaths, oldpath)
+		}
+	}
+
+	return newpaths, nil
+}
+
+func FormatFilePath(f string) string {
+	f = strings.Replace(f, commonInitPathSep1, commonTargetPathSep, -1)
+	f = strings.Replace(f, commonInitPathSep2, commonTargetPathSep, -1)
+
+	// 去掉路径中的..
+	if strings.Contains(f, "..") {
+		p := strings.Split(f, commonTargetPathSep)
+
+		var newPath []string
+		for _, v := range p {
+			if v == ".." {
+				newPath = newPath[:len(newPath)-1]
+			} else {
+				newPath = append(newPath, v)
+			}
+		}
+		f = strings.Join(newPath, commonTargetPathSep)
+	}
+
+	return f
+}
+
+func GetAllLinkFiles(f string) []string {
+	fs := []string{}
+	tempf := f
+	// avoid dead loop
+	maxTry := 10
+	try := 0
+	for {
+		loopagain := false
+		i := dcFile.Lstat(tempf)
+		if i.Exist() && i.Basic().Mode()&os.ModeSymlink != 0 {
+			originFile, err := os.Readlink(tempf)
+			if err == nil {
+				if !filepath.IsAbs(originFile) {
+					originFile, _ = filepath.Abs(filepath.Join(filepath.Dir(tempf), originFile))
+				}
+				fs = append(fs, FormatFilePath(originFile))
+
+				loopagain = true
+				tempf = originFile
+
+				try++
+				if try >= maxTry {
+					loopagain = false
+					blog.Infof("common util: symlink %s may be drop in dead loop", tempf)
+					break
+				}
+			}
+		}
+
+		if !loopagain {
+			break
+		}
+	}
+
+	return fs
+}
+
+func UniqArr(arr []string) []string {
+	newarr := make([]string, 0)
+	tempMap := make(map[string]bool, len(newarr))
+	for _, v := range arr {
+		if tempMap[v] == false {
+			tempMap[v] = true
+			newarr = append(newarr, v)
+		}
+	}
+
+	return newarr
+}
+
+func getSubdirs(path string) []string {
+	var subdirs []string
+
+	// 循环获取每级子目录
+	for {
+		subdirs = append([]string{path}, subdirs...)
+		parent := filepath.Dir(path)
+		if parent == path {
+			break
+		}
+		path = parent
+	}
+
+	return subdirs
+}
+
+// 获取依赖文件的路径中是链接的路径
+func GetAllLinkDir(files []string) []string {
+	dirs := make([]string, 0, len(files))
+	for _, f := range files {
+		dirs = append(dirs, filepath.Dir(f))
+	}
+
+	uniqdirs := UniqArr(dirs)
+	if len(uniqdirs) > 0 {
+		subdirs := []string{}
+		for _, d := range uniqdirs {
+			subdirs = append(subdirs, getSubdirs(d)...)
+		}
+
+		uniqsubdirs := UniqArr(subdirs)
+		blog.Infof("common util: got all uniq sub dirs:%v", uniqsubdirs)
+
+		linkdirs := []string{}
+		for _, d := range uniqsubdirs {
+			i := dcFile.Lstat(d)
+			if i.Exist() && i.Basic().Mode()&os.ModeSymlink != 0 {
+				fs := GetAllLinkFiles(d)
+				if len(fs) > 0 {
+					for i := len(fs) - 1; i >= 0; i-- {
+						linkdirs = append(linkdirs, fs[i])
+					}
+					linkdirs = append(linkdirs, d)
+				}
+			}
+		}
+
+		blog.Infof("common util: got all link sub dirs:%v", linkdirs)
+		return linkdirs
+	}
+
+	return nil
+}
+
+// GetResultCacheDir get the runtime result cache dir
+func GetResultCacheDir() string {
+	dir := path.Join(GetRuntimeDir(), "result_cache")
+	_ = os.MkdirAll(dir, os.ModePerm)
+	return dir
+}
+
+func HashFile(f string) (uint64, error) {
+	if !dcFile.Stat(f).Exist() {
+		return 0, fmt.Errorf("%s not existed", f)
+	}
+
+	file, err := os.Open(f)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	d := xxhash.New()
+	if _, err := io.Copy(d, file); err != nil {
+		return 0, err
+	}
+
+	return d.Sum64(), nil
 }

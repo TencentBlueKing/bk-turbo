@@ -15,8 +15,13 @@ import (
 
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
+	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 
 	"github.com/jinzhu/gorm"
+)
+
+const (
+	MetricPrefix = "crm"
 )
 
 // Basic define the basic table columns.
@@ -83,7 +88,8 @@ func NewMySQL(conf MySQLConf) (MySQL, error) {
 
 	blog.Infof("crm: get a new mysql: %s, db: %s, table: %s, user: %s",
 		conf.MySQLStorage, conf.MySQLDatabase, conf.MySQLTable, conf.MySQLUser)
-	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local",
+	source := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&parseTime=True&loc=Local"+
+		"&timeout=30s&readTimeout=30s&writeTimeout=30s",
 		conf.MySQLUser, conf.MySQLPwd, conf.MySQLStorage, conf.MySQLDatabase, conf.Charset)
 	db, err := gorm.Open("mysql", source)
 	if err != nil {
@@ -133,6 +139,7 @@ func (m *mysql) ensureTables(tables ...interface{}) error {
 // ListResource list resource from db, return list and total num.
 // list cut by offset and limit, but total num describe the true num.
 func (m *mysql) ListResource(opts commonMySQL.ListOptions) ([]*TableResource, int64, error) {
+	defer timeMetricRecord("list_resource")()
 	defer logSlowFunc(time.Now().Unix(), "ListResource", 2)
 	var rl []*TableResource
 	db := opts.AddWhere(m.db.Model(&TableResource{}).Table(m.conf.MySQLTable))
@@ -157,6 +164,7 @@ func (m *mysql) ListResource(opts commonMySQL.ListOptions) ([]*TableResource, in
 
 // GetResource get resource.
 func (m *mysql) GetResource(resourceID string) (*TableResource, error) {
+	defer timeMetricRecord("get_resource")()
 	defer logSlowFunc(time.Now().Unix(), "GetResource", 2)
 	opts := commonMySQL.NewListOptions()
 	opts.Limit(1)
@@ -177,6 +185,7 @@ func (m *mysql) GetResource(resourceID string) (*TableResource, error) {
 
 // CreateResource create a new resource into database.
 func (m *mysql) CreateResource(tr *TableResource) error {
+	defer timeMetricRecord("create_resource")()
 	defer logSlowFunc(time.Now().Unix(), "CreateResource", 2)
 	blog.Infof("crm: try to create resource(%s)", tr.ResourceID)
 	tr.tableName = m.conf.MySQLTable
@@ -190,6 +199,7 @@ func (m *mysql) CreateResource(tr *TableResource) error {
 
 // PutResource update a existing resource with full fields into database.
 func (m *mysql) PutResource(tr *TableResource) error {
+	defer timeMetricRecord("put_resource")()
 	defer logSlowFunc(time.Now().Unix(), "PutResource", 2)
 	blog.Infof("crm: try to put resource(%s)", tr.ResourceID)
 	tr.tableName = m.conf.MySQLTable
@@ -203,6 +213,7 @@ func (m *mysql) PutResource(tr *TableResource) error {
 
 // DeleteResource delete resource from db. Just set the disabled to true instead of real deletion.
 func (m *mysql) DeleteResource(resourceID string) error {
+	defer timeMetricRecord("delete_resource")()
 	defer logSlowFunc(time.Now().Unix(), "DeleteResource", 2)
 	blog.Infof("crm: try to delete resource(%s)", resourceID)
 	if err := m.db.
@@ -215,6 +226,10 @@ func (m *mysql) DeleteResource(resourceID string) error {
 	}
 	blog.Infof("crm: success to delete resource(%s)", resourceID)
 	return nil
+}
+
+func timeMetricRecord(operation string) func() {
+	return selfMetric.TimeMetricRecord(fmt.Sprintf("%s_%s", MetricPrefix, operation))
 }
 
 func logSlowFunc(start int64, funcname string, threshold int64) {

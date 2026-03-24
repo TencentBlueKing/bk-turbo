@@ -210,7 +210,7 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 		blog.Warnf("tracker: check task(%s) launch is done but no enough resource", taskID)
 		tb.Status.FailWithServerDown()
 		tb.Status.Message = messageNoEnoughAvailableWorkers
-		if err = t.layer.UpdateTaskBasic(tb); err != nil {
+		if err = t.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 			blog.Errorf("tracker: update basic task failed: %v", err)
 			return false
 		}
@@ -228,7 +228,7 @@ func (t *tracker) isFinishStarting(taskID string, egn engine.Engine) bool {
 
 	tb.Status.Message = messageTaskRunning
 	blog.Infof("tracker: task(%s) is ready at start_time(%s)", taskID, tb.Status.StartTime.String())
-	if err = t.layer.UpdateTaskBasic(tb); err != nil {
+	if err = t.layer.UpdateTaskBasic(tb, nil, false); err != nil {
 		blog.Errorf("tracker: set task(%s) running and update basic task failed: %v", taskID, err)
 		return false
 	}

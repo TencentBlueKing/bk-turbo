@@ -10,6 +10,7 @@ dependencies {
     api("com.github.ben-manes.caffeine:caffeine")
     api("com.google.guava:guava")
     api("io.jsonwebtoken:jjwt")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core")
     api("com.tencent.bk.devops.ci.project:api-project:${Versions.ciVersion}"){
         isTransitive = false
     }
@@ -20,6 +21,9 @@ dependencies {
         isTransitive = false
     }
     api("com.tencent.bk.devops.ci.common:common-auth-api:${Versions.ciVersion}"){
+        isTransitive = false
+    }
+    api("com.tencent.bk.devops.ci.metrics:api-metrics") {
         isTransitive = false
     }
 }

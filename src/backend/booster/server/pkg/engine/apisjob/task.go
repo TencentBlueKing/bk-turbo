@@ -96,6 +96,16 @@ func (t *apisTask) WorkerList() []string {
 	return t.WorkerIPList
 }
 
+// UBAWorkerList no need
+func (t *apisTask) UBAWorkerList() []string {
+	return nil
+}
+
+// GetWorkerNameMap return worker name map
+func (t *apisTask) GetWorkerNameMap() map[string]string {
+	return nil
+}
+
 // GetRequestInstance define
 func (t *apisTask) GetRequestInstance() int {
 	return t.ContainerSetting.RequestInstance

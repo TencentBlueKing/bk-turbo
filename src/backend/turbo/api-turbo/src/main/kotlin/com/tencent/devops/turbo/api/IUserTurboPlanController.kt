@@ -9,6 +9,7 @@ import com.tencent.devops.turbo.validate.TurboPlanGroup
 import com.tencent.devops.turbo.vo.TurboMigratedPlanVO
 import com.tencent.devops.turbo.vo.TurboPlanDetailVO
 import com.tencent.devops.turbo.vo.TurboPlanPageVO
+import com.tencent.devops.turbo.vo.TurboPlanStatusBatchUpdateReqVO
 import io.swagger.annotations.Api
 import io.swagger.annotations.ApiOperation
 import io.swagger.annotations.ApiParam
@@ -179,4 +180,21 @@ interface IUserTurboPlanController {
         @PathVariable("pipelineElementId")
         pipelineElementId: String
     ): Response<TurboMigratedPlanVO?>
+
+    @ApiOperation("加速方案-刷新状态")
+    @PutMapping(
+        "/status/manualRefresh",
+        produces = [MediaType.APPLICATION_JSON_VALUE]
+    )
+    fun manualRefreshStatus(
+        @ApiParam(value = "新增加速方案请求数据信息", required = true)
+        @RequestBody
+        reqVO: TurboPlanStatusBatchUpdateReqVO,
+        @ApiParam(value = "用户信息", required = true)
+        @RequestHeader(AUTH_HEADER_DEVOPS_USER_ID)
+        user: String,
+        @ApiParam(value = "蓝盾项目id", required = true)
+        @RequestHeader(AUTH_HEADER_DEVOPS_PROJECT_ID)
+        projectId: String
+    ): Response<String>
 }

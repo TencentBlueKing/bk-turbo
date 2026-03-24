@@ -14,5 +14,6 @@ import (
 )
 
 var (
-	ErrorResourceNoExist = fmt.Errorf("resource no exist")
+	ErrorResourceNoExist    = fmt.Errorf("resource no exist")
+	ErrorResourceNotEnought = fmt.Errorf("resource not enought")
 )

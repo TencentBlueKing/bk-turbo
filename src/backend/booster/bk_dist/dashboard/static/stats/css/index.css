@@ -5,3 +5,34 @@
 .panel.panel-box ul.list-justified>li {
     width: 130px !important;
 }
+
+.hidden {
+    display: none;
+}
+
+.left-button {
+    float: left;
+}
+
+.right-button {
+    float: right;
+}
+
+.light-red {
+    color: #FF6666; /* 浅红色 */
+}
+
+.light-black {
+    color: #5b5a5a; /* 浅黑色 */
+}
+
+.divider {
+    height: 2px;
+    background-color: #A9A9A9; /* 浅黑色 */
+    margin: 20px 0;
+}
+
+.divider-row td {
+    border-top: 1px solid #A9A9A9; /* 浅黑色 */
+    padding: 0; /* 移除内边距 */
+}

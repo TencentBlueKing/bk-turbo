@@ -27,12 +27,25 @@ const (
 
 	DEFAULTTIMEOUTSECS        = 300
 	DEFAULTREADALLTIMEOUTSECS = 600
+
+	connectTimeout = 5 * time.Second
 )
 
 // TCPClient wrapper net.TCPConn
 type TCPClient struct {
 	timeout int
 	conn    *net.TCPConn
+}
+
+// NewTCPClientWithConn return new TCPClient with specified conn
+func NewTCPClientWithConn(conn *net.TCPConn) *TCPClient {
+	// not sure whether it can imporve performance
+	err := conn.SetNoDelay(false)
+	if err != nil {
+		blog.Errorf("set no delay to false error: [%s]", err.Error())
+	}
+
+	return &TCPClient{conn: conn}
 }
 
 // NewTCPClient return new TCPClient
@@ -56,7 +69,7 @@ func (c *TCPClient) Connect(server string) error {
 	}
 
 	t := time.Now().Local()
-	c.conn, err = net.DialTCP("tcp", nil, resolvedserver)
+	conn, err := net.DialTimeout("tcp", server, connectTimeout)
 	d := time.Now().Sub(t)
 	if d > 50*time.Millisecond {
 		blog.Debugf("TCP Dail to long gt50 to server(%s): %s", resolvedserver, d.String())
@@ -67,6 +80,15 @@ func (c *TCPClient) Connect(server string) error {
 
 	if err != nil {
 		blog.Errorf("connect to server error: [%s]", err.Error())
+		return err
+	}
+
+	// 将 net.Conn 转换为 net.TCPConn
+	var ok bool
+	c.conn, ok = conn.(*net.TCPConn)
+	if !ok {
+		err := fmt.Errorf("failed to conver net.Conn to net.TCPConn")
+		blog.Errorf("connect to server error: [%v]", err)
 		return err
 	}
 
@@ -270,7 +292,7 @@ func (c *TCPClient) ReadUntilEOF() ([]byte, int, error) {
 	return data, readlen, nil
 }
 
-func sendMessages(client *TCPClient, messages []protocol.Message) error {
+func SendMessages(client *TCPClient, messages []protocol.Message) error {
 	blog.Debugf("send requests")
 
 	if len(messages) == 0 {
@@ -313,4 +335,28 @@ func (c *TCPClient) ConnDesc() string {
 	}
 
 	return fmt.Sprintf("%s->%s", c.conn.LocalAddr().String(), c.conn.RemoteAddr().String())
+}
+
+// RemoteAddr return RemoteAddr
+func (c *TCPClient) RemoteAddr() string {
+	if c.conn != nil {
+		return c.conn.RemoteAddr().String()
+	}
+
+	return ""
+}
+
+// RemoteIP return remote ip
+func (c *TCPClient) RemoteIP() string {
+	if c.conn != nil {
+		remoteAddr := c.conn.RemoteAddr()
+		tcpAddr, ok := remoteAddr.(*net.TCPAddr)
+		if !ok {
+			return ""
+		}
+
+		return tcpAddr.IP.String()
+	}
+
+	return ""
 }

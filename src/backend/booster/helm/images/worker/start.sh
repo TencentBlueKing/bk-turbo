@@ -42,7 +42,11 @@ fi
 echo "BK_DIST_MAX_PROCESS_4_WORKER=${BK_DIST_MAX_PROCESS_4_WORKER}"
 echo "BK_DIST_WHITE_IP=${BK_DIST_WHITE_IP}"
 
+if [ -f ~/.bashrc ]; then
+echo "source bashrc file"
 source ~/.bashrc
+fi
+
 ./bk-dist-worker -f config_file.json > ./logs/bk-dist-worker.log 2>&1 &
 
 sleep 10s

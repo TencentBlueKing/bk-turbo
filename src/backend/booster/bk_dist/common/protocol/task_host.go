@@ -79,6 +79,9 @@ type Host struct {
 	Compresstype CompressType `json:"compress_type"`
 	Protocol     string       `json:"protocol"`
 	TimeDelta    int64        `json:"time_delta"`
+	Name         string       `json:"name"`
+	Token        string       `json:"token"`
+	UBAPort      int          `json:"uba_port"`
 }
 
 // Equal to judge whether equal

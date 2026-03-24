@@ -26,6 +26,7 @@ import (
 
 // mainProcess do the make process:
 func mainProcess(c *commandCli.Context) error {
+	common.FreshEnvFromProjectSetting()
 	initialLogDir(getLogDir(c.String(FlagLogDir)))
 	common.SetLogLevel(c.String(FlagLog))
 
@@ -85,6 +86,7 @@ func newCustomProcess(c *commandCli.Context) *pkg.ShaderTool {
 		LogLevel:        c.String(FlagLog),
 		LogDir:          getLogDir(c.String(FlagLogDir)),
 		ProcessInfoFile: c.String(FlagProcessInfoFile),
+		NoIdleQuit:      c.Bool(FlagNoIdleQuit),
 	})
 }
 

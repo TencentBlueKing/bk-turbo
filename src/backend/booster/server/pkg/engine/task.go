@@ -23,6 +23,11 @@ type TaskExtension interface {
 	// get worker list from task
 	WorkerList() []string
 
+	// get worker list from task
+	UBAWorkerList() []string
+
+	GetWorkerNameMap() map[string]string
+
 	GetRequestInstance() int
 
 	GetWorkerCount() int
@@ -342,4 +347,11 @@ func (tbs *TaskBasicStatus) FailWithClientLost() {
 
 func now() time.Time {
 	return time.Now().Local()
+}
+
+// BeforeRunning check whether before running
+func (tbs *TaskBasicStatus) BeforeRunning() bool {
+	return tbs.Status == TaskStatusInit ||
+		tbs.Status == TaskStatusStaging ||
+		tbs.Status == TaskStatusStarting
 }

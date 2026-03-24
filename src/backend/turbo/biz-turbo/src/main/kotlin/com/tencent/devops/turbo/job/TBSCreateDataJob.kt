@@ -36,7 +36,7 @@ class TBSCreateDataJob @Autowired constructor(
                 return
             }
             val engineCode = jobParam["engineCode"] as String
-            logger.info("[create turbo job|$engineCode] create job start")
+            logger.info("[create turbo job $engineCode] create job start")
             fetchNewTurboRecord(engineCode)
         } catch (e: Exception) {
             logger.info("execute create job fail! message: ${e.message}")
@@ -57,15 +57,15 @@ class TBSCreateDataJob @Autowired constructor(
             // todo distask额外逻辑，需要截取下划线之前的子串
             val turboPlanId = (turboRecord["project_id"] as String?)?.substringBefore("_")
             if (turboPlanId.isNullOrBlank()) {
-                logger.info("[create turbo job|$engineCode|$turboPlanId] no respective turbo plan id")
+                logger.info("[create turbo job $engineCode $turboPlanId] no respective turbo plan id")
                 continue
             }
             val turboPlanEntity = turboPlanService.findTurboPlanById(turboPlanId)
             if (null == turboPlanEntity) {
-                logger.info("[create turbo job|$engineCode|$turboPlanId] no turbo plan info found with id $turboPlanId")
+                logger.info("[create turbo job $engineCode $turboPlanId] no turbo plan info found with id $turboPlanId")
                 continue
             }
-            logger.info("[create turbo job|$engineCode|$turboPlanId] ready to send message")
+            logger.info("[create turbo job $engineCode $turboPlanId] ready to send message")
             if (gray.isGrayMatchProject(turboPlanEntity.projectId, redisOperation)) {
                 rabbitTemplate.convertAndSend(EXCHANGE_TURBO_REPORT, ROUTE_TURBO_REPORT_CREATE, TurboRecordCreateDto(engineCode, turboRecord))
             }
