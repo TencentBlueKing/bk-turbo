@@ -79,7 +79,7 @@ class ExceptionControllerAdvice {
         )
     }
 
-    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
     @ResponseBody
     @ExceptionHandler(UnauthorizedErrorException::class)
     fun unauthorizedExceptionHandler(exception: UnauthorizedErrorException): Response<Void> {
