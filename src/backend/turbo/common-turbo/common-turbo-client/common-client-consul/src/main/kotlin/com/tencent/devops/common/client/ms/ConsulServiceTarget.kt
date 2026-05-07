@@ -50,7 +50,7 @@ open class ConsulServiceTarget<T> constructor(
     }
 
     override fun choose(serviceName: String): ServiceInstance {
-        val serviceInstanceList: List<ServiceInstance> = usedInstance.getIfPresent(serviceName) ?: emptyList()
+        var serviceInstanceList: List<ServiceInstance> = usedInstance.getIfPresent(serviceName) ?: emptyList()
 
         if (serviceInstanceList.isEmpty()) {
             val currentInstanceList = discoveryClient.getInstances(serviceName)
@@ -60,20 +60,22 @@ open class ConsulServiceTarget<T> constructor(
                     "Unable to find any valid [$serviceName] service provider"
                 )
             }
+            val matchedInstances = mutableListOf<ServiceInstance>()
             currentInstanceList.forEach { serviceInstance ->
                 if (serviceInstance is ConsulServiceInstance && serviceInstance.tags.contains(tag)) {
-                    serviceInstanceList.toMutableList().add(serviceInstance)
+                    matchedInstances.add(serviceInstance)
                 }
             }
 
-            if (serviceInstanceList.isEmpty()) {
+            if (matchedInstances.isEmpty()) {
                 logger.error("Unable to find any valid [$serviceName] service provider")
                 throw ClientException(
                     "Unable to find any valid [$serviceName] service provider"
                 )
             } else {
+                matchedInstances.shuffle()
+                serviceInstanceList = matchedInstances
                 usedInstance.put(serviceName, serviceInstanceList)
-                serviceInstanceList.toMutableList().shuffle()
             }
         }
 
