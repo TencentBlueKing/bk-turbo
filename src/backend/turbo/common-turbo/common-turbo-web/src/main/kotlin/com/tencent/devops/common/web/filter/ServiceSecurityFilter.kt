@@ -2,6 +2,7 @@ package com.tencent.devops.common.web.filter
 
 import com.tencent.devops.common.security.jwt.JwtManager
 import com.tencent.devops.common.util.constants.AUTH_HEADER_DEVOPS_JWT_TOKEN
+import org.slf4j.LoggerFactory
 import org.springframework.web.filter.OncePerRequestFilter
 import java.net.InetAddress
 import javax.servlet.FilterChain
@@ -68,6 +69,7 @@ class ServiceSecurityFilter(
 
 
     companion object {
+        private val logger = LoggerFactory.getLogger(ServiceSecurityFilter::class.java)
         private val excludeVerifyPath = listOf(
             "/api/swagger.json"
         )
