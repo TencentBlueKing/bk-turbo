@@ -57,8 +57,8 @@ class TurboAuthService @Autowired constructor(
                 userId = userId,
                 token = token!!,
                 projectCode = projectId,
-                resourceCode = "TURBO",
-                action = "VIEW"
+                resourceCode = "turbo",
+                action = "view"
             ).data ?: false
         } catch (e : Exception) {
             logger.info("validate admin member fail! error message : ${e.message}")
