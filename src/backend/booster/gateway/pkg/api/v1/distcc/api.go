@@ -24,10 +24,17 @@ const (
 	queryCCacheEnabledKey = "ccache_enabled"
 	queryBanDistcc        = "ban_distcc"
 	queryBanAllBooster    = "ban_all_booster"
+	queryQueueNameKey     = "queue_name"
+	queryResourceTypeKey  = "resource_type"
 )
 
 var (
 	defaultMySQL distcc.MySQL
+
+	defaultPrivateQueueNames = map[string][]string{
+		"mesos":     {"wxg"},
+		"k8s_linux": {"K8S://wxgk", "K8S://private1"},
+	}
 
 	// implements the keys that can be filtered with "In" during task list
 	listTaskInKey = api.WithBasicGroup(api.GroupListTaskInKey, map[string]bool{

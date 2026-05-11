@@ -683,3 +683,71 @@ func wrapMap(source interface{}) map[string]interface{} {
 	_ = codec.DecJSON(tmp, &data)
 	return data
 }
+
+// SummaryPrivate handle summary private cluster statistics request
+func SummaryPrivate(req *restful.Request, resp *restful.Response) {
+	opts, err := getSummaryPrivateOptions(req)
+	if err != nil {
+		blog.Errorf("summary private cluster get options failed: %v", err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrInvalidParam, Message: err.Error()})
+		return
+	}
+
+	wsList, length, err := defaultMySQL.SummaryTaskRecordsPrivate(opts)
+	if err != nil {
+		blog.Errorf("summary private cluster failed with opts(%v) error: %v", opts, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrSummaryFailed,
+			Message: err.Error()})
+		return
+	}
+
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: wsList, Extra: map[string]interface{}{"length": length}})
+}
+
+// getSummaryPrivateOptions get options for summary private cluster
+func getSummaryPrivateOptions(req *restful.Request) (commonMySQL.ListOptions, error) {
+	opts, err := getSummaryOptions(req)
+	if err != nil {
+		return opts, err
+	}
+
+	queueNames := parseStringList(req.Request.URL.Query().Get(queryQueueNameKey))
+	if len(queueNames) == 0 {
+		queueNames = getDefaultPrivateQueueNames(parseStringList(req.Request.URL.Query().Get(queryResourceTypeKey)))
+	}
+
+	// 如果没有提供 queue_name 和 resource_type，则不添加私有队列过滤条件
+	if len(queueNames) > 0 {
+		opts.In(queryQueueNameKey, queueNames)
+	}
+
+	return opts, nil
+}
+
+// getDefaultPrivateQueueNames get default private queue names by resource type
+func getDefaultPrivateQueueNames(resourceTypes []string) []string {
+	if len(resourceTypes) == 0 {
+		return nil
+	}
+
+	var queueNames []string
+	for _, rt := range resourceTypes {
+		if queues, ok := defaultPrivateQueueNames[rt]; ok {
+			queueNames = append(queueNames, queues...)
+		}
+	}
+
+	return queueNames
+}
+
+// parseStringList parse comma separated string to string list
+func parseStringList(raw string) []string {
+	items := make([]string, 0, len(strings.Split(raw, api.MultiSeparator)))
+	for _, item := range strings.Split(raw, api.MultiSeparator) {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}

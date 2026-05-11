@@ -133,6 +133,14 @@ func initDCCActions() {
 		Params:  nil,
 		Handler: api.NoLimit(distcc.Summary),
 	})
+
+	// distcc private cluster summary statistics
+	api.RegisterV1Action(api.Action{
+		Verb:    "GET",
+		Path:    "/distcc/resource/summary/private",
+		Params:  nil,
+		Handler: api.NoLimit(distcc.SummaryPrivate),
+	})
 }
 
 func initFBActions() {
