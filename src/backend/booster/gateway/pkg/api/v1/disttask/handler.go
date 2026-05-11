@@ -595,7 +595,7 @@ func parseStringList(raw string) []string {
 }
 
 func getDefaultPrivateQueueNames(resourceTypes []string) []string {
-	queueNames := make([]string, 0, 10)
+	queueNames := make([]string, 0, 20)
 	if len(resourceTypes) == 0 {
 		for _, defaultQueueNames := range defaultPrivateQueueNames {
 			queueNames = append(queueNames, defaultQueueNames...)

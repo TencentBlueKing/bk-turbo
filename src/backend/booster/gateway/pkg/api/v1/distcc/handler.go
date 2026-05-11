@@ -715,28 +715,29 @@ func getSummaryPrivateOptions(req *restful.Request) (commonMySQL.ListOptions, er
 	if len(queueNames) == 0 {
 		queueNames = getDefaultPrivateQueueNames(parseStringList(req.Request.URL.Query().Get(queryResourceTypeKey)))
 	}
-
-	// 如果没有提供 queue_name 和 resource_type，则不添加私有队列过滤条件
-	if len(queueNames) > 0 {
-		opts.In(queryQueueNameKey, queueNames)
+	if len(queueNames) == 0 {
+		return opts, fmt.Errorf("%s empty", queryQueueNameKey)
 	}
-
+	opts.In(queryQueueNameKey, queueNames)
+	
 	return opts, nil
 }
 
 // getDefaultPrivateQueueNames get default private queue names by resource type
 func getDefaultPrivateQueueNames(resourceTypes []string) []string {
+	queueNames := make([]string, 0, 10)
 	if len(resourceTypes) == 0 {
-		return nil
+		for _, defaultQueueNames := range defaultPrivateQueueNames {
+			queueNames = append(queueNames, defaultQueueNames...)
+		}
+		return queueNames
 	}
 
-	var queueNames []string
-	for _, rt := range resourceTypes {
-		if queues, ok := defaultPrivateQueueNames[rt]; ok {
-			queueNames = append(queueNames, queues...)
+	for _, resourceType := range resourceTypes {
+		if defaultQueueNames, ok := defaultPrivateQueueNames[resourceType]; ok {
+			queueNames = append(queueNames, defaultQueueNames...)
 		}
 	}
-
 	return queueNames
 }
 
