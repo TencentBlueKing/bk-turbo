@@ -19,7 +19,15 @@ const (
 	querySceneKey         = "scene"
 	queryWorkIDKey        = "work_id"
 	querySuccessKey       = "success"
+	queryQueueNameKey     = "queue_name"
+	queryResourceTypeKey  = "resource_type"
 )
+
+var defaultPrivateQueueNames = map[string][]string{
+	"mesos":     {"wxg"},
+	"k8s_win":   {"K8S_WIN://df"},
+	"k8s_linux": {"K8S://hok", "K8S://wxgk"},
+}
 
 var (
 	defaultMySQL disttask.MySQL

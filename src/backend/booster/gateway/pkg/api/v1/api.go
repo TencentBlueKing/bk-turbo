@@ -370,6 +370,14 @@ func initDistTaskActions() {
 		Params:  nil,
 		Handler: api.NoLimit(disttask.SummaryByUser),
 	})
+
+	// disttask private cluster summary statistics
+	api.RegisterV1Action(api.Action{
+		Verb:    "GET",
+		Path:    "/disttask/resource/summary/private",
+		Params:  nil,
+		Handler: api.NoLimit(disttask.SummaryPrivate),
+	})
 }
 
 func initAutoDistTaskActions() {

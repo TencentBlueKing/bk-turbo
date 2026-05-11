@@ -498,6 +498,26 @@ func SummaryByUser(req *restful.Request, resp *restful.Response) {
 	api.ReturnRest(&api.RestResponse{Resp: resp, Data: wsList, Extra: map[string]interface{}{"length": length}})
 }
 
+// SummaryPrivate handle the http request for private cluster summary cpu used info.
+func SummaryPrivate(req *restful.Request, resp *restful.Response) {
+	opts, err := getSummaryPrivateOptions(req)
+	if err != nil {
+		blog.Errorf("summary private cluster get options failed: %v", err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrInvalidParam, Message: err.Error()})
+		return
+	}
+
+	wsList, length, err := defaultMySQL.SummaryTaskRecordsPrivate(opts)
+	if err != nil {
+		blog.Errorf("summary private cluster failed with opts(%v) error: %v", opts, err)
+		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrSummaryFailed,
+			Message: err.Error()})
+		return
+	}
+
+	api.ReturnRest(&api.RestResponse{Resp: resp, Data: wsList, Extra: map[string]interface{}{"length": length}})
+}
+
 func validTimeString(s string) (time.Time, error) {
 	layout := "2006-01-02"
 	return time.Parse(layout, s)
@@ -542,6 +562,53 @@ func getSummaryOptions(req *restful.Request) (commonMySQL.ListOptions, error) {
 	opts.Group(groups)
 
 	return opts, nil
+}
+
+func getSummaryPrivateOptions(req *restful.Request) (commonMySQL.ListOptions, error) {
+	opts, err := getSummaryOptions(req)
+	if err != nil {
+		return opts, err
+	}
+
+	queueNames := parseStringList(req.Request.URL.Query().Get(queryQueueNameKey))
+	if len(queueNames) == 0 {
+		queueNames = getDefaultPrivateQueueNames(parseStringList(req.Request.URL.Query().Get(queryResourceTypeKey)))
+	}
+
+	if len(queueNames) == 0 {
+		return opts, fmt.Errorf("%s empty", queryQueueNameKey)
+	}
+	opts.In(queryQueueNameKey, queueNames)
+
+	return opts, nil
+}
+
+func parseStringList(raw string) []string {
+	items := make([]string, 0, len(strings.Split(raw, api.MultiSeparator)))
+	for _, item := range strings.Split(raw, api.MultiSeparator) {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func getDefaultPrivateQueueNames(resourceTypes []string) []string {
+	queueNames := make([]string, 0, 10)
+	if len(resourceTypes) == 0 {
+		for _, defaultQueueNames := range defaultPrivateQueueNames {
+			queueNames = append(queueNames, defaultQueueNames...)
+		}
+		return queueNames
+	}
+
+	for _, resourceType := range resourceTypes {
+		if defaultQueueNames, ok := defaultPrivateQueueNames[resourceType]; ok {
+			queueNames = append(queueNames, defaultQueueNames...)
+		}
+	}
+	return queueNames
 }
 
 func getSummaryByUserOptions(req *restful.Request) (commonMySQL.ListOptions, error) {

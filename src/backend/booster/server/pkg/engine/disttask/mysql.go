@@ -70,6 +70,7 @@ type MySQL interface {
 
 	SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResult, int64, error)
 	SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*SummaryResultByUser, int64, error)
+	SummaryTaskRecordsPrivate(opts commonMySQL.ListOptions) ([]*SummaryResultPrivate, int64, error)
 }
 
 // NewMySQL get new mysql instance with connected orm operator.
@@ -954,7 +955,7 @@ func (m *mysql) SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResu
 	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
 	db := m.db.Table("task_records").Where("disabled = ?", false)
 
-	var length int64
+	//var length int64
 	// if err := db.Count(&length).Error; err != nil {
 	// 	blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
 	// 	return nil, 0, err
@@ -964,12 +965,14 @@ func (m *mysql) SummaryTaskRecords(opts commonMySQL.ListOptions) ([]*SummaryResu
 	db = opts.AddWhere(db)
 	db = opts.AddGroup(db)
 
+	//blog.Debugf("engine(%s) mysql summary task opts: %+v", EngineName, opts)
+
 	if err := db.Find(&tl).Error; err != nil {
 		blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
 		return nil, 0, err
 	}
 
-	return tl, length, nil
+	return tl, int64(len(tl)), nil
 }
 
 // SummaryTaskRecordsByUser summary task records group by user.
@@ -981,7 +984,7 @@ func (m *mysql) SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*Summa
 	// db := opts.AddWhere(m.db.Model(&TableTask{})).Where("disabled = ?", false)
 	db := m.db.Table("task_records").Where("disabled = ?", false)
 
-	var length int64
+	// var length int64
 	// if err := db.Count(&length).Error; err != nil {
 	// 	blog.Errorf("engine(%s) mysql summary task failed opts(%v): %v", EngineName, opts, err)
 	// 	return nil, 0, err
@@ -996,7 +999,29 @@ func (m *mysql) SummaryTaskRecordsByUser(opts commonMySQL.ListOptions) ([]*Summa
 		return nil, 0, err
 	}
 
-	return tl, length, nil
+	return tl, int64(len(tl)), nil
+}
+
+// SummaryTaskRecordsPrivate summary private cluster task records.
+func (m *mysql) SummaryTaskRecordsPrivate(opts commonMySQL.ListOptions) ([]*SummaryResultPrivate, int64, error) {
+	defer timeMetricRecord("summary_task_records_private")()
+	defer logSlowFunc(time.Now().Unix(), "summary_task_records_private", 2)
+
+	var tl []*SummaryResultPrivate
+	db := m.db.Table("task_records").Where("disabled = ?", false)
+
+	db = opts.AddSelector(db)
+	db = opts.AddWhere(db)
+	db = opts.AddGroup(db)
+
+	//blog.Debugf("engine(%s) mysql summary private cluster task opts: %+v", EngineName, opts)
+
+	if err := db.Find(&tl).Error; err != nil {
+		blog.Errorf("engine(%s) mysql summary private cluster task failed opts(%v): %v", EngineName, opts, err)
+		return nil, 0, err
+	}
+
+	return tl, int64(len(tl)), nil
 }
 
 // SummaryResult generate summary data
@@ -1013,6 +1038,15 @@ type SummaryResultByUser struct {
 	Day               string  `json:"day"`
 	ProjectID         string  `json:"project_id"`
 	User              string  `json:"user"`
+	TotalTime         float64 `json:"total_time"`
+	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
+	TotalRecordNumber int     `json:"total_record_number"`
+}
+
+// SummaryResultPrivate generate private cluster summary data.
+type SummaryResultPrivate struct {
+	Day               string  `json:"day"`
+	ProjectID         string  `json:"project_id"`
 	TotalTime         float64 `json:"total_time"`
 	TotalTimeWithCPU  float64 `json:"total_time_with_cpu"`
 	TotalRecordNumber int     `json:"total_record_number"`
