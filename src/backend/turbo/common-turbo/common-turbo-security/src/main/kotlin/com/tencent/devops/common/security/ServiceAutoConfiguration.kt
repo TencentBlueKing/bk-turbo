@@ -16,16 +16,16 @@ import org.springframework.scheduling.annotation.EnableScheduling
 @EnableScheduling
 @Configuration
 @AutoConfigureOrder(Ordered.LOWEST_PRECEDENCE)
-class ServiceAutoConfiguration {
-
+class ServiceAutoConfiguration(
     @Value("\${bkci.security.public-key:#{null}}")
-    private val publicKey: String? = null
+    private val publicKey: String?,
 
     @Value("\${bkci.security.private-key:#{null}}")
-    private val privateKey: String? = null
+    private val privateKey: String?,
 
     @Value("\${bkci.security.enable:#{false}}")
-    private val enable: Boolean = false
+    private val enable: Boolean
+) {
 
     @Bean
     fun environmentUtil() = EnvironmentUtil()

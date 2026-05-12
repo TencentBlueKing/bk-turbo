@@ -4,5 +4,5 @@ import com.tencent.devops.common.api.exception.code.IS_NOT_ADMIN_MEMBER
 
 class UnauthorizedErrorException(
     val errorCode: String = IS_NOT_ADMIN_MEMBER,
-    errorMessage: String = ""
+    errorMessage: String? = null
 ) : RuntimeException(errorMessage)
