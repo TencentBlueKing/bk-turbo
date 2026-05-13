@@ -267,6 +267,13 @@ gateway:
       name:
       image:
 
+  # IP whitelist configuration
+  # Default enabled and only allows localhost, external users should configure whitelist as needed
+  ipWhitelist:
+    enable: true
+    whitelistIP:
+      - "127.0.0.1"
+
   # image configuration
   image:
     registry: mirrors.tencent.com

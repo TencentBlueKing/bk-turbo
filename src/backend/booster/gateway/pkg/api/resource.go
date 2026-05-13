@@ -21,6 +21,8 @@ import (
 
 var Rd rd.RegisterDiscover
 
+var GatewayConf *config.GatewayConfig
+
 // DistCCServerAPIResource describe all the distcc api resources
 type DistCCServerAPIResource struct {
 	ActionsV1 []*httpserver.Action
