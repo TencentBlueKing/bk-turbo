@@ -31,6 +31,10 @@ data:
         "disttask_mysql_db": "{{ include "bktbs.mariadb.database" . }}",
         "disttask_mysql_user": "{{ include "bktbs.mariadb.username" . }}",
         "disttask_mysql_pwd": "{{ include "bktbs.mariadb.password" . }}"
+      },
+      "ip_whitelist": {
+        "enable": {{ .Values.gateway.ipWhitelist.enable }},
+        "whitelist_ip": [{{ range $index, $ip := .Values.gateway.ipWhitelist.whitelistIP }}{{ if $index }},{{ end }}"{{ $ip }}"{{ end }}]
       }
     }
 {{- end }}

@@ -57,33 +57,33 @@ func initDCCActions() {
 		Verb:    "GET",
 		Path:    "/distcc/resource/task",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.ListTask),
+		Handler: api.AuthRequired(distcc.ListTask),
 	})
 	// distcc worker images
 	api.RegisterV1Action(api.Action{
 		Verb:    "GET",
 		Path:    "/distcc/resource/images",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.ListWorkerImages),
+		Handler: api.AuthRequired(distcc.ListWorkerImages),
 	})
 	// distcc project
 	api.RegisterV1Action(api.Action{
 		Verb:    "GET",
 		Path:    "/distcc/resource/project",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.ListProject),
+		Handler: api.AuthRequired(distcc.ListProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/distcc/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.UpdateProject),
+		Handler: api.AuthRequired(distcc.UpdateProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/distcc/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.DeleteProject),
+		Handler: api.AuthRequired(distcc.DeleteProject),
 	})
 
 	// distcc whitelist
@@ -91,19 +91,19 @@ func initDCCActions() {
 		Verb:    "GET",
 		Path:    "/distcc/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.ListWhitelist),
+		Handler: api.AuthRequired(distcc.ListWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/distcc/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.UpdateWhitelist),
+		Handler: api.AuthRequired(distcc.UpdateWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/distcc/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.DeleteWhitelist),
+		Handler: api.AuthRequired(distcc.DeleteWhitelist),
 	})
 
 	// distcc gcc
@@ -111,19 +111,19 @@ func initDCCActions() {
 		Verb:    "GET",
 		Path:    "/distcc/resource/gcc",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.ListGcc),
+		Handler: api.AuthRequired(distcc.ListGcc),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/distcc/resource/gcc/{gcc_version}",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.UpdateGcc),
+		Handler: api.AuthRequired(distcc.UpdateGcc),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/distcc/resource/gcc/{gcc_version}",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.DeleteGcc),
+		Handler: api.AuthRequired(distcc.DeleteGcc),
 	})
 
 	// distcc summary statistics
@@ -131,7 +131,7 @@ func initDCCActions() {
 		Verb:    "GET",
 		Path:    "/distcc/resource/summary",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.Summary),
+		Handler: api.AuthRequired(distcc.Summary),
 	})
 
 	// distcc private cluster summary statistics
@@ -139,7 +139,7 @@ func initDCCActions() {
 		Verb:    "GET",
 		Path:    "/distcc/resource/summary/private",
 		Params:  nil,
-		Handler: api.NoLimit(distcc.SummaryPrivate),
+		Handler: api.AuthRequired(distcc.SummaryPrivate),
 	})
 }
 
@@ -153,13 +153,13 @@ func initFBActions() {
 		Verb:    "GET",
 		Path:    "/fb/resource/task",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.ListTask),
+		Handler: api.AuthRequired(fastbuild.ListTask),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "GET",
 		Path:    "/fb/resource/subtask",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.ListSubTask),
+		Handler: api.AuthRequired(fastbuild.ListSubTask),
 	})
 
 	// fb project
@@ -167,19 +167,19 @@ func initFBActions() {
 		Verb:    "GET",
 		Path:    "/fb/resource/project",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.ListProject),
+		Handler: api.AuthRequired(fastbuild.ListProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/fb/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.UpdateProject),
+		Handler: api.AuthRequired(fastbuild.UpdateProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/fb/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.DeleteProject),
+		Handler: api.AuthRequired(fastbuild.DeleteProject),
 	})
 
 	// fb whitelist
@@ -187,19 +187,19 @@ func initFBActions() {
 		Verb:    "GET",
 		Path:    "/fb/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.ListWhitelist),
+		Handler: api.AuthRequired(fastbuild.ListWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/fb/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.UpdateWhitelist),
+		Handler: api.AuthRequired(fastbuild.UpdateWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/fb/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(fastbuild.DeleteWhitelist),
+		Handler: api.AuthRequired(fastbuild.DeleteWhitelist),
 	})
 }
 
@@ -213,7 +213,7 @@ func initAPISActions() {
 		Verb:    "GET",
 		Path:    "/apisjob/resource/task",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.ListTask),
+		Handler: api.AuthRequired(apisjob.ListTask),
 	})
 
 	// apis project
@@ -221,19 +221,19 @@ func initAPISActions() {
 		Verb:    "GET",
 		Path:    "/apisjob/resource/project",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.ListProject),
+		Handler: api.AuthRequired(apisjob.ListProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/apisjob/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.UpdateProject),
+		Handler: api.AuthRequired(apisjob.UpdateProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/apisjob/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.DeleteProject),
+		Handler: api.AuthRequired(apisjob.DeleteProject),
 	})
 
 	// apis whitelist
@@ -241,19 +241,19 @@ func initAPISActions() {
 		Verb:    "GET",
 		Path:    "/apisjob/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.ListWhitelist),
+		Handler: api.AuthRequired(apisjob.ListWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/apisjob/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.UpdateWhitelist),
+		Handler: api.AuthRequired(apisjob.UpdateWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/apisjob/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(apisjob.DeleteWhitelist),
+		Handler: api.AuthRequired(apisjob.DeleteWhitelist),
 	})
 }
 
@@ -266,7 +266,7 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/version",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListClientVersion),
+		Handler: api.AuthRequired(disttask.ListClientVersion),
 	})
 
 	// disttask worker images
@@ -274,7 +274,7 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/images",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListWorkerImages),
+		Handler: api.AuthRequired(disttask.ListWorkerImages),
 	})
 
 	// disttask task
@@ -282,7 +282,7 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/task",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListTask),
+		Handler: api.AuthRequired(disttask.ListTask),
 	})
 
 	// disttask work stats
@@ -290,7 +290,7 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/stats",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListWorkStats),
+		Handler: api.AuthRequired(disttask.ListWorkStats),
 	})
 
 	// disttask project
@@ -298,31 +298,31 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/project",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListProject),
+		Handler: api.AuthRequired(disttask.ListProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/disttask/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.UpdateProject),
+		Handler: api.AuthRequired(disttask.UpdateProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/disttask/resource/project/{project_id}/scene/{scene}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.UpdateProject),
+		Handler: api.AuthRequired(disttask.UpdateProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/disttask/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.DeleteProject),
+		Handler: api.AuthRequired(disttask.DeleteProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/disttask/resource/project/{project_id}/scene/{scene}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.DeleteProject),
+		Handler: api.AuthRequired(disttask.DeleteProject),
 	})
 
 	// disttask whitelist
@@ -330,19 +330,19 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListWhitelist),
+		Handler: api.AuthRequired(disttask.ListWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/disttask/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.UpdateWhitelist),
+		Handler: api.AuthRequired(disttask.UpdateWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/disttask/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.DeleteWhitelist),
+		Handler: api.AuthRequired(disttask.DeleteWhitelist),
 	})
 
 	// disttask worker
@@ -350,19 +350,19 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/worker",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.ListWorker),
+		Handler: api.AuthRequired(disttask.ListWorker),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    "/disttask/resource/worker/{worker_version}/scene/{scene}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.UpdateWorker),
+		Handler: api.AuthRequired(disttask.UpdateWorker),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    "/disttask/resource/worker/{worker_version}/scene/{scene}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.DeleteWorker),
+		Handler: api.AuthRequired(disttask.DeleteWorker),
 	})
 
 	// disttask summary statistics
@@ -370,13 +370,13 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/summary",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.Summary),
+		Handler: api.AuthRequired(disttask.Summary),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "GET",
 		Path:    "/disttask/resource/summary/groupbyuser/scene/{scene}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.SummaryByUser),
+		Handler: api.AuthRequired(disttask.SummaryByUser),
 	})
 
 	// disttask private cluster summary statistics
@@ -384,10 +384,9 @@ func initDistTaskActions() {
 		Verb:    "GET",
 		Path:    "/disttask/resource/summary/private",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.SummaryPrivate),
+		Handler: api.AuthRequired(disttask.SummaryPrivate),
 	})
 }
-
 func initAutoDistTaskActions() {
 	if api.GetDistTaskServerAPIResource().MySQL == nil {
 		return
@@ -400,7 +399,7 @@ func initAutoDistTaskActions() {
 		Verb:    "GET",
 		Path:    autoKey + "/resource/task",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoListTask),
+		Handler: api.AuthRequired(disttask.AutoListTask),
 	})
 
 	// auto disttask work stats
@@ -408,7 +407,7 @@ func initAutoDistTaskActions() {
 		Verb:    "GET",
 		Path:    autoKey + "/resource/stats",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoListWorkStats),
+		Handler: api.AuthRequired(disttask.AutoListWorkStats),
 	})
 
 	// auto disttask task
@@ -416,19 +415,19 @@ func initAutoDistTaskActions() {
 		Verb:    "GET",
 		Path:    autoKey + "/resource/project",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoListProject),
+		Handler: api.AuthRequired(disttask.AutoListProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    autoKey + "/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoUpdateProject),
+		Handler: api.AuthRequired(disttask.AutoUpdateProject),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    autoKey + "/resource/project/{project_id}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoDeleteProject),
+		Handler: api.AuthRequired(disttask.AutoDeleteProject),
 	})
 
 	// auto disttask whitelist
@@ -436,19 +435,19 @@ func initAutoDistTaskActions() {
 		Verb:    "GET",
 		Path:    autoKey + "/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoListWhitelist),
+		Handler: api.AuthRequired(disttask.AutoListWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    autoKey + "/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoUpdateWhitelist),
+		Handler: api.AuthRequired(disttask.AutoUpdateWhitelist),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    autoKey + "/resource/whitelist",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoDeleteWhitelist),
+		Handler: api.AuthRequired(disttask.AutoDeleteWhitelist),
 	})
 
 	// auto disttask worker
@@ -456,19 +455,19 @@ func initAutoDistTaskActions() {
 		Verb:    "GET",
 		Path:    autoKey + "/resource/worker",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoListWorker),
+		Handler: api.AuthRequired(disttask.AutoListWorker),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "PUT",
 		Path:    autoKey + "/resource/worker/{worker_version}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoUpdateWorker),
+		Handler: api.AuthRequired(disttask.AutoUpdateWorker),
 	})
 	api.RegisterV1Action(api.Action{
 		Verb:    "DELETE",
 		Path:    autoKey + "/resource/worker/{worker_version}",
 		Params:  nil,
-		Handler: api.NoLimit(disttask.AutoDeleteWorker),
+		Handler: api.AuthRequired(disttask.AutoDeleteWorker),
 	})
 }
 

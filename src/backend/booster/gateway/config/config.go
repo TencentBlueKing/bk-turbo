@@ -36,6 +36,9 @@ type GatewayConfig struct {
 	DistTaskMySQL  DistTaskMySQL  `json:"disttask_mysql"`
 
 	ServerCert *CertConfig // cert of the server
+
+	// IP白名单配置
+	IPWhitelist IPWhitelistConfig `json:"ip_whitelist"`
 }
 
 // DistCCMySQL describe engine distcc mysql connection settings
@@ -76,6 +79,12 @@ type DistTaskMySQL struct {
 	MySQLDatabase string `json:"disttask_mysql_db" value:"" usage:"disttask mysql database for connecting."`
 	MySQLUser     string `json:"disttask_mysql_user" value:"root" usage:"disttask mysql username"`
 	MySQLPwd      string `json:"disttask_mysql_pwd" value:"" usage:"disttask mysql password, encrypted"`
+}
+
+// IPWhitelistConfig describe IP whitelist configuration
+type IPWhitelistConfig struct {
+	Enable      bool     `json:"enable" value:"false" usage:"enable IP whitelist access control"`
+	WhitelistIP []string `json:"whitelist_ip" value:"" usage:"allowed IP addresses, multiple IPs separated by commas"`
 }
 
 // CertConfig  configuration of Cert

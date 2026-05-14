@@ -53,6 +53,7 @@ func NewGatewayServer(conf *config.GatewayConfig) (*GatewayServer, error) {
 
 func (dcs *GatewayServer) initHTTPServer() error {
 	api.Rd = dcs.rd
+	api.GatewayConf = dcs.conf
 
 	// Api v1
 	return dcs.httpServer.RegisterWebServer(api.PathV1, nil, api.GetAPIV1Action())
