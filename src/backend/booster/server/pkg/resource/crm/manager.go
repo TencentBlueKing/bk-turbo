@@ -136,19 +136,23 @@ type ResourceParam struct {
 	// container images
 	Image string `json:"image"`
 
+	// worker version for matching pre-creation resources
+	WorkerVersion string `json:"worker_version"`
+
 	// if it is a broker resource, then broker name should be specified
 	BrokerName string `json:"broker_name"`
 }
 
 func (rp *ResourceParam) copy() ResourceParam {
 	newrp := ResourceParam{
-		City:       rp.City,
-		Platform:   rp.Platform,
-		Image:      rp.Image,
-		BrokerName: rp.BrokerName,
-		Env:        make(map[string]string),
-		Ports:      make(map[string]string),
-		Volumes:    make(map[string]op.BcsVolume),
+		City:          rp.City,
+		Platform:      rp.Platform,
+		Image:         rp.Image,
+		WorkerVersion: rp.WorkerVersion,
+		BrokerName:    rp.BrokerName,
+		Env:           make(map[string]string),
+		Ports:         make(map[string]string),
+		Volumes:       make(map[string]op.BcsVolume),
 	}
 
 	for k, v := range rp.Env {

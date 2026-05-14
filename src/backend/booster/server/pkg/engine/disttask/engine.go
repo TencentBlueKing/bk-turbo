@@ -788,8 +788,9 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 			portsService: "http",
 			portsStats:   "http",
 		},
-		Image:   task.Operator.Image,
-		Volumes: volumes,
+		Image:         task.Operator.Image,
+		WorkerVersion: task.InheritSetting.WorkerVersion,
+		Volumes:       volumes,
 	}); err != nil && err != crm.ErrorResourceAlreadyInit {
 		blog.Errorf("engine(%s) try launching crm task(%s), init resource manager failed: %v",
 			EngineName, tb.ID, err)
@@ -1187,13 +1188,14 @@ func (de *disttaskEngine) initBrokers() error {
 						portsService: "http",
 						portsStats:   "http",
 					},
-					Image:      worker.Image,
-					BrokerName: brokerName,
-					Volumes:    volumes,
+					Image:         worker.Image,
+					WorkerVersion: worker.WorkerVersion,
+					BrokerName:    brokerName,
+					Volumes:       volumes,
 				},
 				Instance: broker.Instance,
 				FitFunc: func(brokerParam, requestParam crm.ResourceParam) bool {
-					return brokerParam.City == requestParam.City && brokerParam.Image == requestParam.Image
+					return brokerParam.City == requestParam.City && brokerParam.WorkerVersion == requestParam.WorkerVersion
 				},
 				IdleKeepSeconds: broker.IdleKeepSeconds,
 				ReleaseLoop:     broker.ReleaseLoop,
