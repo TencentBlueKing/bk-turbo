@@ -33,6 +33,7 @@ import (
 
 const (
 	queueNameHeaderSymbol = "://"
+	queueNameSep          = "<|>"
 
 	// EngineName define the engine name
 	EngineName = "distcc"
@@ -952,6 +953,11 @@ func (de *distccEngine) initBrokers() error {
 }
 
 func (de *distccEngine) canTakeFromPublicQueue(queueName string) bool {
+	// 复合队列是虚拟队列，只负责取自身队列中的方案任务，不从公共队列取任务。
+	if strings.Contains(queueName, queueNameSep) {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}

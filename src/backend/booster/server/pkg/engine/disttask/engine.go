@@ -55,7 +55,7 @@ const (
 
 const (
 	queueNameHeaderSymbol = "://"
-	// queueNameSep          = "<|>"
+	queueNameSep          = "<|>"
 
 	workerMacLauncherName = "start.sh"
 	workerWinLauncherName = "start.bat"
@@ -1229,6 +1229,11 @@ func (de *disttaskEngine) getCrMgr(queueName string) crm.HandlerWithUser {
 }
 
 func (de *disttaskEngine) canTakeFromPublicQueue(queueName string) bool {
+	// 复合队列是虚拟队列，只负责取自身队列中的方案任务，不从公共队列取任务。
+	if strings.Contains(queueName, queueNameSep) {
+		return false
+	}
+
 	// p2p的任务不允许跨组
 	if containsP2P(queueName) {
 		return false
