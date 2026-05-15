@@ -33,6 +33,7 @@ import (
 
 const (
 	queueNameHeaderSymbol = "://"
+	queueNameSep          = "<|>"
 
 	// EngineName define the engine name
 	EngineName = "distcc"
@@ -76,7 +77,7 @@ type EngineConfig struct {
 	QueueResourceAllocater map[string]config.ResourceAllocater
 }
 
-//K8sClusterInfo define
+// K8sClusterInfo define
 type K8sClusterInfo struct {
 	K8SCRMClusterID      string
 	K8SCRMCPUPerInstance float64
@@ -508,7 +509,8 @@ func (de *distccEngine) launchTask(tb *engine.TaskBasic, queueName string) error
 			portsService: "http",
 			portsStats:   "http",
 		},
-		Image: task.Operator.Image,
+		Image:         task.Operator.Image,
+		WorkerVersion: task.Client.GccVersion,
 	}); err != nil && err != crm.ErrorResourceAlreadyInit {
 		blog.Errorf("engine(%s) try launching task(%s), init resource manager failed: %v",
 			EngineName, tb.ID, err)
@@ -860,7 +862,7 @@ type Message struct {
 	MessageGetCMakeArgs MessageGetCMakeArgs `json:"get_cmake_args"`
 }
 
-//MessageType define
+// MessageType define
 type MessageType int
 
 const (
@@ -931,12 +933,13 @@ func (de *distccEngine) initBrokers() error {
 						portsService: "http",
 						portsStats:   "http",
 					},
-					Image:      gcc.Image,
-					BrokerName: brokerName,
+					Image:         gcc.Image,
+					WorkerVersion: gcc.GccVersion,
+					BrokerName:    brokerName,
 				},
 				Instance: broker.Instance,
 				FitFunc: func(brokerParam, requestParam crm.ResourceParam) bool {
-					return brokerParam.City == requestParam.City && brokerParam.Image == requestParam.Image
+					return brokerParam.City == requestParam.City && brokerParam.WorkerVersion == requestParam.WorkerVersion
 				},
 			}); err != nil {
 			blog.Errorf("engine(%s) init broker(%s) add broker failed: %v", EngineName, brokerName, err)
@@ -950,6 +953,11 @@ func (de *distccEngine) initBrokers() error {
 }
 
 func (de *distccEngine) canTakeFromPublicQueue(queueName string) bool {
+	// 复合队列是虚拟队列，只负责取自身队列中的方案任务，不从公共队列取任务。
+	if strings.Contains(queueName, queueNameSep) {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}
@@ -1050,7 +1058,7 @@ func getQueueNamePure(queueName string) string {
 	return strings.TrimPrefix(queueName, fmt.Sprintf("%s%s", header, queueNameHeaderSymbol))
 }
 
-//GetK8sInstanceKey get instance type from queueName
+// GetK8sInstanceKey get instance type from queueName
 func GetK8sInstanceKey(queueName string) *config.InstanceType {
 	header := getQueueNameHeader(queueName)
 	if header == queueNameHeaderK8SDefault || header == queueNameHeaderK8SWin {
