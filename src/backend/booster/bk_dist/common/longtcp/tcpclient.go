@@ -234,6 +234,12 @@ func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
 		blog.Debugf("[longtcp] [%s] received data [%s] ", c.ConnDesc(), string(data))
 	}
 
+	if readlen < expectlen {
+		err := fmt.Errorf("incomplete read: got %d, want %d: %w", readlen, expectlen, io.ErrUnexpectedEOF)
+		blog.Warnf("[longtcp] [%s] read data incomplete: [%s]", c.ConnDesc(), err.Error())
+		return data[:readlen], readlen, err
+	}
+
 	return data, readlen, nil
 }
 

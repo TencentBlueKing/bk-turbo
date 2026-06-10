@@ -146,7 +146,35 @@ func (cc *TaskCC) CanExecuteWithLocalIdleResource(command []string) bool {
 }
 
 // PreExecuteNeedLock 如果编译本身是预处理, 那么不需要pre-lock, 因为它会在pre-execute中转本地, 不会真正地执行预处理
+
+func isUbaAgentCommand(command []string) bool {
+	if len(command) == 0 {
+		return false
+	}
+	return strings.Contains(command[0], "UbaAgent")
+}
+
+func (cc *TaskCC) preExecuteUbaAgent(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	blog.Infof("cc(%s): preExecuteUbaAgent with command: %v", cc.jobID, command)
+	return &dcSDK.BKDistCommand{
+		Commands: []dcSDK.BKCommand{
+			{
+				WorkDir:         cc.sandbox.Dir,
+				ExePath:         command[0],
+				ExeName:         "",
+				ExeToolChainKey: dcSDK.GetJsonToolChainKey(command[0]),
+				Params:          command[1:],
+				Inputfiles:      []dcSDK.FileDesc{},
+				ResultFiles:     []string{},
+			},
+		},
+	}, dcType.ErrorNone
+}
+
 func (cc *TaskCC) PreExecuteNeedLock(command []string) bool {
+	if isUbaAgentCommand(command) {
+		return false
+	}
 	for _, arg := range command {
 		if arg == "-E" {
 			return false
@@ -172,6 +200,9 @@ func (cc *TaskCC) PreLockWeight(command []string) int32 {
 
 // PreExecute 预处理
 func (cc *TaskCC) PreExecute(command []string) (*dcSDK.BKDistCommand, dcType.BKDistCommonError) {
+	if isUbaAgentCommand(command) {
+		return cc.preExecuteUbaAgent(command)
+	}
 	return cc.preExecute(command)
 }
 
@@ -227,6 +258,10 @@ func (cc *TaskCC) PostLockWeight(result *dcSDK.BKDistResult) int32 {
 
 // PostExecute 后置处理, 判断远程执行的结果是否正确
 func (cc *TaskCC) PostExecute(r *dcSDK.BKDistResult) dcType.BKDistCommonError {
+	if isUbaAgentCommand(cc.originArgs) {
+		blog.Infof("cc(%s): PostExecute for UbaAgent, result: %+v", cc.jobID, *r)
+		return dcType.ErrorNone
+	}
 	return cc.postExecute(r)
 }
 

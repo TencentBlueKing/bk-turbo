@@ -207,6 +207,7 @@ func ResetFileInfoCache() {
 func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir bool) ([]*Info, error) {
 	// read
 	fileInfoCacheLock.RLock()
+	defer fileInfoCacheLock.RUnlock()
 	notfound := []string{}
 	is := make([]*Info, 0, len(fs))
 	for _, f := range fs {
@@ -232,7 +233,6 @@ func GetFileInfo(fs []string, mustexisted bool, notdir bool, statbysearchdir boo
 		}
 		is = append(is, i)
 	}
-	fileInfoCacheLock.RUnlock()
 
 	blog.Infof("common util: got %d file stat and %d not found", len(is), len(notfound))
 	if len(notfound) == 0 {

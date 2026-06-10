@@ -792,6 +792,7 @@ func (s *Session) Clean(err error) {
 		s.Desc(), len(s.sendQueue))
 	if !s.valid { // 避免重复clean
 		blog.Debugf("[longtcp] session %s has cleaned before", s.Desc())
+		s.sendMutex.Unlock()
 		return
 	} else {
 		s.valid = false

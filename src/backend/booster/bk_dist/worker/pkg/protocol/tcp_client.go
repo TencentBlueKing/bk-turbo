@@ -201,6 +201,12 @@ func (c *TCPClient) ReadData(expectlen int) ([]byte, int, error) {
 		readlen += ret
 	}
 
+	if readlen < expectlen {
+		err := fmt.Errorf("incomplete read: got %d, want %d: %w", readlen, expectlen, io.ErrUnexpectedEOF)
+		blog.Warnf("read data incomplete: [%s]", err.Error())
+		return data[:readlen], readlen, err
+	}
+
 	if readlen < 32 {
 		blog.Debugf("got string '%s'", string(data))
 	} else {

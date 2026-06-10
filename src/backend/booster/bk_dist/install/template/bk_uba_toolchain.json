@@ -1,0 +1,17 @@
+{
+    "toolchains": [
+      {
+        "tool_key": "/usr/local/bin/UbaAgent",
+        "tool_name": "UbaAgent",
+        "tool_local_full_path": "/usr/local/bin/UbaAgent",
+        "tool_remote_relative_path": "/usr/local/bin",
+        "files": [
+          {
+            "local_full_path": "/usr/local/bin/libUbaDetours.so",
+            "remote_relative_path": "/usr/local/bin"
+          }
+        ]
+      }
+    ]
+  }
+  

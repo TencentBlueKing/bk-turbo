@@ -118,6 +118,8 @@ const (
 	FlagResultCacheIndexNum    = "result_cache_index_num"
 	FlagResultCacheFileNum     = "result_cache_file_num"
 	FlagPreferLocal            = "prefer_local"
+	FlagUseUba                 = "use_uba"
+	FlagUbaParam               = "uba_param"
 
 	EnvBuildIDOld  = "TURBO_PLAN_BUILD_ID"
 	EnvBuildID     = "TBS_BUILD_ID"
@@ -507,6 +509,14 @@ var (
 			Name:  "prefer_local",
 			Usage: "if true, controller will try to use local first",
 		},
+		commandCli.BoolFlag{
+			Name:  "use_uba",
+			Usage: "enable UBA acceleration mode",
+		},
+		commandCli.StringFlag{
+			Name:  "uba_param",
+			Usage: "parameters passed to UbaCli, e.g. '-summary -storeraw -port=2345 scheduler'",
+		},
 	}
 )
 
@@ -515,7 +525,7 @@ func GetApp(ct ClientType) *commandCli.App {
 	client := commandCli.NewApp()
 	client.Name = ct.Name()
 	client.Usage = ct.Usage()
-	client.Version = fmt.Sprintf("Version:   %s\n\t Tag:       %s\n\t BuildTime: %s\n\t GitHash:   %s",
+	client.Version = fmt.Sprintf("Version:   %s\n	 Tag:       %s\n	 BuildTime: %s\n	 GitHash:   %s",
 		version.Version, version.Tag, version.BuildTime, version.GitHash)
 
 	client.Flags = commonFlags

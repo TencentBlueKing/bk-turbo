@@ -393,7 +393,8 @@ func Summary(req *restful.Request, resp *restful.Response) {
 
 func validTimeString(s string) (time.Time, error) {
 	layout := "2006-01-02"
-	return time.Parse(layout, s)
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	return time.ParseInLocation(layout, s, loc)
 }
 
 func getSummaryOptions(req *restful.Request) (commonMySQL.ListOptions, error) {
@@ -719,7 +720,7 @@ func getSummaryPrivateOptions(req *restful.Request) (commonMySQL.ListOptions, er
 		return opts, fmt.Errorf("%s empty", queryQueueNameKey)
 	}
 	opts.In(queryQueueNameKey, queueNames)
-	
+
 	return opts, nil
 }
 

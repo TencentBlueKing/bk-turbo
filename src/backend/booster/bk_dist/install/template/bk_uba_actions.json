@@ -1,0 +1,17 @@
+{
+    "actions": [
+      {
+        "index": "0",
+        "cmd": "/usr/local/bin/UbaAgent",
+        "arg": " -host={ip}:{port} -maxcpu=16 -quiet -nocustomalloc -memwait=92 -memkill=98",
+        "workdir": "/usr/local/bin",
+        "dep": [],
+        "attributes": [
+          "all_worker_once",
+          "no_local_execute"
+        ],
+        "adjust": true
+      }
+    ]
+  }
+  

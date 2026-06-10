@@ -573,74 +573,152 @@ func MicrosecondsToTime(us int64) time.Time {
 func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid string) error {
 	blog.Infof("ubatrace: start read UBA file: %s", ubainfo.TraceFile)
 	traceView, err := ReadUBAFile(ubainfo.TraceFile)
-	if err == nil && traceView != nil {
-		for _, s := range traceView.Sessions {
-			ip := ""
-			if sip, ok := ubainfo.SessionMap[s.Name]; ok {
-				ip = sip
-			}
-			for _, processor := range s.Processors {
-				// convert processes to []*dcSDK.ControllerJobStats
-				for _, process := range processor.Processes {
-					flag := s.FullName + "_" + process.Description
-					start := float64(process.Start) / float64(traceView.Frequency)
-					stop := float64(process.Stop) / float64(traceView.Frequency)
+	if err != nil {
+		blog.Errorf("ubatrace: ReadUBAFile failed: %v", err)
+		return err
+	}
+	if traceView == nil {
+		blog.Warnf("ubatrace: ReadUBAFile returned nil traceView")
+		return nil
+	}
 
-					// mac 需要乘以 100，Frequency 为 1000000000
-					if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-						start = start * 100
-						stop = stop * 100
-					}
-					startus := uint64(start*1000000) + traceView.SystemStartTimeUs
-					stopus := uint64(stop*1000000) + traceView.SystemStartTimeUs
-					fmt.Printf("flag:[%s]start[%s]stop[%s]\n",
-						flag,
-						formatTimeUS(int64(startus)),
-						formatTimeUS(int64(stopus)))
+	blog.Infof("ubatrace: TraceView summary: sessions=%d, frequency=%d, systemStartTimeUs=%d, finished=%v, totalExited=%d, totalActive=%d",
+		len(traceView.Sessions), traceView.Frequency, traceView.SystemStartTimeUs,
+		traceView.Finished, traceView.TotalProcessExitedCount, traceView.TotalProcessActiveCount)
 
-					var stats dcSDK.ControllerJobStats
-					stats.ID = flag
-					stats.EnterTime = dcSDK.StatsTime(MicrosecondsToTime(int64(startus)))
-					stats.LeaveTime = dcSDK.StatsTime(MicrosecondsToTime(int64(stopus)))
-					stats.Success = process.ExitCode == 0
-					if process.IsRemote {
-						stats.RemoteWorkEnterTime = stats.EnterTime
-						stats.RemoteWorkLeaveTime = stats.LeaveTime
-						stats.RemoteWorkStartTime = stats.EnterTime
-						stats.RemoteWorkEndTime = stats.LeaveTime
-						stats.RemoteWorkProcessStartTime = stats.EnterTime
-						stats.RemoteWorkProcessEndTime = stats.LeaveTime
-						stats.RemoteWorker = ip
-						stats.PreWorkSuccess = stats.Success
-						stats.RemoteWorkSuccess = stats.Success
-						stats.PostWorkSuccess = stats.Success
-						stats.FinalWorkSuccess = stats.Success
-					} else {
-						stats.LocalWorkEnterTime = stats.EnterTime
-						stats.LocalWorkLeaveTime = stats.LeaveTime
-						stats.LocalWorkStartTime = stats.EnterTime
-						stats.LocalWorkEndTime = stats.LeaveTime
-						stats.LocalWorkLockTime = stats.EnterTime
-						stats.LocalWorkUnlockTime = stats.LeaveTime // 方便显示
-						stats.LocalWorkSuccess = stats.Success
-					}
-					if len(stats.OriginArgs) == 0 {
-						fileds := strings.Split(process.Description, " ")
-						stats.OriginArgs = []string{guessCommand(fileds[0]), process.Description}
-					}
-					stats.TaskID = taskid
-					stats.WorkID = workid
+	totalProcesses := 0
+	flagCounts := make(map[string]int)
+	convertedCount := 0
+	duplicateCount := 0
 
-					was.Update(&stats)
+	for si, s := range traceView.Sessions {
+		sessionProcessCount := 0
+		for _, processor := range s.Processors {
+			sessionProcessCount += len(processor.Processes)
+		}
+		blog.Infof("ubatrace: session[%d] name=%q fullName=%q processors=%d processes=%d",
+			si, s.Name, s.FullName, len(s.Processors), sessionProcessCount)
+		totalProcesses += sessionProcessCount
+	}
+	blog.Infof("ubatrace: total processes across all sessions: %d", totalProcesses)
+
+	for _, s := range traceView.Sessions {
+		ip := ""
+		if sip, ok := ubainfo.SessionMap[s.Name]; ok {
+			ip = sip
+		}
+		for pi, processor := range s.Processors {
+			for proci, process := range processor.Processes {
+				flag := fmt.Sprintf("%s_%d_%s", s.FullName, process.ID, process.Description)
+				flagCounts[flag]++
+				if flagCounts[flag] > 1 {
+					duplicateCount++
+					if duplicateCount <= 10 {
+						blog.Warnf("ubatrace: DUPLICATE flag: %q (count=%d) session=%q proc=%d/%d desc=%q",
+							flag, flagCounts[flag], s.FullName, pi, proci, process.Description)
+					}
 				}
+				start := float64(process.Start) / float64(traceView.Frequency)
+				stop := float64(process.Stop) / float64(traceView.Frequency)
+
+				if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+					start = start * 100
+					stop = stop * 100
+				}
+				startus := uint64(start*1000000) + traceView.SystemStartTimeUs
+				stopus := uint64(stop*1000000) + traceView.SystemStartTimeUs
+
+				var stats dcSDK.ControllerJobStats
+				stats.ID = flag
+				stats.EnterTime = dcSDK.StatsTime(MicrosecondsToTime(int64(startus)))
+				stats.LeaveTime = dcSDK.StatsTime(MicrosecondsToTime(int64(stopus)))
+				stats.Success = process.ExitCode == 0
+				if process.IsRemote {
+					stats.RemoteWorkEnterTime = stats.EnterTime
+					stats.RemoteWorkLeaveTime = stats.LeaveTime
+					stats.RemoteWorkStartTime = stats.EnterTime
+					stats.RemoteWorkEndTime = stats.LeaveTime
+					stats.RemoteWorkProcessStartTime = stats.EnterTime
+					stats.RemoteWorkProcessEndTime = stats.LeaveTime
+					stats.RemoteWorker = ip
+					stats.PreWorkSuccess = stats.Success
+					stats.RemoteWorkSuccess = stats.Success
+					stats.PostWorkSuccess = stats.Success
+					stats.FinalWorkSuccess = stats.Success
+				} else {
+					stats.LocalWorkEnterTime = stats.EnterTime
+					stats.LocalWorkLeaveTime = stats.LeaveTime
+					stats.LocalWorkStartTime = stats.EnterTime
+					stats.LocalWorkEndTime = stats.LeaveTime
+					stats.LocalWorkLockTime = stats.EnterTime
+					stats.LocalWorkUnlockTime = stats.LeaveTime
+					stats.LocalWorkSuccess = stats.Success
+				}
+				if len(stats.OriginArgs) == 0 {
+					fileds := strings.Split(process.Description, " ")
+					stats.OriginArgs = []string{guessCommand(fileds[0]), process.Description}
+				}
+				stats.TaskID = taskid
+				stats.WorkID = workid
+
+				was.Update(&stats)
+				convertedCount++
 			}
 		}
 	}
 
-	return err
+	cmdTypeCounts := make(map[string]int)
+	for _, s := range traceView.Sessions {
+		for _, processor := range s.Processors {
+			for _, process := range processor.Processes {
+				fields := strings.Split(process.Description, " ")
+				cmd := guessCommand(fields[0])
+				cmdTypeCounts[cmd]++
+			}
+		}
+	}
+	blog.Infof("ubatrace: readUBAFile complete: totalProcesses=%d, converted=%d, duplicateFlags=%d, uniqueFlags=%d",
+		totalProcesses, convertedCount, duplicateCount, len(flagCounts))
+	for cmd, cnt := range cmdTypeCounts {
+		blog.Infof("ubatrace: command type distribution: %s = %d", cmd, cnt)
+	}
+	if duplicateCount > 0 {
+		blog.Warnf("ubatrace: %d processes had duplicate flags and overwrote previous entries!", duplicateCount)
+	}
+
+	return nil
 }
 
 func guessCommand(describe string) string {
+	base := filepath.Base(describe)
+
+	switch base {
+	case "c++", "g++", "clang++", "cc1plus":
+		return "c++"
+	case "cc", "gcc", "clang", "cc1":
+		return "cc"
+	case "ar":
+		return "ar"
+	case "ranlib":
+		return "ranlib"
+	case "sh", "bash":
+		return "sh"
+	case "ld", "ld.lld", "ld.gold", "lld", "link":
+		return "ld"
+	case "as":
+		return "as"
+	}
+
+	if strings.Contains(base, "llvm-tblgen") {
+		return "llvm-tblgen"
+	}
+	if strings.Contains(base, "llvm-min-tblgen") {
+		return "llvm-min-tblgen"
+	}
+	if strings.HasPrefix(base, "python") {
+		return "python"
+	}
+
 	suffix := filepath.Ext(describe)
 	switch suffix {
 	case ".cpp", ".c", ".cc", ".cxx", ".C", ".CXX", ".h":
@@ -659,6 +737,10 @@ func guessCommand(describe string) string {
 		return "dotnet.exe"
 	case ".in":
 		return "ShaderCompileWorker.exe"
+	}
+
+	if base != "" && base != describe {
+		return base
 	}
 	return "other.exe"
 }

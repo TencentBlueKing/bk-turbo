@@ -141,6 +141,9 @@ type BoosterWorks struct {
 	ResultCacheTriggleSecs int
 	ResultCacheIndexNum    int
 	ResultCacheFileNum     int
+
+	UseUba   bool
+	UbaParam string
 }
 
 // BoosterTransport describe the transport data to controller

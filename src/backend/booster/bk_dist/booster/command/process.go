@@ -328,6 +328,8 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			ResultCacheList:        c.StringSlice(FlagResultCacheList),
 			ResultCacheType:        c.Int(FlagResultCacheType),
 			ResultCacheTriggleSecs: resultCacheTriggleSecs,
+			UseUba:                 c.Bool(FlagUseUba),
+			UbaParam:               c.String(FlagUbaParam),
 		},
 
 		Transport: dcType.BoosterTransport{

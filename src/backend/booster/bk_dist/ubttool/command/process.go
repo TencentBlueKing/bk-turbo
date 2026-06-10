@@ -80,7 +80,7 @@ func newCustomProcess(c *commandCli.Context) *pkg.UBTTool {
 		ToolChainFile:   c.String(FlagToolChainJSONFile),
 		MostDepentFirst: c.Bool(FlagMostDependFirst),
 		LogLevel:        c.String(FlagLog),
-		LogDir:          getLogDir(FlagLogDir),
+		LogDir:          getLogDir(c.String(FlagLogDir)),
 	})
 }
 

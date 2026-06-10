@@ -1782,6 +1782,7 @@ func (m *Mgr) querySendFile(server string, desc dcSDK.FileDesc) types.FileSendSt
 	m.fileSendMutex.RLock()
 	if m.fileSendMap == nil {
 		blog.Errorf("remote: fileSendMap not initialized for server(%s)", server)
+		m.fileSendMutex.RUnlock()
 		return types.FileSendFailed
 	}
 	fsm, ok := m.fileSendMap[server]

@@ -12,12 +12,15 @@ package pkg
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -142,6 +145,8 @@ type Booster struct {
 	ppid      int32
 	pppid     int32
 	toolchain *dcSDK.Toolchain
+
+	ubaTraceFile string
 }
 
 // GetTaskID get registered taskID
@@ -771,6 +776,15 @@ func (b *Booster) runCommands(ctx context.Context) (code int, err error) {
 		return -1, err
 	}
 
+	// set UBA toolchain if UBA mode is enabled
+	if b.config.Works.UseUba {
+		if err = b.setUbaToolChain(); err != nil {
+			blog.Errorf("booster: runCommands set UBA tool chain for task(%s) failed: %v",
+				b.taskID, err)
+			return -1, err
+		}
+	}
+
 	// if work not nil, should call controller to start it.
 	if err = b.startControllerWork(); err != nil {
 		blog.Errorf("booster: runCommands task(%s) start work(%s) in controller failed: %v",
@@ -784,11 +798,65 @@ func (b *Booster) runCommands(ctx context.Context) (code int, err error) {
 		_ = b.endControllerWork()
 	}()
 
+	// send UBA agent start command to remote workers asynchronously if UBA mode enabled
+	if b.config.Works.UseUba {
+		ubaParam := strings.TrimSpace(b.config.Works.UbaParam)
+		b.ubaTraceFile = parseTraceFileFromUbaParam(ubaParam)
+		if b.ubaTraceFile == "" {
+			b.ubaTraceFile = fmt.Sprintf("/tmp/uba_trace_%d.uba", os.Getpid())
+			blog.Infof("booster: generated UBA trace file path: %s", b.ubaTraceFile)
+		} else {
+			blog.Infof("booster: parsed UBA trace file path from uba_param: %s", b.ubaTraceFile)
+		}
+
+		go func() {
+			if ubaErr := b.sendUbaStartCommand(); ubaErr != nil {
+				blog.Warnf("booster: send UBA start command failed: %v, continuing anyway", ubaErr)
+			} else {
+				blog.Infof("booster: send UBA start command succeeded")
+			}
+			if err := b.notifyControllerTraceFile(); err != nil {
+				blog.Warnf("booster: failed to notify controller about trace file: %v", err)
+			}
+		}()
+	}
+
 	// send addition files to workers before run commands.
 	//b.sendAdditionFile()
 
 	// before run the commands, ensure that environments for workers are set.
 	b.ensureWorkersEnv()
+
+	// if UBA mode, prefix the user command with UbaCli
+	if b.config.Works.UseUba {
+		ubaParam := strings.TrimSpace(b.config.Works.UbaParam)
+
+		// Inject -tracefile if not already present in uba_param
+		if !strings.Contains(ubaParam, "-tracefile=") && b.ubaTraceFile != "" {
+			ubaParam = fmt.Sprintf("-tracefile=%s %s", b.ubaTraceFile, ubaParam)
+			blog.Infof("booster: injected -tracefile=%s into UbaCli params", b.ubaTraceFile)
+		}
+
+		// Cap -maxcpu based on available memory to prevent OOM.
+		memMaxCPU := b.calcMemBasedMaxCPU()
+		maxcpuRe := regexp.MustCompile(`-maxcpu=(\d+)`)
+		if matches := maxcpuRe.FindStringSubmatch(ubaParam); len(matches) > 1 {
+			requested, _ := strconv.Atoi(matches[1])
+			safeCPU := memMaxCPU
+			if requested < safeCPU {
+				safeCPU = requested
+			}
+			ubaParam = maxcpuRe.ReplaceAllString(ubaParam, fmt.Sprintf("-maxcpu=%d", safeCPU))
+			blog.Infof("booster: adjusted -maxcpu=%d to -maxcpu=%d (memory-based limit=%d)", requested, safeCPU, memMaxCPU)
+		}
+
+		if ubaParam != "" {
+			b.config.Args = fmt.Sprintf("UbaCli %s %s", ubaParam, b.config.Args)
+		} else {
+			b.config.Args = fmt.Sprintf("UbaCli -maxcpu=%d scheduler %s", memMaxCPU, b.config.Args)
+		}
+		blog.Infof("booster: UBA mode enabled, modified command to: %s", b.config.Args)
+	}
 
 	args := b.renderArgs(b.config.Args)
 	blog.Infof("booster: got origin command: %s", b.config.Args)
@@ -1332,6 +1400,211 @@ func (b *Booster) setToolChainWithJSON(tools *dcSDK.Toolchain) error {
 	return nil
 }
 
+// UBA actions JSON structures
+type UbaAction struct {
+	Index      string   `json:"index"`
+	Cmd        string   `json:"cmd"`
+	Arg        string   `json:"arg"`
+	WorkDir    string   `json:"workdir"`
+	Dep        []string `json:"dep"`
+	Attributes []string `json:"attributes"`
+	Adjust     bool     `json:"adjust"`
+}
+
+type UbaActionsConfig struct {
+	Actions []UbaAction `json:"actions"`
+}
+
+func parsePortFromUbaParam(param string) int {
+	for _, field := range strings.Fields(param) {
+		if strings.HasPrefix(field, "-port=") {
+			portStr := strings.TrimPrefix(field, "-port=")
+			if port, err := strconv.Atoi(portStr); err == nil {
+				return port
+			}
+		}
+	}
+	return 1345
+}
+
+func parseTraceFileFromUbaParam(param string) string {
+	for _, field := range strings.Fields(param) {
+		if strings.HasPrefix(field, "-tracefile=") {
+			return strings.TrimPrefix(field, "-tracefile=")
+		}
+	}
+	return ""
+}
+
+func getExternalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+
+	_, classA, _ := net.ParseCIDR("10.0.0.0/8")
+	_, classB, _ := net.ParseCIDR("172.16.0.0/12")
+	_, classC, _ := net.ParseCIDR("192.168.0.0/16")
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
+			ip := ipnet.IP
+			if classA.Contains(ip) || classB.Contains(ip) || classC.Contains(ip) {
+				continue
+			}
+			return ip.String()
+		}
+	}
+	return ""
+}
+
+func (b *Booster) setUbaToolChain() error {
+	ubaToolchainFile := "/etc/bk_dist/bk_uba_toolchain.json"
+	blog.Infof("booster: setting UBA toolchain from %s", ubaToolchainFile)
+
+	tools, err := resolveToolChainJSON(ubaToolchainFile)
+	if err != nil {
+		blog.Errorf("booster: failed to resolve UBA toolchain %s: %v", ubaToolchainFile, err)
+		return err
+	}
+
+	return b.setToolChainWithJSON(tools)
+}
+
+func (b *Booster) sendUbaStartCommand() error {
+	ubaActionsFile := "/etc/bk_dist/bk_uba_actions.json"
+	blog.Infof("booster: sending UBA start command from %s", ubaActionsFile)
+
+	data, err := ioutil.ReadFile(ubaActionsFile)
+	if err != nil {
+		blog.Errorf("booster: failed to read UBA actions file %s: %v", ubaActionsFile, err)
+		return err
+	}
+
+	var actionsConfig UbaActionsConfig
+	if err := json.Unmarshal(data, &actionsConfig); err != nil {
+		blog.Errorf("booster: failed to parse UBA actions file %s: %v", ubaActionsFile, err)
+		return err
+	}
+
+	externalIP := getExternalIP()
+	if externalIP == "" {
+		blog.Errorf("booster: failed to get external IP for UBA")
+		return fmt.Errorf("failed to get external IP for UBA")
+	}
+
+	ubaPort := parsePortFromUbaParam(b.config.Works.UbaParam)
+
+	blog.Infof("booster: UBA external IP: %s, listen port: %d", externalIP, ubaPort)
+
+	for _, action := range actionsConfig.Actions {
+		arg := strings.Replace(action.Arg, "{ip}", externalIP, -1)
+		arg = strings.Replace(arg, "{port}", strconv.Itoa(ubaPort), -1)
+
+		cmds := []string{action.Cmd}
+		for _, a := range strings.Fields(strings.TrimSpace(arg)) {
+			cmds = append(cmds, a)
+		}
+
+		blog.Infof("booster: sending UBA command to remote workers: %v", cmds)
+
+		if b.work == nil {
+			blog.Errorf("booster: work is nil, cannot send UBA start command")
+			return fmt.Errorf("work is nil")
+		}
+
+		_, _, result, err := b.work.Job(&dcSDK.ControllerJobStats{
+			Pid:        os.Getpid(),
+			WorkID:     b.workID,
+			TaskID:     b.taskID,
+			OriginArgs: cmds,
+		}).ExecuteLocalTask(
+			cmds,
+			action.WorkDir,
+			0,
+			action.Attributes,
+		)
+		if err != nil {
+			blog.Warnf("booster: UBA start command returned error: %v", err)
+		}
+		if result != nil {
+			blog.Infof("booster: UBA start command result: exit_code=%d, message=%s",
+				result.ExitCode, result.Message)
+		}
+	}
+
+	return nil
+}
+
+func (b *Booster) notifyControllerTraceFile() error {
+	if b.ubaTraceFile == "" {
+		return nil
+	}
+
+	addr := b.config.Controller.Address()
+	url := fmt.Sprintf("%s/api/v1/dist/listresource?tracefile=%s", addr, b.ubaTraceFile)
+	blog.Infof("booster: notifying controller about UBA trace file: %s", url)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		blog.Warnf("booster: failed to notify controller about trace file: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		blog.Warnf("booster: controller returned status %d for trace file notification", resp.StatusCode)
+		return fmt.Errorf("controller returned status %d", resp.StatusCode)
+	}
+
+	blog.Infof("booster: successfully notified controller about trace file: %s", b.ubaTraceFile)
+	return nil
+}
+
+func (b *Booster) calcMemBasedMaxCPU() int {
+	const perProcessMB = 500
+	const reserveMB = 2048
+
+	localCPU := runtime.NumCPU()
+
+	data, err := ioutil.ReadFile("/proc/meminfo")
+	if err != nil {
+		blog.Warnf("booster: cannot read /proc/meminfo: %v, falling back to CPU count", err)
+		return localCPU
+	}
+
+	lines := strings.Split(string(data), "\n")
+	availKB := 0
+	for _, line := range lines {
+		if strings.HasPrefix(line, "MemAvailable:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				availKB, _ = strconv.Atoi(fields[1])
+			}
+			break
+		}
+	}
+
+	if availKB == 0 {
+		blog.Warnf("booster: cannot parse MemAvailable, falling back to CPU count")
+		return localCPU
+	}
+
+	availMB := availKB / 1024
+	usableMB := availMB - reserveMB
+	if usableMB < perProcessMB {
+		usableMB = perProcessMB
+	}
+
+	memMax := usableMB / perProcessMB
+	if memMax < localCPU {
+		memMax = localCPU
+	}
+
+	blog.Infof("booster: memory-based maxcpu: availMem=%dMB, reserve=%dMB, perProcess=%dMB, memMax=%d, cpuCount=%d",
+		availMB, reserveMB, perProcessMB, memMax, localCPU)
+	return memMax
+}
 func (b *Booster) checkPump() {
 	if b.config.Works.Pump || b.config.Works.PumpCache {
 		pumpdir := b.config.Works.PumpCacheDir
