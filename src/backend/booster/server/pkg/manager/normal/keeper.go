@@ -165,7 +165,7 @@ func (k *keeper) checkTaskBasic(taskID string, wg *sync.WaitGroup) {
 		// timeout after last received heartbeat
 		heartBeatTimeout := time.Duration(egn.GetPreferences().HeartbeatTimeoutTickTimes) * clientHeartBeatTickTime
 		if tb.Status.LastHeartBeatTime.Add(heartBeatTimeout).Before(nowTime) {
-			blog.Errorf("keeper: check and find task(%s) heartbeat timeout(over %s) "+
+			blog.Warnf("keeper: check and find task(%s) heartbeat timeout(over %s) "+
 				"since last beat(%s) from ip(%s), will be canceled",
 				tb.ID, heartBeatTimeout.String(), tb.Status.LastHeartBeatTime.String(), tb.Client.ClientIP)
 

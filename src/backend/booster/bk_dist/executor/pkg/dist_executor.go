@@ -216,7 +216,7 @@ func (d *DistExecutor) runWork() (int, string, error) {
 
 	if len(os.Args) < 2 {
 		blog.Errorf("executor: not enough args to execute")
-		return 0, "", fmt.Errorf("not enough args to execute")
+		return 1, "", fmt.Errorf("not enough args to execute")
 	}
 
 	// TODO : 如果支持了自动获取工具链，这儿将命令转为绝对路径
@@ -296,26 +296,24 @@ func (d *DistExecutor) updateJobStats() {
 }
 
 func (d *DistExecutor) sysSignalHandler() {
-	interrupt := make(chan os.Signal)
+	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	select {
-	case sig := <-interrupt:
-		blog.Warnf("executor-command: get system signal %s, going to exit", sig.String())
-		blog.CloseLogs()
+	sig := <-interrupt
+	blog.Warnf("executor-command: get system signal %s, going to exit", sig.String())
+	blog.CloseLogs()
 
-		// catch control-C and should return code 130(128+0x2)
-		if sig == syscall.SIGINT {
-			os.Exit(130)
-		}
-
-		// catch kill and should return code 143(128+0xf)
-		if sig == syscall.SIGTERM {
-			os.Exit(143)
-		}
-
-		os.Exit(1)
+	// catch control-C and should return code 130(128+0x2)
+	if sig == syscall.SIGINT {
+		os.Exit(130)
 	}
+
+	// catch kill and should return code 143(128+0xf)
+	if sig == syscall.SIGTERM {
+		os.Exit(143)
+	}
+
+	os.Exit(1)
 }
 
 func (d *DistExecutor) detectLogLevel() {

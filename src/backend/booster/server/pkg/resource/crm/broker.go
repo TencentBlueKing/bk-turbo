@@ -459,6 +459,19 @@ func (b *Broker) track(resourceID string, startTime time.Time) bool {
 	resource, err := b.mgr.getResources(resourceID)
 	b.mgr.unlockResource(resourceID)
 	if err != nil {
+		if err == ErrorResourceNoExist {
+			blog.Infof("crm broker: track resource(%s) from broker(%s) with user(%s), resource already released, stop tracking",
+				resourceID, b.name, b.user)
+			b.currentNumLock.Lock()
+			if b.currentNum > 0 {
+				b.currentNum--
+			} else {
+				blog.Warnf("crm broker: currentNum already 0 when stopping track resource(%s) from broker(%s) with user(%s), skip decrement",
+					resourceID, b.name, b.user)
+			}
+			b.currentNumLock.Unlock()
+			return true
+		}
 		blog.Errorf("crm broker: track resource(%s) from broker(%s) with user(%s), get resource failed: %v",
 			resourceID, b.name, b.user, err)
 		return false

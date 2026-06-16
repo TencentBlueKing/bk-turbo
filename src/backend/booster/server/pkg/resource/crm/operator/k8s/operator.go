@@ -213,6 +213,24 @@ func (o *operator) getResource(clusterID string) ([]*op.NodeInfo, error) {
 
 	nodeInfoList := make([]*op.NodeInfo, 0, 1000)
 	for _, node := range nodeList.Items {
+		// skip unschedulable nodes (kubectl cordon)
+		if node.Spec.Unschedulable {
+			blog.Infof("k8s-operator: skip unschedulable node(%s) clusterID(%s)", node.Name, clusterID)
+			continue
+		}
+
+		// skip NotReady nodes
+		nodeReady := true
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == coreV1.NodeReady {
+				nodeReady = condition.Status == coreV1.ConditionTrue
+				break
+			}
+		}
+		if !nodeReady {
+			blog.Infof("k8s-operator: skip NotReady node(%s) clusterID(%s)", node.Name, clusterID)
+			continue
+		}
 
 		// get internal ip from status
 		ip := ""

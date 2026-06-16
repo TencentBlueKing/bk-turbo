@@ -269,6 +269,4 @@ func (s *selector) checkNewQueue() {
 			s.onNewQueue(tb.Client.QueueName, tb.Client.EngineName)
 		}
 	}
-
-	return
 }

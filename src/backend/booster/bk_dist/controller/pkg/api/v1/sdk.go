@@ -12,6 +12,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -424,7 +425,7 @@ func (s *sdk) launchServer() error {
 	return dcSyscall.RunServer(fmt.Sprintf("%s%s -a=%s -p=%d --log-dir=%s --v=%d --local_slots=%d "+
 		"--local_pre_slots=%d --local_exe_slots=%d --local_post_slots=%d --async_flush %s --remain_time=%d "+
 		"--use_local_cpu_percent=%d %s"+
-		"%s --res_idle_secs_for_free=%d"+
+		" %s --res_idle_secs_for_free=%d"+
 		" %s"+
 		" %s"+
 		" --send_file_memory_limit=%d"+
@@ -577,7 +578,7 @@ func (s *sdk) request(method, uri string, data []byte, wait bool) ([]byte, bool,
 	}
 
 	if resp.Code != api.ServerErrOK.Int() {
-		return nil, true, fmt.Errorf(resp.Message)
+		return nil, true, errors.New(resp.Message)
 	}
 
 	var by []byte
@@ -806,7 +807,7 @@ func (ws *workSDK) lockLocalSlot(usage dcSDK.JobUsage) error {
 	}
 
 	if r.Code != api.ServerErrOK.Int() {
-		return fmt.Errorf(r.Message)
+		return errors.New(r.Message)
 	}
 
 	return nil
@@ -945,6 +946,15 @@ func (wj *workJob) ExecuteRemoteTask(req *dcSDK.BKDistCommand) (*dcSDK.BKDistRes
 	return resp.Result, nil
 }
 
+// failureExitCode ensures controller communication failures are not reported as success.
+func failureExitCode(code int, err error) int {
+	if err != nil && code == 0 {
+		blog.Errorf("failureExitCode: %v", err)
+		return 1
+	}
+	return code
+}
+
 // ExecuteLocalTask do the task in local controller
 func (wj *workJob) ExecuteLocalTask(
 	commands []string,
@@ -987,13 +997,13 @@ func (wj *workJob) ExecuteLocalTask(
 	servermessage := ""
 	resp, err := wj.sdk.sdk.requestRaw("POST", fmt.Sprintf(localExecURI, wj.sdk.id), data, true)
 	if err != nil {
-		return servercode, servermessage, nil, err
+		return failureExitCode(servercode, err), servermessage, nil, err
 	}
 
 	r := &LocalTaskExecuteResp{}
 	httpcode, httpmessage, err := r.Read(resp.Reply)
 	if err != nil {
-		return httpcode, httpmessage, nil, err
+		return failureExitCode(httpcode, err), httpmessage, nil, err
 	}
 
 	return httpcode, httpmessage, &dcSDK.LocalTaskResult{
@@ -1018,7 +1028,7 @@ func (wj *workJob) ExecuteLocalTaskWithWebSocket(
 	servermessage := ""
 	session, err := sp.GetSession()
 	if err != nil && session == nil {
-		return servercode, servermessage, nil, err
+		return failureExitCode(servercode, err), servermessage, nil, err
 	}
 
 	// 准备要发送的数据
@@ -1057,11 +1067,12 @@ func (wj *workJob) ExecuteLocalTaskWithWebSocket(
 	// 发送和接收结果
 	ret := session.Send(data, true)
 	if ret == nil {
-		return servercode, servermessage, nil, fmt.Errorf("got nil result")
+		err := fmt.Errorf("got nil result")
+		return failureExitCode(servercode, err), servermessage, nil, err
 	}
 
 	if ret.Err != nil {
-		return servercode, servermessage, nil, ret.Err
+		return failureExitCode(servercode, ret.Err), servermessage, nil, ret.Err
 	}
 
 	// resp, err := wj.sdk.sdk.requestRaw("POST", fmt.Sprintf(localExeWebSocketcURI, wj.sdk.id), data, true)
@@ -1072,7 +1083,7 @@ func (wj *workJob) ExecuteLocalTaskWithWebSocket(
 	r := &LocalTaskExecuteResp{}
 	httpcode, httpmessage, err := r.Read(ret.Data)
 	if err != nil {
-		return httpcode, httpmessage, nil, err
+		return failureExitCode(httpcode, err), httpmessage, nil, err
 	}
 
 	return httpcode, httpmessage, &dcSDK.LocalTaskResult{

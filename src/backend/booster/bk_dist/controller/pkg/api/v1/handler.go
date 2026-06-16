@@ -161,7 +161,6 @@ func registerWork(req *restful.Request, resp *restful.Response) {
 		WorkID:      workInfo.WorkID(),
 		BatchLeader: leader,
 	}})
-	return
 }
 
 func unregisterWork(req *restful.Request, resp *restful.Response) {
