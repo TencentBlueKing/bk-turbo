@@ -7,10 +7,10 @@ import com.tencent.devops.common.api.pojo.Page
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.common.util.MathUtil
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_COMMON_PLAN_ID
-import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PLAN_ID_LIST_FOR_DEV_CLOUD
 import com.tencent.devops.common.util.constants.BASE_EXCLUDED_PROJECT_ID_LIST
 import com.tencent.devops.turbo.config.TodCostProperties
 import com.tencent.devops.turbo.dao.mongotemplate.TbsDaySummaryDao
+import com.tencent.devops.turbo.dao.mongotemplate.TbsPrivateDaySummaryDao
 import com.tencent.devops.turbo.dao.repository.BaseDataRepository
 import com.tencent.devops.turbo.sdk.TodCostApi
 import com.tencent.devops.turbo.vo.ProjectResourceCostVO
@@ -27,6 +27,7 @@ import java.time.LocalDate
 @Service
 class ProjectResourcesService @Autowired constructor(
     private val tbsDaySummaryDao: TbsDaySummaryDao,
+    private val tbsPrivateDaySummaryDao: TbsPrivateDaySummaryDao,
     private val baseDataRepository: BaseDataRepository
 ) {
 
@@ -49,20 +50,19 @@ class ProjectResourcesService @Autowired constructor(
         val page = pageNum?.takeIf { it > 0 }?.let { it - 1 } ?: 0
         val pageSizeNum = pageSize?.coerceAtMost(10000) ?: 100
 
-        // 获取需要过滤掉的方案id集合
-        val baseDataEntityList = baseDataRepository.findByParamCodeIn(listOf(BASE_EXCLUDED_PLAN_ID_LIST_FOR_DEV_CLOUD,
-            BASE_EXCLUDED_COMMON_PLAN_ID))
-        val filterPlanIds = baseDataEntityList.flatMap { it.paramValue.split(",") }.toSet() ?: emptySet()
-
-        // 获取需要过滤掉的项目id集合
-        val projectExcludedEntity = baseDataRepository.findFirstByParamCode(BASE_EXCLUDED_PROJECT_ID_LIST)
-        val filterProjectIds = projectExcludedEntity?.paramValue?.split(",")?.toSet() ?: emptySet()
+        // 成本分摊时只过滤内部测试方案，不再过滤 DevCloud 专用方案
+        // 因为同一方案可能既用私有资源又用公共资源，需要按 总资源 - 私有资源 计算实际公共资源
+        val filterPlanIds = getFilterIds(BASE_EXCLUDED_COMMON_PLAN_ID)
+        val filterProjectIds = getFilterIds(BASE_EXCLUDED_PROJECT_ID_LIST)
 
         val today = LocalDate.now()
+        val start = startDate ?: today.minusMonths(1).withDayOfMonth(1).toString()
+        val end = endDate ?: today.withDayOfMonth(1).minusDays(1).toString()
 
+        // 查询总资源数据（分页，按项目+引擎分组汇总）
         val summaryEntityList = tbsDaySummaryDao.findByDay(
-            startDate = startDate ?: today.minusMonths(1).withDayOfMonth(1).toString(),
-            endDate = endDate ?: today.withDayOfMonth(1).minusDays(1).toString(),
+            startDate = start,
+            endDate = end,
             filterPlanIdNin = filterPlanIds,
             filterProjectIdNin = filterProjectIds,
             pageNum = page,
@@ -70,14 +70,36 @@ class ProjectResourcesService @Autowired constructor(
         )
         logger.info("summaryEntityList size: ${summaryEntityList.size}")
 
-        val resultList = summaryEntityList.filter { !(it.projectId.isNullOrBlank()) }.map {
+        // 查询私有资源数据（不分页，按项目+引擎分组汇总），用于从总资源中扣除
+        val privateEntityList = tbsPrivateDaySummaryDao.findByDay(
+            startDate = start,
+            endDate = end,
+            filterPlanIdNin = filterPlanIds,
+            filterProjectIdNin = filterProjectIds
+        )
+        logger.info("privateSummaryEntityList size: ${privateEntityList.size}")
+
+        // 构建私有资源 Map: key = "projectId|engineCode" -> totalTimeWithCpu
+        val privateMap = privateEntityList.filter { !it.projectId.isNullOrBlank() }.associate {
+            "${it.projectId}|${it.engineCode}" to (it.totalTimeWithCpu ?: 0.0)
+        }
+
+        // 从总资源中减去私有资源，得到实际使用的公共资源
+        val resultList = summaryEntityList.filter { !it.projectId.isNullOrBlank() }.mapNotNull {
+            val key = "${it.projectId}|${it.engineCode}"
+            val totalTimeWithCpu = it.totalTimeWithCpu ?: 0.0
+            val privateTimeWithCpu = privateMap[key] ?: 0.0
+            val publicTimeWithCpu = totalTimeWithCpu - privateTimeWithCpu
+            // 公共资源为0或负数的项目不需要分摊成本
+            if (publicTimeWithCpu <= 0) return@mapNotNull null
+
             with(it) {
                 ProjectResourceUsageVO(
                     projectId = projectId!!,
                     projectName = projectName,
                     engineCode = engineCode,
                     // 秒转分钟
-                    totalTimeWithCpu = MathUtil.secondsToMinutes(totalTimeWithCpu!!).toDouble(),
+                    totalTimeWithCpu = MathUtil.secondsToMinutes(publicTimeWithCpu).toDouble(),
                     productId = productId,
                     bgName = bgName,
                     bgId = bgId,

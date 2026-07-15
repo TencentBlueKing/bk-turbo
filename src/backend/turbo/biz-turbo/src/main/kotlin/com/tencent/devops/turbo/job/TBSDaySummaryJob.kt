@@ -5,6 +5,7 @@ import com.tencent.devops.common.util.DateTimeUtils
 import com.tencent.devops.common.util.JsonUtil
 import com.tencent.devops.project.api.service.ServiceProjectResource
 import com.tencent.devops.project.pojo.ProjectVO
+import com.tencent.devops.turbo.dao.mongotemplate.TbsPrivateDaySummaryDao
 import com.tencent.devops.turbo.dao.repository.TbsDaySummaryRepository
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
 import com.tencent.devops.turbo.dao.repository.TurboPlanRepository
@@ -24,6 +25,7 @@ import java.time.LocalDateTime
 class TBSDaySummaryJob @Autowired constructor(
     private val client: Client,
     private val tbsDaySummaryRepository: TbsDaySummaryRepository,
+    private val tbsPrivateDaySummaryDao: TbsPrivateDaySummaryDao,
     private val turboEngineConfigRepository: TurboEngineConfigRepository,
     private val turboPlanRepository: TurboPlanRepository
 ) : Job {
@@ -50,6 +52,8 @@ class TBSDaySummaryJob @Autowired constructor(
 
         // 清理待统计的数据，防止重复统计
         tbsDaySummaryRepository.removeAllByDay(statisticsDateStr)
+        // 清理待统计的私有资源数据，防止重复统计
+        tbsPrivateDaySummaryDao.removeAllByDay(statisticsDateStr)
 
         val projectVOMap =  mutableMapOf<String, ProjectVO>()
 
@@ -74,55 +78,97 @@ class TBSDaySummaryJob @Autowired constructor(
                 return@forEach
             }
 
-            // 把TBS的接口数据整理成entity
-            val summaryEntityList = this.dto2SummaryEntityList(daySummaryList = daySummaryDtoList)
-            val summaryListList = summaryEntityList.chunked(PAGE_SIZE)
-            for (summaryList in summaryListList) {
-
-                // 根据planId批量获取方案信息
-                val planIds = summaryList.map { it.planId }.toSet()
-                val turboPlanList = turboPlanRepository.findByIdIn(planIds.toList())
-                logger.info("turboPlanRepository.findByIdIn result size: ${turboPlanList.size}")
-                val planEntityMap = turboPlanList.associateBy { it.id }
-
-                // 赋值plan信息和项目id
-                for (summaryEntity in summaryList) {
-                    val planEntity = planEntityMap[summaryEntity.planId]
-                    summaryEntity.planCreator = planEntity?.createdBy
-                    summaryEntity.planName = planEntity?.planName
-                    summaryEntity.projectId = planEntity?.projectId
-                }
-
-                // 取出项目ID集合用于获取项目组织架构信息
-                val projectIdSet = turboPlanList.map { it.projectId }.toSet()
-                val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
-
-                // 获取项目信息清单
-                val projectVOList = this.getProjectVOListByProjectIds(projectIds = notInProjectMapKeySet.toList())
-                if (projectVOList.isNotEmpty()) {
-                    projectVOMap.putAll(projectVOList.associateBy { it.englishName })
-                }
-
-                for (it in summaryList) {
-                    val projectVO = projectVOMap[it.projectId]
-
-                    it.projectName = projectVO?.projectName
-                    it.bgName = projectVO?.bgName
-                    it.bgId = projectVO?.bgId?.toInt()
-                    it.businessLineName = projectVO?.businessLineName
-                    it.businessLineId = projectVO?.businessLineId?.toInt()
-                    it.deptName = projectVO?.deptName
-                    it.deptId = projectVO?.deptId?.toInt()
-                    it.centerName = projectVO?.centerName
-                    it.centerId = projectVO?.centerId?.toInt()
-                    it.productId = projectVO?.productId
-                }
-            }
+            // 把TBS的接口数据整理成entity并关联方案和项目信息
+            val summaryEntityList = this.enrichSummaryEntities(daySummaryDtoList, projectVOMap)
 
             tbsDaySummaryRepository.saveAll(summaryEntityList)
             logger.info("save summary entity size: ${summaryEntityList.size}")
         }
+
+        // 采集私有资源统计数据
+        // 私有资源接口按 engine 维度查询（disttask/distcc），需要从 engineConfig 推断并去重
+        val privateEngineCodes = engineConfigEntities.map {
+            if (it.engineCode.contains("disttask")) "disttask" else it.engineCode
+        }.toSet()
+        privateEngineCodes.forEach { engineCode ->
+            logger.info("query private summary for engineCode: $engineCode")
+            val privateDtoList = try {
+                TBSSdkApi.queryTBSPrivateSummary(
+                    engineCode = engineCode,
+                    queryParam = mapOf(
+                        "day" to statisticsDateStr
+                    )
+                )
+            } catch (e: Exception) {
+                logger.error("queryTBSPrivateSummary error: ${e.message}")
+                return@forEach
+            }
+
+            logger.info("privateSummaryDtoList size: ${privateDtoList.size}")
+            if (privateDtoList.isEmpty()) {
+                logger.warn("queryTBSPrivateSummary result is empty! engineCode: $engineCode")
+                return@forEach
+            }
+
+            val privateEntityList = this.enrichSummaryEntities(privateDtoList, projectVOMap)
+            tbsPrivateDaySummaryDao.saveAll(privateEntityList)
+        }
+
         logger.info("TBS day summary job execution completed!")
+    }
+
+    /**
+     * 将TBS接口返回的DTO列表转为实体，并关联方案信息和项目组织架构信息
+     */
+    private fun enrichSummaryEntities(
+        daySummaryDtoList: List<TBSDaySummaryDto>,
+        projectVOMap: MutableMap<String, ProjectVO>
+    ): List<TTbsDaySummaryEntity> {
+        // 把TBS的接口数据整理成entity
+        val summaryEntityList = this.dto2SummaryEntityList(daySummaryList = daySummaryDtoList)
+        val summaryListList = summaryEntityList.chunked(PAGE_SIZE)
+        for (summaryList in summaryListList) {
+
+            // 根据planId批量获取方案信息
+            val planIds = summaryList.map { it.planId }.toSet()
+            val turboPlanList = turboPlanRepository.findByIdIn(planIds.toList())
+            logger.info("turboPlanRepository.findByIdIn result size: ${turboPlanList.size}")
+            val planEntityMap = turboPlanList.associateBy { it.id }
+
+            // 赋值plan信息和项目id
+            for (summaryEntity in summaryList) {
+                val planEntity = planEntityMap[summaryEntity.planId]
+                summaryEntity.planCreator = planEntity?.createdBy
+                summaryEntity.planName = planEntity?.planName
+                summaryEntity.projectId = planEntity?.projectId
+            }
+
+            // 取出项目ID集合用于获取项目组织架构信息
+            val projectIdSet = turboPlanList.map { it.projectId }.toSet()
+            val notInProjectMapKeySet = projectIdSet.subtract(projectVOMap.keys)
+
+            // 获取项目信息清单
+            val projectVOList = this.getProjectVOListByProjectIds(projectIds = notInProjectMapKeySet.toList())
+            if (projectVOList.isNotEmpty()) {
+                projectVOMap.putAll(projectVOList.associateBy { it.englishName })
+            }
+
+            for (it in summaryList) {
+                val projectVO = projectVOMap[it.projectId]
+
+                it.projectName = projectVO?.projectName
+                it.bgName = projectVO?.bgName
+                it.bgId = projectVO?.bgId?.toInt()
+                it.businessLineName = projectVO?.businessLineName
+                it.businessLineId = projectVO?.businessLineId?.toInt()
+                it.deptName = projectVO?.deptName
+                it.deptId = projectVO?.deptId?.toInt()
+                it.centerName = projectVO?.centerName
+                it.centerId = projectVO?.centerId?.toInt()
+                it.productId = projectVO?.productId
+            }
+        }
+        return summaryEntityList
     }
 
     /**
