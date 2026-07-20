@@ -570,6 +570,18 @@ func MicrosecondsToTime(us int64) time.Time {
 	return time.Unix(0, us*1000)
 }
 
+func (was *WorkAnalysisStatus) resolveSessionIP(ubainfo UbaInfo, session Session) string {
+	if sip, ok := ubainfo.SessionMap[session.Name]; ok {
+		return sip
+	}
+	for key, mapIP := range ubainfo.SessionMap {
+		if strings.Contains(session.FullName, key) || strings.Contains(session.Name, key) {
+			return mapIP
+		}
+	}
+	return ""
+}
+
 func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid string) error {
 	blog.Infof("ubatrace: start read UBA file: %s", ubainfo.TraceFile)
 	traceView, err := ReadUBAFile(ubainfo.TraceFile)
@@ -603,10 +615,7 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 	blog.Infof("ubatrace: total processes across all sessions: %d", totalProcesses)
 
 	for _, s := range traceView.Sessions {
-		ip := ""
-		if sip, ok := ubainfo.SessionMap[s.Name]; ok {
-			ip = sip
-		}
+		ip := was.resolveSessionIP(ubainfo, s)
 		for pi, processor := range s.Processors {
 			for proci, process := range processor.Processes {
 				flag := fmt.Sprintf("%s_%d_%s", s.FullName, process.ID, process.Description)
@@ -747,10 +756,19 @@ func guessCommand(describe string) string {
 
 // DumpJobs encode WorkAnalysisStatus into json bytes
 func (was *WorkAnalysisStatus) DumpJobs(taskid, workid string) []byte {
-	if len(was.ubainfos) > 0 {
+	// 先在读锁内复制一份快照, 避免与 SetUbaInfo 的写操作产生 map 并发读写;
+	// 不能在持锁期间调用 readUBAFile, 因为其内部 Update 会申请写锁(RWMutex 不可重入)
+	was.mutex.RLock()
+	ubainfos := make([]UbaInfo, 0, len(was.ubainfos))
+	for _, ubainfo := range was.ubainfos {
+		ubainfos = append(ubainfos, ubainfo)
+	}
+	was.mutex.RUnlock()
+
+	if len(ubainfos) > 0 {
 		blog.Infof("ubatrace: len(was.ubainfos) > 0")
-		for _, ubainfo := range was.ubainfos {
-			was.readUBAFile(ubainfo, taskid, workid)
+		for _, ubainfo := range ubainfos {
+			_ = was.readUBAFile(ubainfo, taskid, workid)
 		}
 	}
 
