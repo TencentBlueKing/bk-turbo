@@ -414,7 +414,8 @@ var (
 		".S": ".s",
 	}
 
-	// skip options and skip its value in the next index
+	// Exact-match options whose value is the next argument; skip both.
+	// Example: "--sysroot /path" is split into "--sysroot" and "/path".
 	skipLocalOptionsWithValue = map[string]bool{
 		"-D":                 true,
 		"-I":                 true,
@@ -432,9 +433,11 @@ var (
 		"-isystem":           true,
 		"-iwithprefixbefore": true,
 		"-idirafter":         true,
+		"--sysroot":          true,
 	}
 
-	// skip options without value
+	// Exact-match options without a value; skip the option only.
+	// Example: "-nostdinc".
 	skipLocalOptions = map[string]bool{
 		"-undef":      true,
 		"-nostdinc":   true,
@@ -445,7 +448,8 @@ var (
 		"-MP":         true,
 	}
 
-	// skip options start with flags
+	// Prefix-match options with an attached value; skip the matched argument only.
+	// Example: "--sysroot=/path" is a single argument.
 	skipLocalOptionStartWith = map[string]bool{
 		"-Wp,":            true,
 		"-Wl,":            true,
