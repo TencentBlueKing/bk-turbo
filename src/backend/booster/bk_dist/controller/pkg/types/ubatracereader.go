@@ -152,6 +152,7 @@ type Process struct {
 	Stop            uint64
 	Description     string
 	ReturnedReason  string
+	KillReason      string
 	Breadcrumbs     string
 	BitmapDirty     bool
 	Type            ProcessType
@@ -264,6 +265,7 @@ type WorkRecordLogEntry struct {
 // WorkRecord represents a work record
 type WorkRecord struct {
 	Description  string
+	Color        uint32
 	Start        uint64
 	Stop         uint64
 	Entries      []WorkRecordLogEntry
@@ -485,6 +487,7 @@ type TraceView struct {
 	SystemStartTimeUs          uint64
 	Frequency                  uint64
 	LastKillProcessTime        uint64
+	LastKillReason             string
 	LastSpawningDelayStartTime uint64
 	LastSpawningDelayEndTime   uint64
 	TotalProcessActiveCount    uint32
@@ -2455,7 +2458,11 @@ func (tr *TraceReader) handleBeginWork(out *TraceView, reader *BinaryReader, tim
 		stringIndex = reader.Read7BitEncoded()
 	}
 
-	if int(stringIndex) < len(out.Strings) {
+	if out.Version >= 38 {
+		record.Color = reader.ReadU32()
+	}
+
+	if stringIndex < uint64(len(out.Strings)) {
 		record.Description = out.Strings[stringIndex]
 	}
 
@@ -2956,8 +2963,24 @@ func (tr *TraceReader) handleSchedulerUpdate(out *TraceView, reader *BinaryReade
 
 func (tr *TraceReader) handleSchedulerKillProcess(out *TraceView, reader *BinaryReader, time uint64) bool {
 	processId := reader.ReadU32()
-	_ = processId // 使用_忽略未使用的变量
+	killReason := ""
+	if out.Version >= 52 {
+		stringIndex := reader.Read7BitEncoded()
+		if stringIndex < uint64(len(out.Strings)) {
+			killReason = out.Strings[stringIndex]
+		}
+	}
+
 	out.LastKillProcessTime = time
+	out.LastKillReason = killReason
+	if location, ok := tr.activeProcesses[processId]; ok {
+		session := tr.GetSession(out, location.SessionIndex)
+		if session != nil &&
+			int(location.ProcessorIndex) < len(session.Processors) &&
+			int(location.ProcessIndex) < len(session.Processors[location.ProcessorIndex].Processes) {
+			session.Processors[location.ProcessorIndex].Processes[location.ProcessIndex].KillReason = killReason
+		}
+	}
 	return true
 }
 
