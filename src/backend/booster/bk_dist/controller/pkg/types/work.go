@@ -570,18 +570,6 @@ func MicrosecondsToTime(us int64) time.Time {
 	return time.Unix(0, us*1000)
 }
 
-func (was *WorkAnalysisStatus) resolveSessionIP(ubainfo UbaInfo, session Session) string {
-	if sip, ok := ubainfo.SessionMap[session.Name]; ok {
-		return sip
-	}
-	for key, mapIP := range ubainfo.SessionMap {
-		if strings.Contains(session.FullName, key) || strings.Contains(session.Name, key) {
-			return mapIP
-		}
-	}
-	return ""
-}
-
 func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid string) error {
 	blog.Infof("ubatrace: start read UBA file: %s", ubainfo.TraceFile)
 	traceView, err := ReadUBAFile(ubainfo.TraceFile)
@@ -615,7 +603,10 @@ func (was *WorkAnalysisStatus) readUBAFile(ubainfo UbaInfo, taskid, workid strin
 	blog.Infof("ubatrace: total processes across all sessions: %d", totalProcesses)
 
 	for _, s := range traceView.Sessions {
-		ip := was.resolveSessionIP(ubainfo, s)
+		ip := ""
+		if sip, ok := ubainfo.SessionMap[s.Name]; ok {
+			ip = sip
+		}
 		for pi, processor := range s.Processors {
 			for proci, process := range processor.Processes {
 				flag := fmt.Sprintf("%s_%d_%s", s.FullName, process.ID, process.Description)

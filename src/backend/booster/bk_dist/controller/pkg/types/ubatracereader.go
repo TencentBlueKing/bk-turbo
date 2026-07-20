@@ -1439,6 +1439,7 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 	processor := &session.Processors[0]
 	processor.Processes = append(processor.Processes, Process{
 		ID:          id,
+		Type:        processType,
 		Description: description,
 		Start:       time,
 		Stop:        ^uint64(0), // Max uint64
