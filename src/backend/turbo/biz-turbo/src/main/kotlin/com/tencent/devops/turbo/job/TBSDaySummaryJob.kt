@@ -3,9 +3,11 @@ package com.tencent.devops.turbo.job
 import com.tencent.devops.common.client.Client
 import com.tencent.devops.common.util.DateTimeUtils
 import com.tencent.devops.common.util.JsonUtil
+import com.tencent.devops.common.util.constants.STAT_PRIVATE_ENGINE_CODE
 import com.tencent.devops.project.api.service.ServiceProjectResource
 import com.tencent.devops.project.pojo.ProjectVO
 import com.tencent.devops.turbo.dao.mongotemplate.TbsPrivateDaySummaryDao
+import com.tencent.devops.turbo.dao.repository.BaseDataRepository
 import com.tencent.devops.turbo.dao.repository.TbsDaySummaryRepository
 import com.tencent.devops.turbo.dao.repository.TurboEngineConfigRepository
 import com.tencent.devops.turbo.dao.repository.TurboPlanRepository
@@ -24,6 +26,7 @@ import java.time.LocalDateTime
 @Component
 class TBSDaySummaryJob @Autowired constructor(
     private val client: Client,
+    private val baseDataRepository: BaseDataRepository,
     private val tbsDaySummaryRepository: TbsDaySummaryRepository,
     private val tbsPrivateDaySummaryDao: TbsPrivateDaySummaryDao,
     private val turboEngineConfigRepository: TurboEngineConfigRepository,
@@ -86,10 +89,9 @@ class TBSDaySummaryJob @Autowired constructor(
         }
 
         // 采集私有资源统计数据
-        // 私有资源接口按 engine 维度查询（disttask/distcc），需要从 engineConfig 推断并去重
-        val privateEngineCodes = engineConfigEntities.map {
-            if (it.engineCode.contains("disttask")) "disttask" else it.engineCode
-        }.toSet()
+        // 从配置表获取需要统计私有资源的引擎code
+        val privateEngineCodes = baseDataRepository.findByParamCode(STAT_PRIVATE_ENGINE_CODE)
+            .map { it.paramValue }.toSet()
         privateEngineCodes.forEach { engineCode ->
             logger.info("query private summary for engineCode: $engineCode")
             val privateDtoList = try {
