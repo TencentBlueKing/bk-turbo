@@ -59,6 +59,11 @@ class ProjectResourcesService @Autowired constructor(
         val start = startDate ?: today.minusMonths(1).withDayOfMonth(1).toString()
         val end = endDate ?: today.withDayOfMonth(1).minusDays(1).toString()
 
+        logger.info(
+            "querySummary start, dateRange=[$start, $end], page=$page, pageSize=$pageSizeNum, " +
+                "filterPlanIdsCount=${filterPlanIds.size}, filterProjectIdsCount=${filterProjectIds.size}"
+        )
+
         // 查询总资源数据（分页，按项目+引擎分组汇总）
         val summaryEntityList = tbsDaySummaryDao.findByDay(
             startDate = start,
@@ -68,7 +73,11 @@ class ProjectResourcesService @Autowired constructor(
             pageNum = page,
             pageSize = pageSizeNum
         )
-        logger.info("summaryEntityList size: ${summaryEntityList.size}")
+        val totalAllUsage = summaryEntityList.sumOf { it.totalTimeWithCpu ?: 0.0 }
+        logger.info(
+            "querySummary total resources, recordCount=${summaryEntityList.size}, " +
+                "totalTimeWithCpuSum=${"%.2f".format(totalAllUsage)}s"
+        )
 
         // 查询私有资源数据（不分页，按项目+引擎分组汇总），用于从总资源中扣除
         val privateEntityList = tbsPrivateDaySummaryDao.findByDay(
@@ -77,7 +86,11 @@ class ProjectResourcesService @Autowired constructor(
             filterPlanIdNin = filterPlanIds,
             filterProjectIdNin = filterProjectIds
         )
-        logger.info("privateSummaryEntityList size: ${privateEntityList.size}")
+        val privateAllUsage = privateEntityList.sumOf { it.totalTimeWithCpu ?: 0.0 }
+        logger.info(
+            "querySummary private resources, recordCount=${privateEntityList.size}, " +
+                "privateTimeWithCpuSum=${"%.2f".format(privateAllUsage)}s"
+        )
 
         // 构建私有资源 Map: key = "projectId|engineCode" -> totalTimeWithCpu
         val privateMap = privateEntityList.filter { !it.projectId.isNullOrBlank() }.associate {
@@ -85,13 +98,22 @@ class ProjectResourcesService @Autowired constructor(
         }
 
         // 从总资源中减去私有资源，得到实际使用的公共资源
+        var filteredCount = 0
         val resultList = summaryEntityList.filter { !it.projectId.isNullOrBlank() }.mapNotNull {
             val key = "${it.projectId}|${it.engineCode}"
             val totalTimeWithCpu = it.totalTimeWithCpu ?: 0.0
             val privateTimeWithCpu = privateMap[key] ?: 0.0
             val publicTimeWithCpu = totalTimeWithCpu - privateTimeWithCpu
             // 公共资源为0或负数的项目不需要分摊成本
-            if (publicTimeWithCpu <= 0) return@mapNotNull null
+            if (publicTimeWithCpu <= 0) {
+                filteredCount++
+                logger.info(
+                    "querySummary filtered: projectId=${it.projectId}, engineCode=${it.engineCode}, " +
+                        "total=${"%.2f".format(totalTimeWithCpu)}s, private=${"%.2f".format(privateTimeWithCpu)}s, " +
+                        "public=${"%.2f".format(publicTimeWithCpu)}s"
+                )
+                return@mapNotNull null
+            }
 
             with(it) {
                 ProjectResourceUsageVO(
