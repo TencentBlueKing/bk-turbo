@@ -55,6 +55,15 @@ const (
 	TraceTypeSchedulerUpdate
 	TraceTypeSchedulerKillProcess
 	TraceTypeSessionInfo
+	TraceTypeStringAdd
+	TraceTypeStatusUpdate2
+	TraceTypeTableUpdate
+	TraceTypeProcessRace
+)
+
+const (
+	TraceReadCompatibilityVersion = 6
+	TraceVersionLatest            = 52
 )
 
 // TraceTypeNames maps trace type constants to their string names
@@ -98,6 +107,17 @@ var TraceTypeNames = map[uint8]string{
 	TraceTypeSchedulerUpdate:           "SchedulerUpdate",
 	TraceTypeSchedulerKillProcess:      "SchedulerKillProcess",
 	TraceTypeSessionInfo:               "SessionInfo",
+	TraceTypeStringAdd:                 "StringAdd",
+	TraceTypeStatusUpdate2:             "StatusUpdate2",
+	TraceTypeTableUpdate:               "TableUpdate",
+	TraceTypeProcessRace:               "ProcessRace",
+}
+
+// Table mirrors uba::TraceView::Table for UE 5.8+ trace events.
+type Table struct {
+	RowCharWidth uint32
+	RowMaxCount  uint32
+	Items        []string
 }
 
 // GUID represents a Windows GUID
@@ -132,6 +152,7 @@ type Process struct {
 	Stop            uint64
 	Description     string
 	ReturnedReason  string
+	KillReason      string
 	Breadcrumbs     string
 	BitmapDirty     bool
 	Type            ProcessType
@@ -244,6 +265,7 @@ type WorkRecordLogEntry struct {
 // WorkRecord represents a work record
 type WorkRecord struct {
 	Description  string
+	Color        uint32
 	Start        uint64
 	Stop         uint64
 	Entries      []WorkRecordLogEntry
@@ -313,6 +335,9 @@ type ProcessStats struct {
 	FileTable          Timer
 	DirTable           Timer
 	LongPathName       Timer
+	CreateSharedMemory Timer
+	CommitSharedMemory Timer
+	GetSharedMemory    Timer
 
 	// Fixed fields
 	StartupTime       uint64
@@ -399,11 +424,16 @@ type KernelStats struct {
 	CloseHandle        ExtendedTimer // ExtendedTimer
 	TraverseDir        ExtendedTimer // ExtendedTimer
 	VirtualAlloc       ExtendedTimer // ExtendedTimer
+	MemoryCompress     TimeAndBytes  // TimeAndBytes (v41+)
 	RenameFile         ExtendedTimer
 	RenameFileFallback ExtendedTimer
 	CopyFile           ExtendedTimer
 	MoveFile           ExtendedTimer
 	DeleteFile         ExtendedTimer
+	VirtualFree        ExtendedTimer // v50+
+	VirtualAlloc2      ExtendedTimer // v50+
+	MapViewOfFile3     TimeAndBytes  // v50+
+	UnmapViewOfFile2   ExtendedTimer // v50+
 }
 
 // CacheStats represents cache statistics - complete implementation
@@ -450,12 +480,14 @@ type TraceView struct {
 	WorkTracks                 []WorkTrack
 	Strings                    []string
 	StatusMap                  map[uint64]StatusUpdate
+	Tables                     map[uint32]Table
 	CacheWrites                map[uint32]CacheWrite
 	RealStartTime              uint64
 	StartTime                  uint64
 	SystemStartTimeUs          uint64
 	Frequency                  uint64
 	LastKillProcessTime        uint64
+	LastKillReason             string
 	LastSpawningDelayStartTime uint64
 	LastSpawningDelayEndTime   uint64
 	TotalProcessActiveCount    uint32
@@ -881,6 +913,15 @@ func (r *BinaryReader) ReadProcessStats(version uint32) ProcessStats {
 		if (bits & (1 << 24)) != 0 {
 			stats.LongPathName = r.ReadTimer()
 		}
+		if (bits & (1 << 25)) != 0 {
+			stats.CreateSharedMemory = r.ReadTimer()
+		}
+		if (bits & (1 << 26)) != 0 {
+			stats.CommitSharedMemory = r.ReadTimer()
+		}
+		if (bits & (1 << 27)) != 0 {
+			stats.GetSharedMemory = r.ReadTimer()
+		}
 	}
 
 	// Read the fixed fields at the end
@@ -1234,19 +1275,34 @@ func (r *BinaryReader) ReadKernelStats(version uint32) KernelStats {
 			stats.VirtualAlloc = r.ReadExtendedTimer(version)
 		}
 		if (bits & (1 << 14)) != 0 {
-			stats.RenameFile = r.ReadExtendedTimer(version)
+			stats.MemoryCompress = r.ReadTimeAndBytes(version)
 		}
 		if (bits & (1 << 15)) != 0 {
-			stats.RenameFileFallback = r.ReadExtendedTimer(version)
+			stats.RenameFile = r.ReadExtendedTimer(version)
 		}
 		if (bits & (1 << 16)) != 0 {
-			stats.CopyFile = r.ReadExtendedTimer(version)
+			stats.RenameFileFallback = r.ReadExtendedTimer(version)
 		}
 		if (bits & (1 << 17)) != 0 {
-			stats.MoveFile = r.ReadExtendedTimer(version)
+			stats.CopyFile = r.ReadExtendedTimer(version)
 		}
 		if (bits & (1 << 18)) != 0 {
+			stats.MoveFile = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 19)) != 0 {
 			stats.DeleteFile = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 20)) != 0 {
+			stats.VirtualFree = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 21)) != 0 {
+			stats.VirtualAlloc2 = r.ReadExtendedTimer(version)
+		}
+		if (bits & (1 << 22)) != 0 {
+			stats.MapViewOfFile3 = r.ReadTimeAndBytes(version)
+		}
+		if (bits & (1 << 23)) != 0 {
+			stats.UnmapViewOfFile2 = r.ReadExtendedTimer(version)
 		}
 	}
 
@@ -1386,6 +1442,7 @@ func (tr *TraceReader) ProcessBegin(out *TraceView, sessionIndex, id uint32, tim
 	processor := &session.Processors[0]
 	processor.Processes = append(processor.Processes, Process{
 		ID:          id,
+		Type:        processType,
 		Description: description,
 		Start:       time,
 		Stop:        ^uint64(0), // Max uint64
@@ -1459,20 +1516,17 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 	traceType := reader.ReadByte()
 	var time uint64 = 0
 
-	blog.Debugf("ubatrace: got trace type: %s", TraceTypeNames[traceType])
+	traceTypeName, knownTraceType := TraceTypeNames[traceType]
+	if knownTraceType {
+		blog.Debugf("ubatrace: got trace type: %s", traceTypeName)
+	} else {
+		blog.Infof("ubatrace: Processing unknown trace type: %d", traceType)
+		return false
+	}
 
 	// Count trace types
 	if traceTypeCounts != nil {
 		traceTypeCounts[traceType]++
-	}
-
-	// Print the trace type for each message
-	if _, exists := TraceTypeNames[traceType]; exists {
-		if TraceTypeProgressUpdate != traceType {
-		}
-	} else {
-		blog.Infof("ubatrace: Processing unknown trace type: %d", traceType)
-		return false
 	}
 
 	if out.Version >= 15 && traceType != TraceTypeString && traceType != TraceTypeDriveUpdate {
@@ -1562,6 +1616,14 @@ func (tr *TraceReader) ReadTrace(out *TraceView, reader *BinaryReader, maxTime u
 		return tr.handleSchedulerKillProcess(out, reader, time)
 	case TraceTypeSessionInfo:
 		return tr.handleSessionInfo(out, reader)
+	case TraceTypeStringAdd:
+		return tr.handleStringAdd(out, reader)
+	case TraceTypeStatusUpdate2:
+		return tr.handleStatusUpdate2(out, reader)
+	case TraceTypeTableUpdate:
+		return tr.handleTableUpdate(out, reader)
+	case TraceTypeProcessRace:
+		return tr.handleProcessRace(out, reader)
 	}
 
 	return true
@@ -2396,7 +2458,11 @@ func (tr *TraceReader) handleBeginWork(out *TraceView, reader *BinaryReader, tim
 		stringIndex = reader.Read7BitEncoded()
 	}
 
-	if int(stringIndex) < len(out.Strings) {
+	if out.Version >= 38 {
+		record.Color = reader.ReadU32()
+	}
+
+	if stringIndex < uint64(len(out.Strings)) {
 		record.Description = out.Strings[stringIndex]
 	}
 
@@ -2897,8 +2963,24 @@ func (tr *TraceReader) handleSchedulerUpdate(out *TraceView, reader *BinaryReade
 
 func (tr *TraceReader) handleSchedulerKillProcess(out *TraceView, reader *BinaryReader, time uint64) bool {
 	processId := reader.ReadU32()
-	_ = processId // 使用_忽略未使用的变量
+	killReason := ""
+	if out.Version >= 52 {
+		stringIndex := reader.Read7BitEncoded()
+		if stringIndex < uint64(len(out.Strings)) {
+			killReason = out.Strings[stringIndex]
+		}
+	}
+
 	out.LastKillProcessTime = time
+	out.LastKillReason = killReason
+	if location, ok := tr.activeProcesses[processId]; ok {
+		session := tr.GetSession(out, location.SessionIndex)
+		if session != nil &&
+			int(location.ProcessorIndex) < len(session.Processors) &&
+			int(location.ProcessIndex) < len(session.Processors[location.ProcessorIndex].Processes) {
+			session.Processors[location.ProcessorIndex].Processes[location.ProcessIndex].KillReason = killReason
+		}
+	}
 	return true
 }
 
@@ -2909,6 +2991,66 @@ func (tr *TraceReader) handleSessionInfo(out *TraceView, reader *BinaryReader) b
 	_ = session
 	_ = infoStr
 
+	return true
+}
+
+func (tr *TraceReader) handleStringAdd(out *TraceView, reader *BinaryReader) bool {
+	return tr.handleString(out, reader)
+}
+
+func (tr *TraceReader) handleStatusUpdate2(out *TraceView, reader *BinaryReader) bool {
+	row := reader.Read7BitEncoded()
+	column := reader.Read7BitEncoded()
+	key := (row << 32) | column
+	stringIndex := reader.Read7BitEncoded()
+
+	if out.StatusMap == nil {
+		out.StatusMap = make(map[uint64]StatusUpdate)
+	}
+
+	status := StatusUpdate{Type: 0}
+	if int(stringIndex) < len(out.Strings) {
+		status.Text = out.Strings[stringIndex]
+	}
+	out.StatusMap[key] = status
+	return true
+}
+
+func (tr *TraceReader) handleTableUpdate(out *TraceView, reader *BinaryReader) bool {
+	name := uint32(reader.Read7BitEncoded())
+	if out.Tables == nil {
+		out.Tables = make(map[uint32]Table)
+	}
+
+	table := Table{
+		RowCharWidth: uint32(reader.Read7BitEncoded()),
+		RowMaxCount:  uint32(reader.Read7BitEncoded()),
+	}
+	itemCount := uint32(reader.Read7BitEncoded())
+	table.Items = make([]string, itemCount)
+	for i := uint32(0); i < itemCount; i++ {
+		stringIndex := reader.Read7BitEncoded()
+		if int(stringIndex) < len(out.Strings) {
+			table.Items[i] = out.Strings[stringIndex]
+		}
+	}
+	out.Tables[name] = table
+	return true
+}
+
+func (tr *TraceReader) handleProcessRace(out *TraceView, reader *BinaryReader) bool {
+	id := reader.ReadU32()
+	_ = reader.ReadU32() // remoteId
+
+	if location, exists := tr.activeProcesses[id]; exists {
+		session := tr.GetSession(out, location.SessionIndex)
+		if session != nil &&
+			int(location.ProcessorIndex) < len(session.Processors) &&
+			int(location.ProcessIndex) < len(session.Processors[location.ProcessorIndex].Processes) {
+			// UE marks the process as racing; stats parsing only needs to consume the event.
+			_ = session.Processors[location.ProcessorIndex].Processes[location.ProcessIndex]
+		}
+	}
 	return true
 }
 
@@ -2925,6 +3067,13 @@ func formatTimeUS(timeus int64) string {
 
 // ReadUBAFile reads and parses a UBA trace file
 func ReadUBAFile(filename string) (*TraceView, error) {
+	return readUBAFileWithRetry(filename, 20)
+}
+
+func readUBAFileWithRetry(filename string, maxRetries int) (*TraceView, error) {
+	if maxRetries <= 0 {
+		maxRetries = 1
+	}
 	blog.Infof("ubatrace: start read UBA file: %s", filename)
 
 	// Track trace type counts
@@ -2935,12 +3084,14 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 	var file *os.File
 	var err error
 	succeed := false
-	for trycounter < 20 {
+	for trycounter < maxRetries {
 		trycounter++
 		file, err = os.Open(filename)
 		if err != nil {
-			blog.Infof("failed to open file:%s with try:%d with error: %v", filename, trycounter, err)
-			time.Sleep(time.Second * 1)
+			if maxRetries > 1 {
+				blog.Infof("failed to open file:%s with try:%d with error: %v", filename, trycounter, err)
+				time.Sleep(time.Second * 1)
+			}
 			continue
 		} else {
 			succeed = true
@@ -2965,20 +3116,20 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 	// Create binary reader
 	reader := NewBinaryReader(data)
 
-	// Read the header
+	// Read UBA file header (matches Epic UbaTraceReader::ReadFile)
 	if len(data) < 16 {
 		return nil, fmt.Errorf("file too small to contain valid UBA header")
 	}
 
-	// Read UBA file header (based on C++ implementation)
-	magic := reader.ReadU32()
-	blog.Infof("ubatrace: Magic number: 0x%08X", magic)
-	if magic != 0x41425555 { // "UBA\0" in little endian
-		blog.Infof("ubatrace: Warning: Unexpected magic number: 0x%08X (expected 0x41425555)", magic)
-	}
-
+	traceSize := reader.ReadU32()
 	version := reader.ReadU32()
-	blog.Infof("ubatrace: UBA file version: %d", version)
+	if version < TraceReadCompatibilityVersion || version > TraceVersionLatest {
+		return nil, fmt.Errorf("incompatible trace version (%d), supported %d to %d", version, TraceReadCompatibilityVersion, TraceVersionLatest)
+	}
+	if traceSize > 0 && uint64(traceSize) > uint64(len(data)) {
+		blog.Infof("ubatrace: Warning: trace size %d exceeds file size %d", traceSize, len(data))
+	}
+	blog.Infof("ubatrace: UBA file version: %d (size: %d)", version, traceSize)
 
 	// Initialize trace view
 	traceView := &TraceView{
@@ -2987,6 +3138,7 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 		WorkTracks:  make([]WorkTrack, 0),
 		Strings:     make([]string, 0),
 		StatusMap:   make(map[uint64]StatusUpdate),
+		Tables:      make(map[uint32]Table),
 		CacheWrites: make(map[uint32]CacheWrite),
 		Frequency:   GetFrequency(),
 		Finished:    false,
@@ -3026,7 +3178,15 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 
 		success := traceReader.ReadTrace(traceView, reader, maxTime, traceTypeCounts)
 		if !success {
-			blog.Infof("ubatrace: Trace processing failed, stopping")
+			typeName := "unknown"
+			if int(currentPos) < len(data) {
+				if name, ok := TraceTypeNames[data[currentPos]]; ok {
+					typeName = name
+				}
+				blog.Infof("ubatrace: Trace processing failed at offset %d type=%d (%s)", currentPos, data[currentPos], typeName)
+			} else {
+				blog.Infof("ubatrace: Trace processing failed, stopping")
+			}
 			break
 		}
 
@@ -3038,7 +3198,8 @@ func ReadUBAFile(filename string) (*TraceView, error) {
 		}
 	}
 
-	blog.Infof("ubatrace: finished read UBA file: %s", filename)
+	blog.Infof("ubatrace: finished read UBA file: %s (entries: %d, position: %d/%d)", filename, entryCount, reader.GetPosition(), len(data))
+	traceView.Finished = reader.GetPosition() >= uint64(len(data))
 
 	return traceView, nil
 }
