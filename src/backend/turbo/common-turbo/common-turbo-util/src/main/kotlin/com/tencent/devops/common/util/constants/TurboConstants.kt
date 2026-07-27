@@ -25,3 +25,8 @@ const val BASE_EXCLUDED_PROJECT_ID_LIST = "EXCLUDED_PROJECT_ID_LIST"
  * 内部测试的方案，服务计费时需要过滤掉
  */
 const val BASE_EXCLUDED_COMMON_PLAN_ID = "EXCLUDED_COMMON_PLAN_ID_LIST"
+
+/**
+ * 统计私有资源涉及的引擎code，多个用逗号分隔
+ */
+const val STAT_PRIVATE_ENGINE_CODE = "STAT_PRIVATE_ENGINE_CODE"

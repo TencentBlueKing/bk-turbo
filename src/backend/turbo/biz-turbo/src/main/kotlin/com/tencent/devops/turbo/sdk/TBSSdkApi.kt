@@ -225,7 +225,7 @@ object TBSSdkApi {
                 queryParam = queryParam,
                 // disttask的统计数据涵盖cc和ue4,因此disttask+distcc就是全量统计
                 // 该groupbyuser接口的统计信息不包含cc,只是为了方便查看ue的用户维度数据，是disttask的子集
-                customPath = if (engineCode.contains("ue4"))"/groupbyuser/scene/ue4" else null
+                customPath = if (engineCode.contains("ue4")) "/groupbyuser/scene/ue4" else null
             )
         } else {
             tbsCommonRequest(
@@ -234,12 +234,30 @@ object TBSSdkApi {
                 queryParam = queryParam
             )
         }
+        return buildTbsDaySummaryDtos(responseStr)
+    }
+
+    private fun buildTbsDaySummaryDtos(responseStr: String): List<TBSDaySummaryDto> {
         val response = JsonUtil.to(responseStr, object : TypeReference<DistccResponse<List<TBSDaySummaryDto>>>() {})
         if (response.code != 0 || !response.result) {
-            throw TurboException(errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "fail to invoke request: "
-                + response.message
+            throw TurboException(
+                errorCode = TURBO_THIRDPARTY_SYSTEM_FAIL, errorMessage = "fail to invoke request: "
+                    + response.message
             )
         }
         return response.data ?: listOf()
+    }
+
+    /**
+     * 查询私有集群统计数据
+     */
+    fun queryTBSPrivateSummary(engineCode: String, queryParam: Map<String, Any>): List<TBSDaySummaryDto> {
+        val responseStr = tbsCommonRequest(
+            engineCode = engineCode,
+            resourceName = "summary",
+            queryParam = queryParam,
+            customPath = "/private"
+        )
+        return buildTbsDaySummaryDtos(responseStr)
     }
 }
