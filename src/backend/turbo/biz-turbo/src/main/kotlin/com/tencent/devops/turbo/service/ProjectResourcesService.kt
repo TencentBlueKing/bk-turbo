@@ -52,7 +52,6 @@ class ProjectResourcesService @Autowired constructor(
 
         // 成本分摊时只过滤内部测试方案，不再过滤 DevCloud 专用方案
         // 因为同一方案可能既用私有资源又用公共资源，需要按 总资源 - 私有资源 计算实际公共资源
-        val filterPlanIds = getFilterIds(BASE_EXCLUDED_COMMON_PLAN_ID)
         val filterProjectIds = getFilterIds(BASE_EXCLUDED_PROJECT_ID_LIST)
 
         val today = LocalDate.now()
@@ -61,14 +60,13 @@ class ProjectResourcesService @Autowired constructor(
 
         logger.info(
             "querySummary start, dateRange=[$start, $end], page=$page, pageSize=$pageSizeNum, " +
-                "filterPlanIdsCount=${filterPlanIds.size}, filterProjectIdsCount=${filterProjectIds.size}"
+                "filterProjectIdsCount=${filterProjectIds.size}"
         )
 
         // 查询总资源数据（分页，按项目+引擎分组汇总）
         val summaryEntityList = tbsDaySummaryDao.findByDay(
             startDate = start,
             endDate = end,
-            filterPlanIdNin = filterPlanIds,
             filterProjectIdNin = filterProjectIds,
             pageNum = page,
             pageSize = pageSizeNum
@@ -83,14 +81,9 @@ class ProjectResourcesService @Autowired constructor(
         val privateEntityList = tbsPrivateDaySummaryDao.findByDay(
             startDate = start,
             endDate = end,
-            filterPlanIdNin = filterPlanIds,
             filterProjectIdNin = filterProjectIds
         )
-        val privateAllUsage = privateEntityList.sumOf { it.totalTimeWithCpu ?: 0.0 }
-        logger.info(
-            "querySummary private resources, recordCount=${privateEntityList.size}, " +
-                "privateTimeWithCpuSum=${"%.2f".format(privateAllUsage)}s"
-        )
+        logger.info("querySummary private resources, recordCount=${privateEntityList.size}")
 
         // 构建私有资源 Map: key = "projectId|engineCode" -> totalTimeWithCpu
         val privateMap = privateEntityList.filter { !it.projectId.isNullOrBlank() }.associate {

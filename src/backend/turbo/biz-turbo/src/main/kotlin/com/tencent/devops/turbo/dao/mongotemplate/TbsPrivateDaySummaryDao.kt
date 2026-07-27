@@ -1,6 +1,6 @@
 package com.tencent.devops.turbo.dao.mongotemplate
 
-import com.tencent.devops.turbo.model.TTbsDaySummaryEntity
+import com.tencent.devops.turbo.model.TTbsPrivateDaySummaryEntity
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.Sort
@@ -32,7 +32,7 @@ class TbsPrivateDaySummaryDao @Autowired constructor(
     /**
      * 批量保存私有资源统计数据
      */
-    fun saveAll(entities: List<TTbsDaySummaryEntity>) {
+    fun saveAll(entities: List<TTbsPrivateDaySummaryEntity>) {
         if (entities.isNotEmpty()) {
             mongoTemplate.insert(entities, COLLECTION_NAME)
             logger.info("save private summary entity size: ${entities.size}")
@@ -46,17 +46,13 @@ class TbsPrivateDaySummaryDao @Autowired constructor(
     fun findByDay(
         startDate: String,
         endDate: String,
-        filterPlanIdNin: Set<String>,
         filterProjectIdNin: Set<String>
-    ): List<TTbsDaySummaryEntity> {
-        logger.info("private findByDay startDate: $startDate, endDate: $endDate, filterPlanIdNin: $filterPlanIdNin")
+    ): List<TTbsPrivateDaySummaryEntity> {
+        logger.info("private findByDay startDate: $startDate, endDate: $endDate")
 
         val criteria = Criteria.where("day").gte(startDate).lte(endDate)
             .and("user").`is`(null)
 
-        if (filterPlanIdNin.isNotEmpty()) {
-            criteria.and("plan_id").nin(filterPlanIdNin)
-        }
         if (filterProjectIdNin.isNotEmpty()) {
             criteria.and("project_id").nin(filterProjectIdNin)
         }
@@ -70,6 +66,6 @@ class TbsPrivateDaySummaryDao @Autowired constructor(
 
         val options = AggregationOptions.Builder().allowDiskUse(true).build()
         val aggregation = Aggregation.newAggregation(match, sort, group).withOptions(options)
-        return mongoTemplate.aggregate(aggregation, COLLECTION_NAME, TTbsDaySummaryEntity::class.java).mappedResults
+        return mongoTemplate.aggregate(aggregation, COLLECTION_NAME, TTbsPrivateDaySummaryEntity::class.java).mappedResults
     }
 }

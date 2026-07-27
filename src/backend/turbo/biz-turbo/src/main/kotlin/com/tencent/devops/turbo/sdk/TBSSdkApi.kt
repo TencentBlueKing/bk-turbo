@@ -249,7 +249,7 @@ object TBSSdkApi {
     }
 
     /**
-     * 只支持查询disttask、distcc的私有集群统计数据
+     * 查询私有集群统计数据
      */
     fun queryTBSPrivateSummary(engineCode: String, queryParam: Map<String, Any>): List<TBSDaySummaryDto> {
         val responseStr = tbsCommonRequest(
