@@ -747,10 +747,19 @@ func guessCommand(describe string) string {
 
 // DumpJobs encode WorkAnalysisStatus into json bytes
 func (was *WorkAnalysisStatus) DumpJobs(taskid, workid string) []byte {
-	if len(was.ubainfos) > 0 {
+	// 先在读锁内复制一份快照, 避免与 SetUbaInfo 的写操作产生 map 并发读写;
+	// 不能在持锁期间调用 readUBAFile, 因为其内部 Update 会申请写锁(RWMutex 不可重入)
+	was.mutex.RLock()
+	ubainfos := make([]UbaInfo, 0, len(was.ubainfos))
+	for _, ubainfo := range was.ubainfos {
+		ubainfos = append(ubainfos, ubainfo)
+	}
+	was.mutex.RUnlock()
+
+	if len(ubainfos) > 0 {
 		blog.Infof("ubatrace: len(was.ubainfos) > 0")
-		for _, ubainfo := range was.ubainfos {
-			was.readUBAFile(ubainfo, taskid, workid)
+		for _, ubainfo := range ubainfos {
+			_ = was.readUBAFile(ubainfo, taskid, workid)
 		}
 	}
 

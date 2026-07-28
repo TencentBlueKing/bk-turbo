@@ -25,18 +25,15 @@ class TbsDaySummaryDao @Autowired constructor(
     fun findByDay(
         startDate: String,
         endDate: String,
-        filterPlanIdNin: Set<String>,
         filterProjectIdNin: Set<String>,
         pageNum: Int,
         pageSize: Int
     ): List<TTbsDaySummaryEntity> {
-        logger.info("findByDay startDate: $startDate, endDate: $endDate, filterPlanIdNin: $filterPlanIdNin")
+        logger.info("findByDay startDate: $startDate, endDate: $endDate")
 
         val criteria = Criteria.where("day").gte(startDate).lte(endDate)
             .and("user").`is`(null)
 
-        // 过滤方案id
-        filterPlanIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("plan_id").nin(filterPlanIdNin) }
         // 过滤项目id
         filterProjectIdNin.takeIf { it.isNotEmpty() }.let { criteria.and("project_id").nin(filterProjectIdNin) }
 
