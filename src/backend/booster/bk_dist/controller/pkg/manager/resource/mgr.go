@@ -29,7 +29,6 @@ import (
 	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
@@ -727,8 +726,9 @@ func (m *Mgr) heartBeatCanStop(taskId string, respHeartbeat *v2.RespHeartbeat, e
 		}
 	} else {
 		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
-		// if requestOK but return error(not encode error), we should release resource right now
-		if strings.Contains(err.Error(), api.ServerErrUpdateHeartbeatFailed.String()) {
+		// 仅当server明确答复任务已不存在时才释放资源, server重启期间返回的
+		// manager is not running 属于临时错误, 等其恢复即可, 不能释放
+		if strings.Contains(err.Error(), engine.ErrorUnterminatedTaskNoFound.Error()) {
 			return true
 		}
 	}
@@ -743,9 +743,12 @@ func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
 		return
 	}
 	var respHeartbeat v2.RespHeartbeat
-	if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
-		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
-		return
+	// server返回业务错误时resp为nil, 此时跳过解码, 直接由heartBeatCanStop按respErr判断
+	if respErr == nil {
+		if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
+			blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+			return
+		}
 	}
 
 	if m.heartBeatCanStop(taskId, &respHeartbeat, respErr) {
