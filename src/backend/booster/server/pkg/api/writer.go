@@ -52,6 +52,8 @@ func ReturnRest(resp *RestResponse) {
 	if resp.Message == "" {
 		resp.Message = resp.ErrCode.String()
 	} else {
+		// message 会与 ErrCode 文案拼接; 失败时 createResponseEx 再加进程名前缀。
+		// 细因(engine error)无独立 reason 字段, client 不宜依赖整段 message 作跨版本分支。
 		resp.Message = resp.ErrCode.String() + " | " + resp.Message
 	}
 

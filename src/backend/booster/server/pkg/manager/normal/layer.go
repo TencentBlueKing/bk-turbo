@@ -308,6 +308,7 @@ func (tc *taskBasicLayer) getTaskBasic(taskID string) (*engine.TaskBasic, error)
 	tb, ok := tc.tbm[taskID]
 	if !ok {
 		blog.Warnf("layer: task(%s) not in layer, no exist or already released", taskID)
+		// 返回 ErrorUnterminatedTaskNoFound; 其 Error() 字符串会进入 HTTP message, client 可能据此分支
 		return nil, engine.ErrorUnterminatedTaskNoFound
 	}
 
@@ -353,6 +354,7 @@ func (tc *taskBasicLayer) updateHeartbeat(taskID string) (engine.TaskStatusType,
 	tb, ok := tc.tbm[taskID]
 	if !ok {
 		blog.Infof("layer: task(%s) not in layer when update heart beat", taskID)
+		// 同上: 心跳失败 message 会含 ErrorUnterminatedTaskNoFound 文案, 见 engine/error.go
 		return "", engine.ErrorUnterminatedTaskNoFound
 	}
 
