@@ -41,6 +41,8 @@ func createResponseEx(code int, message string, data interface{}, extra map[stri
 	result := code == 0
 	if !result {
 		appName := filepath.Base(os.Args[0])
+		// 失败响应 message 再加一层 "(进程名):" 前缀; 与 ReturnRest 的 "|" 拼接叠加,
+		// 均非稳定协议字段, client 分支逻辑应使用 code/reason 而非解析 message。
 		message = fmt.Sprintf("(%s):%s", appName, message)
 	}
 

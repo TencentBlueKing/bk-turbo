@@ -29,7 +29,6 @@ import (
 	commonHTTP "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	commonTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/types"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
@@ -347,6 +346,8 @@ func (m *Mgr) Apply(req *v2.ParamApply, force bool) (*v2.RespTaskInfo, error) {
 	_ = codec.EncJSON(req, &data)
 	blog.Infof("resource: try to apply dist-resource for work(%s) info: %s", m.work.ID(), string(data))
 
+	// Server 失败时 HTTP code=2(ApplyResourceFailed), 细因(如 project no found)仅在 message 中, 见 engine/error.go。
+	// 此处仅 err!=nil; 若按 message 子串做细因分支, 旧 client 易受 Server 改文案影响, 应优先用 reason/code。
 	resp, _, err := m.request("POST", m.serverHost, applyDistributeResourcesURI, data)
 	if err != nil {
 		blog.Errorf("resource: apply dist-resource failed for work(%s): %v", m.work.ID(), err)
@@ -503,6 +504,8 @@ func (m *Mgr) sendReleaseReq(req *v2.ParamRelease, r *Res) error {
 	blog.Debugf("resource: release dist-resource task(%s) for work(%s) info: %s",
 		req.TaskID, m.work.ID(), string(data))
 
+	// v2 Server 对 task 已不存在返回 code=0(见 handler ReleaseResource); 其它失败 code=5, 细因在 message。
+	// 勿用 strings.Contains(message, ...) 区分细因; 与 heartbeat 相同, 改 engine/error.go 文案会影响匹配。
 	_, _, err := m.request("POST", m.serverHost, releaseDistributeResourcesURI, data)
 	if err != nil {
 		blog.Warnf("resource: release dist-resource task(%s) for work(%s) failed: %v",
@@ -605,6 +608,7 @@ func (m *Mgr) SendStats(brief bool) error {
 	var data []byte
 	_ = codec.EncJSON(message, &data)
 
+	// Server 失败时 code=10(SendMessageFailed), 细因(如 task 不在 layer)在 message; 仅打日志/返回 err。
 	if _, _, err := m.request("POST", m.serverHost, messageURI, data); err != nil {
 		blog.Errorf("resource: send stats(brief %v) to server for task(%s) work(%s) failed: %v",
 			brief, taskID, workID, err)
@@ -710,6 +714,7 @@ func (m *Mgr) getSendStatsData(brief bool, t int64) (*[]byte, error) {
 }
 
 func (m *Mgr) sendStatsData(data *[]byte) error {
+	// 同 sendStats: code=10, 细因见 engine/error.go; 不宜新增 message 子串分支而不改 Server 协议
 	if _, _, err := m.request("POST", m.serverHost, messageURI, *data); err != nil {
 		blog.Errorf("resource: send stats server failed: %v", err)
 		return err
@@ -727,8 +732,8 @@ func (m *Mgr) heartBeatCanStop(taskId string, respHeartbeat *v2.RespHeartbeat, e
 		}
 	} else {
 		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
-		// if requestOK but return error(not encode error), we should release resource right now
-		if strings.Contains(err.Error(), api.ServerErrUpdateHeartbeatFailed.String()) {
+		// 依赖 server/pkg/engine/error.go 拼入 message 的文案; 勿用 code=4 或 "update heartbeat failed" 前缀分支
+		if strings.Contains(err.Error(), engine.ErrorUnterminatedTaskNoFound.Error()) {
 			return true
 		}
 	}
@@ -743,9 +748,12 @@ func (m *Mgr) dealHeartBeat(taskId string, heartbeatData []byte) {
 		return
 	}
 	var respHeartbeat v2.RespHeartbeat
-	if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
-		blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
-		return
+	// server返回业务错误时resp为nil, 此时跳过解码, 直接由heartBeatCanStop按respErr判断
+	if respErr == nil {
+		if err := codec.DecJSON(resp, &respHeartbeat); err != nil {
+			blog.Errorf("resource: heartbeat to task(%s) work(%s) failed with error: %v", taskId, m.work.ID(), err)
+			return
+		}
 	}
 
 	if m.heartBeatCanStop(taskId, &respHeartbeat, respErr) {
@@ -810,6 +818,8 @@ func (m *Mgr) inspectInfo(taskID string) {
 			return
 
 		case <-infoTicker.C:
+			// 失败时 code=3(RequestTaskInfoFailed), message 可含 unterminated task no found(见 engine/error.go)。
+			// 当前 continue 轮询; 若改为 strings.Contains 判 task 消失, 有与 heartbeat 相同的文案/version 风险。
 			data, _, err := m.request("GET", m.serverHost,
 				fmt.Sprintf(inspectDistributeTaskURI, taskID), nil)
 			if err != nil {
@@ -1044,10 +1054,8 @@ func (m *Mgr) RegisterCallback(f types.CB4ResChanged) error {
 	return nil
 }
 
-// request send request to server and get return data.
-// if requests failed, http code is not 200, return flag false.
-// else once the http code is 200, return flat true.
-// Only both flag is true and error is nil, guarantees that the data is not nil.
+// request 向 TBS Server 发 HTTP 请求。业务失败时仅返回 message(含 server engine 错误文案), code 被丢弃。
+// apply/release/task/message/cachelist 等调用方共享此行为; 细因分支见 heartBeatCanStop, 改文案见 server/pkg/engine/error.go。
 func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, error) {
 	uri = fmt.Sprintf("%s/%s", server, uri)
 	blog.Debugf("booster: method(%s), server(%s) uri(%s), data: %s", method, server, uri, string(data))
@@ -1102,6 +1110,7 @@ func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, er
 func (m *Mgr) GetCacheList(projectid string) (*v2.CacheConfigList, error) {
 	blog.Infof("resource: try to get cache list for projectid(%s)", projectid)
 
+	// 失败时 code=1/12, 细因在 message; 仅返回 err, 勿依赖 message 子串作跨版本协议。
 	data, _, err := m.request("GET", m.serverHost,
 		fmt.Sprintf(cacheListURI, projectid), nil)
 	if err != nil {

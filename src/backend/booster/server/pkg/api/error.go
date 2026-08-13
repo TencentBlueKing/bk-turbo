@@ -9,6 +9,8 @@
 
 package api
 
+// ServerErrCode 为 HTTP 响应大类 code(如心跳失败均为 UpdateHeartbeatFailed=4)。
+// 细因见 server/pkg/engine/error.go、server/pkg/types/error.go, 经 message 返回, 无独立 reason code。
 // ServerErrorCode implements the ErrorCode
 type ServerErrCode int
 

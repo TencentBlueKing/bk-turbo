@@ -49,6 +49,7 @@ func ApplyResource(req *restful.Request, resp *restful.Response) {
 		} else {
 			blog.Errorf("apply resource: create task failed, url(%s): %v", req.Request.URL.String(), err)
 		}
+		// code=2, 细因(engine/types error 文案)进 message; client 当前仅 err!=nil, 见 resource/mgr Apply
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrApplyResourceFailed, Message: err.Error()})
 		return
 	}
@@ -83,6 +84,7 @@ func SendMessage(req *restful.Request, resp *restful.Response) {
 		if data, err = defaultManager.SendTaskMessage(param.TaskID, []byte(param.Extra)); err != nil {
 			blog.Errorf("send message: send task(%s) message to engine failed, url(%s) message(%s): %v",
 				param.TaskID, req.Request.URL.String(), param.Extra, err)
+			// code=10, 细因(如 task 不在 layer)进 message; client 仅 err!=nil, 见 resource/mgr sendStats
 			api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrSendMessageFailed, Message: err.Error()})
 			return
 		}
@@ -126,6 +128,7 @@ func QueryTaskInfo(req *restful.Request, resp *restful.Response) {
 	if err != nil {
 		blog.Errorf("apply resource: get task info(%s) failed, url(%s): %v",
 			taskID, req.Request.URL.String(), err)
+		// code=3, 可含 ErrorUnterminatedTaskNoFound; client inspectInfo 当前 continue 轮询, 见 resource/mgr
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrRequestTaskInfoFailed, Message: err.Error()})
 		return
 	}
@@ -147,6 +150,9 @@ func UpdateHeartbeat(req *restful.Request, resp *restful.Response) {
 	if err != nil {
 		blog.Warnf("update heartbeat: update task(%s) heartbeat failed, url(%s): %v",
 			taskID, req.Request.URL.String(), err)
+		// 所有心跳失败均为 code=4, 细因(如 unterminated task no found / manager is not running)
+		// 仅体现在 message 末尾。client 不可用 code=4  alone 决定是否释放 work。
+		// 若需稳定语义, 应对 task 不存在单独返回 code=0 或增加 reason 字段(参见 ReleaseResource)。
 		api.ReturnRest(&api.RestResponse{Resp: resp, ErrCode: api.ServerErrUpdateHeartbeatFailed,
 			Message: api.ServerErrUpdateHeartbeatFailed.String() + ":" + err.Error()})
 		return
@@ -172,6 +178,8 @@ func ReleaseResource(req *restful.Request, resp *restful.Response) {
 
 	if err = defaultManager.ReleaseTask(param); err != nil {
 		if err == engine.ErrorUnterminatedTaskNoFound || err == types.ErrorTaskAlreadyTerminated {
+			// task 已不存在时返回 code=0(幂等); 与 UpdateHeartbeat 对同错误返回 code=4 不一致,
+			// client 需分别处理。扩展错误语义时请保持接口间一致或提供 reason 字段。
 			api.ReturnRest(&api.RestResponse{Resp: resp, Message: err.Error()})
 			blog.Warnf("release resource: release task(%s) failed, url(%s): %v",
 				param.TaskID, req.Request.URL.String(), err)

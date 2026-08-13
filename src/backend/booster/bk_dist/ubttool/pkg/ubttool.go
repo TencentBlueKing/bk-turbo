@@ -289,11 +289,17 @@ func (h *UBTTool) executeActions() error {
 		return ErrorNoActionsToRun
 	}
 
+	// starttime与tick必须在循环外, 否则每轮select结束都被重建,
+	// 累计等待时长丢失, MaxWaitSecs判断永远无法达到
+	starttime := time.Now()
+	tick := time.NewTicker(TickSecs * time.Second)
+	defer tick.Stop()
+
 	for {
-		tick := time.NewTicker(TickSecs * time.Second)
-		starttime := time.Now()
 		select {
 		case r := <-h.actionchan:
+			// 远端有结果返回说明未卡死, 重新开始计算空转时长
+			starttime = time.Now()
 			blog.Infof("UBTTool: got action result:%+v", r)
 			if (r.Exitcode != 0 || r.Err != nil) && !h.settings.ContinueOnError {
 				err := fmt.Errorf("exit code:%d,error:%v", r.Exitcode, r.Err)
